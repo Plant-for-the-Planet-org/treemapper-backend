@@ -59,3 +59,11 @@ export const projectSites = pgTable('project_sites', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
+
+export const userMetadata = pgTable('user_metadata', {
+  userId: uuid('user_id').primaryKey().references(() => users.id),
+  roles: jsonb('roles').notNull().default(['user']),
+  // Add other frequently accessed metadata
+  lastLogin: timestamp('last_login').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
