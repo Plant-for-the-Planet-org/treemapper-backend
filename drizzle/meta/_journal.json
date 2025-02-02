@@ -8,6 +8,13 @@
       "when": 1738487786634,
       "tag": "0000_quick_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1738491151706,
+      "tag": "0001_cool_domino",
+      "breakpoints": true
     }
   ]
 }
