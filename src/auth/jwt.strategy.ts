@@ -25,6 +25,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    return payload;
+    // Map the Auth0 custom claims to your user object
+    return {
+      id: payload.sub,
+      email: payload['https://app.plant-for-the-planet.org/email'],
+      emailVerified: payload['https://app.plant-for-the-planet.org/email_verified'],
+      roles: payload.roles || [],
+      permissions: payload.permissions || [],
+      metadata: {
+        // Add any additional metadata from your custom claims
+      }
+    };
   }
 }
