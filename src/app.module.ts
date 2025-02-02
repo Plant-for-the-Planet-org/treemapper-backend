@@ -3,11 +3,10 @@ import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ProjectsModule } from './projects/projects.module';
-import { InvitiesModule } from './invities/invities.module';
 import { CommonModule } from './common/common.module';
-import { WorkspaceService } from './workspace/workspace.service';
+import { ProjectInviteModule } from './project-invite/project-invite.module';
+import { ProjectSitesModule } from './project-sites/project-sites.module';
 
 
 @Module({
@@ -16,12 +15,12 @@ import { WorkspaceService } from './workspace/workspace.service';
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
     UsersModule,
-    WorkspacesModule,
     ProjectsModule,
-    InvitiesModule,
-    CommonModule
+    CommonModule,
+    ProjectInviteModule,
+    ProjectSitesModule
   ],
   controllers: [],
-  providers: [WorkspaceService],
+  providers: [],
 })
 export class AppModule {}
