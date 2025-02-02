@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CacheModule } from '@nestjs/cache-manager';
 import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
@@ -14,6 +15,11 @@ import { RolesGuard } from './auth/roles.guard';
 
 @Module({
   imports: [
+    CacheModule.register({
+      ttl: 3600, // Time to live in seconds (1 hour)
+      max: 100,  // Maximum number of items in cache
+      isGlobal: true // Make cache available everywhere
+    }),
     AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
