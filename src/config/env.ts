@@ -5,4 +5,4 @@ export const ENV_CONFIG = {
     AUTH0_DOMAIN: process.env.AUTH0_DOMAIN,
     AUTH0_AUDIENCE: process.env.AUTH0_AUDIENCE,
     // Add other environment variables here
-  };
+};

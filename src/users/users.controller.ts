@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Post, Request } from '@nestjs/common';
+import { Controller, Get, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/user';
 
 @Controller('users')
 export class UsersController {
@@ -8,13 +7,8 @@ export class UsersController {
   
   @Get()
   async getUsers(@Request() req) {
-    console.log(req.user);
-    return this.usersService.getUsers();
-  }
-
-
-  @Post()
-  async createUser(@Body() request: CreateUserDto) {
-    return this.usersService.createUser(request);
+    // First find or create the user based on the Auth0 token
+    const user = await this.usersService.findOrCreateUser(req.user);
+    return user;
   }
 }

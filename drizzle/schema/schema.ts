@@ -1,7 +1,6 @@
-import { pgTable, uuid, varchar, text, jsonb, boolean, timestamp, pgEnum, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 
 // Enum definitions
-export const workspaceUserRoleEnum = pgEnum('workspace_user_role', ['admin', 'member']);
 export const projectUserRoleEnum = pgEnum('project_user_role', ['admin', 'editor']);
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'rejected']);
 
@@ -9,7 +8,7 @@ export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
   email: varchar('email').notNull().unique(),
-  fullName: varchar('full_name').notNull(),
+  fullName: varchar('full_name').notNull(), // Note: This matches the column name in DB
   avatarUrl: varchar('avatar_url'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
@@ -34,10 +33,6 @@ export const projectUsers = pgTable('project_users', {
   userId: uuid('user_id').notNull().references(() => users.id),
   role: projectUserRoleEnum('role').notNull(),
   joinedAt: timestamp('joined_at').notNull().defaultNow()
-}, (table) => {
-  return {
-    projectUserUnique: unique().on(table.projectId, table.userId)
-  };
 });
 
 // Project invites table
@@ -63,24 +58,4 @@ export const projectSites = pgTable('project_sites', {
   createdBy: uuid('created_by').notNull().references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
-}, (table) => {
-  return {
-    projectNameUnique: unique().on(table.projectId, table.name)
-  };
 });
-
-// Type definitions for better TypeScript support
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-
-export type Project = typeof projects.$inferSelect;
-export type NewProject = typeof projects.$inferInsert;
-
-export type ProjectUser = typeof projectUsers.$inferSelect;
-export type NewProjectUser = typeof projectUsers.$inferInsert;
-
-export type ProjectInvite = typeof projectInvites.$inferSelect;
-export type NewProjectInvite = typeof projectInvites.$inferInsert;
-
-export type ProjectSite = typeof projectSites.$inferSelect;
-export type NewProjectSite = typeof projectSites.$inferInsert;
