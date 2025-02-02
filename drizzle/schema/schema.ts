@@ -1,8 +1,14 @@
 import { pgTable, uuid, varchar, text, jsonb, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 
 // Enum definitions
-export const projectUserRoleEnum = pgEnum('project_user_role', ['admin', 'editor']);
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'rejected']);
+export const projectUserRoleEnum = pgEnum('project_user_role', [
+  'owner',        // Full control + can delete project
+  'admin',        // Full control over project
+  'manager',      // Can manage users and content
+  'contributor',  // Can create and edit content
+  'viewer'        // Read-only access
+]);
 
 // Users table
 export const users = pgTable('users', {
