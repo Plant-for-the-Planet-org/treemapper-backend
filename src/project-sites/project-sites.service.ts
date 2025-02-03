@@ -30,8 +30,8 @@ export class ProjectSitesService {
         id: uuidv4(),
         projectId,
         name: createSiteDto.name,
+        slug: 'createSiteDto.slug',
         description: createSiteDto.description,
-        location: createSiteDto.location,
         metadata: createSiteDto.metadata,
         createdBy: userId
       })

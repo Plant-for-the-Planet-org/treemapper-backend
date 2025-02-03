@@ -5,9 +5,37 @@ import { passportJwtSecret } from 'jwks-rsa';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { DrizzleService } from '../database/database.service';
-import { userMetadata } from '../../drizzle/schema/schema';
+import { userMetadata, users } from '../../drizzle/schema/schema';
 import { eq } from 'drizzle-orm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+
+interface JwtPayload {
+  sub: string;
+  'https://app.plant-for-the-planet.org/email': string;
+  'https://app.plant-for-the-planet.org/email_verified': boolean;
+  iss: string;
+  aud: string[];
+  iat: number;
+  exp: number;
+  scope: string;
+  azp: string;
+}
+
+interface UserData {
+  id: string;                    // Auth0 sub
+  internalId: string;           // Database UUID
+  email: string;
+  emailVerified: boolean;
+  fullName: string;             // Added from schema
+  firstName: string;            // Added from schema
+  lastName?: string;            // Added from schema
+  status: 'active' | 'archived' | 'suspended';  // Added from schema
+  roles: string[];
+  permissions: string[];
+  metadata: any;
+  lastLoginAt?: Date;          // Added from schema
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,7 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
     private readonly drizzle: DrizzleService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache & { set: (key: string, value: any, options?: any) => Promise<void>; get: (key: string) => Promise<any> }
+    @Inject(CACHE_MANAGER) private cacheManager: Cache
   ) {
     const domain = configService.get<string>('AUTH0_DOMAIN');
     const audience = configService.get<string>('AUTH0_AUDIENCE');
@@ -34,11 +62,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: JwtPayload): Promise<UserData> {
     try {
-      // Try to get from cache first
       const cacheKey = `user_${payload.sub}`;
-      let userData = await this.cacheManager.get(cacheKey);
+      let userData = await this.cacheManager.get<UserData>(cacheKey);
 
       if (!userData) {
         // If not in cache, get or create user
@@ -48,53 +75,58 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           emailVerified: payload['https://app.plant-for-the-planet.org/email_verified']
         });
 
-        // Get user metadata
-        const [metadata] = await this.drizzle.database
-          .select()
-          .from(userMetadata)
-          .where(eq(userMetadata.userId, user.id))
-          .limit(1);
+        // Get both user metadata and user details in parallel
+        const [metadata, [userDetails]] = await Promise.all([
+          this.drizzle.database
+            .select()
+            .from(userMetadata)
+            .where(eq(userMetadata.userId, user.id))
+            .limit(1),
+          this.drizzle.database
+            .select({
+              status: users.status,
+              fullName: users.fullName,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              lastLoginAt: users.lastLoginAt
+            })
+            .from(users)
+            .where(eq(users.id, user.id))
+            .limit(1)
+        ]);
 
-        // Create user data object
         userData = {
           id: payload.sub,
           internalId: user.id,
           email: payload['https://app.plant-for-the-planet.org/email'],
           emailVerified: payload['https://app.plant-for-the-planet.org/email_verified'],
-          roles: metadata?.roles || ['user'],
-          permissions: payload.permissions || [],
-          metadata: metadata || {}
+          fullName: userDetails.fullName,
+          firstName: userDetails.firstName,
+          lastName: userDetails.lastName ?? undefined,
+          status: userDetails.status,
+          roles: Array.isArray(metadata?.[0]?.roles) ? metadata[0].roles : ['user'],
+          permissions: [],
+          metadata: metadata?.[0] || {},
+          lastLoginAt: userDetails.lastLoginAt ?? undefined
         };
 
-        // Store in cache for 15 minutes
-        await this.cacheManager.set(cacheKey, userData, 900000); // 15 minutes in milliseconds
+        // Cache for 15 minutes
+        await this.cacheManager.set(
+          cacheKey, 
+          userData, 
+          900000
+        );
+      }
+
+      // Always check user status before returning
+      if (userData.status !== 'active') {
+        throw new Error('User account is not active');
       }
 
       return userData;
     } catch (error) {
       console.error('Error in JWT validation:', error);
-      // If there's an error with caching, fallback to direct database query
-      const user = await this.usersService.getOrCreateUserByAuth0Data({
-        sub: payload.sub,
-        email: payload['https://app.plant-for-the-planet.org/email'],
-        emailVerified: payload['https://app.plant-for-the-planet.org/email_verified']
-      });
-
-      const [metadata] = await this.drizzle.database
-        .select()
-        .from(userMetadata)
-        .where(eq(userMetadata.userId, user.id))
-        .limit(1);
-
-      return {
-        id: payload.sub,
-        internalId: user.id,
-        email: payload['https://app.plant-for-the-planet.org/email'],
-        emailVerified: payload['https://app.plant-for-the-planet.org/email_verified'],
-        roles: metadata?.roles || ['user'],
-        permissions: payload.permissions || [],
-        metadata: metadata || {}
-      };
+      throw error; // Let the error handler deal with it
     }
   }
 }

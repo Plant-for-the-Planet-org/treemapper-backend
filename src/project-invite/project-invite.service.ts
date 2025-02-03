@@ -63,7 +63,9 @@ export class ProjectInviteService {
         invitedByUserId,
         role: role as 'owner' | 'admin' | 'manager' | 'contributor' | 'viewer',
         status: 'pending',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiry
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days expiry
+        workspaceId: 'your_workspace_id', // Add appropriate workspaceId
+        token: 'your_token' // Add appropriate token
       })
       .returning();
 

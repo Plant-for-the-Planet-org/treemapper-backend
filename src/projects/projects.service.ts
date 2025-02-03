@@ -17,7 +17,6 @@ export class ProjectsService {
           name: projects.name,
           description: projects.description,
           settings: projects.settings,
-          isArchived: projects.isArchived,
           createdAt: projects.createdAt,
           updatedAt: projects.updatedAt,
         })
@@ -49,10 +48,11 @@ export class ProjectsService {
         .values({
           id: uuidv4(),
           name: 'My First Project',
+          slug: 'my-first-project',
           description: 'This is your default project',
           createdBy: userId,
           settings: {},
-          isArchived: false,
+          workspaceId: 'default-workspace-id',
         })
         .returning();
 
