@@ -1,16 +1,132 @@
 import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/database.service';
 import { userMetadata, users } from '../../drizzle/schema/schema';
+import { workspaces, workspaceUsers } from '../../drizzle/schema/schema';
 import { eq } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuid4 } from 'uuid';
+import slugify from 'slugify';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly drizzle: DrizzleService) {}
 
+  private async createDefaultWorkspace(userId: string, tx: any) {
+    const workspaceName = 'My Workspace';
+    const workspaceSlug = slugify(workspaceName, { lower: true });
+
+    const [workspace] = await tx
+      .insert(workspaces)
+      .values({
+        id: uuid4(),
+        name: workspaceName,
+        slug: workspaceSlug,
+        ownerId: userId,
+        createdBy: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    // Add user as workspace member with owner role
+    await tx
+      .insert(workspaceUsers)
+      .values({
+        id: uuid4(),
+        workspaceId: workspace.id,
+        userId: userId,
+        role: 'owner',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    return workspace;
+  }
+
+  private async getUserWorkspaces(userId: string) {
+    const userWorkspaces = await this.drizzle.database
+      .select({
+        workspace: workspaces,
+        role: workspaceUsers.role,
+      })
+      .from(workspaceUsers)
+      .innerJoin(workspaces, eq(workspaces.id, workspaceUsers.workspaceId))
+      .where(eq(workspaceUsers.userId, userId));
+
+    return userWorkspaces;
+  }
+
+  async getOrCreateUserByAuth0Data({ sub, email, emailVerified }) {
+    // Use a transaction to ensure data consistency
+    return await this.drizzle.database.transaction(async (tx) => {
+      // Try to find existing user
+      const existingUser = await tx
+        .select()
+        .from(users)
+        .where(eq(users.sub, sub))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        // Update last login
+        await tx
+          .update(users)
+          .set({ lastLoginAt: new Date() })
+          .where(eq(users.id, existingUser[0].id));
+
+        return { user: existingUser[0], isNew: false };
+      }
+
+      // Create new user
+      const [newUser] = await tx
+        .insert(users)
+        .values({
+          id: uuid4(), // Generate UUID
+          sub,
+          email,
+          emailVerified,
+          firstName: email.split('@')[0], // Temporary name, can be updated later
+          fullName: email.split('@')[0],  // Temporary name, can be updated later
+          status: 'active',
+          lastLoginAt: new Date()
+        })
+        .returning();
+
+      // Create user metadata
+      await tx.insert(userMetadata).values({
+        userId: newUser.id,
+        roles: ['user']
+      });
+
+      
+
+      // Create default workspace
+      const [workspace] = await tx
+        .insert(workspaces)
+        .values({
+          id: uuid4(),
+          name: `${newUser.firstName}'s Workspace`,
+          slug: slugify(`${newUser.firstName}-workspace`),
+          isDefault: true,
+          status: 'active',
+          visibility: 'private',
+          createdBy: newUser.id // This fixes your current error
+        })
+        .returning();
+
+      // Create workspace user record
+      await tx.insert(workspaceUsers).values({
+        id: uuid4(),
+        workspaceId: workspace.id,
+        userId: newUser.id,
+        role: 'admin'
+      });
+
+      return { user: newUser, isNew: true };
+    });
+  }
+
+  // Update the findOrCreateUser method similarly
   async findOrCreateUser(authUser: any) {
     try {
-      // Find existing user
       const existingUser = await this.drizzle.database
         .select()
         .from(users)
@@ -27,127 +143,52 @@ export class UsersService {
           })
           .where(eq(users.id, existingUser[0].id));
 
-        return existingUser[0];
+        // Get user's workspaces
+        const workspaces = await this.getUserWorkspaces(existingUser[0].id);
+
+        return {
+          user: existingUser[0],
+          workspaces: workspaces
+        };
       }
 
-      // Create new user if not found
-      const newUser = {
-        id: uuidv4(),
-        email: authUser.email,
-        fullName: authUser.email.split('@')[0], // Consider getting from auth profile
-        firstName: authUser.email.split('@')[0], // Required field in new schema
-        lastName: null,
-        avatarUrl: null,
-        emailVerified: false, // New required field
-        status: 'active' as const, // New required field
-        preferences: {},
-        lastLoginAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        sub: null // Auth0 specific field
-      };
-
-      const [createdUser] = await this.drizzle.database
-        .insert(users)
-        .values(newUser)
-        .returning();
-
-      return createdUser;
-    } catch (error) {
-      console.error('Error in findOrCreateUser:', error);
-      throw error;
-    }
-  }
-
-  async getUsers() {
-    return this.drizzle.database
-      .select({
-        id: users.id,
-        email: users.email,
-        fullName: users.fullName,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        status: users.status,
-        emailVerified: users.emailVerified,
-        lastLoginAt: users.lastLoginAt,
-        createdAt: users.createdAt
-      })
-      .from(users)
-      .where(eq(users.status, 'active'));
-  }
-
-  async getOrCreateUserByAuth0Data(auth0Data: {
-    sub: string;
-    email: string;
-    emailVerified: boolean;
-    given_name?: string;
-    family_name?: string;
-    name?: string;
-  }) {
-    // Try to find existing user
-    const existingUser = await this.drizzle.database
-      .select()
-      .from(users)
-      .where(eq(users.email, auth0Data.email))
-      .limit(1);
-
-    if (existingUser.length > 0) {
-      // Update last login and Auth0 data
-      await this.drizzle.database
-        .update(users)
-        .set({ 
-          lastLoginAt: new Date(),
-          updatedAt: new Date(),
-          emailVerified: auth0Data.emailVerified,
-          sub: auth0Data.sub
-        })
-        .where(eq(users.id, existingUser[0].id));
-
-      return existingUser[0];
-    }
-
-    // Create new user and metadata in a transaction
-    return await this.drizzle.database.transaction(async (tx) => {
-      const [newUser] = await tx
-        .insert(users)
-        .values({
-          id: uuidv4(),
-          email: auth0Data.email,
-          fullName: auth0Data.name || auth0Data.email.split('@')[0],
-          firstName: auth0Data.given_name || auth0Data.email.split('@')[0],
-          lastName: auth0Data.family_name || null,
-          emailVerified: auth0Data.emailVerified,
-          status: 'active',
+      // Create new user with default workspace in a transaction
+      return await this.drizzle.database.transaction(async (tx) => {
+        const newUser = {
+          id: uuid4(),
+          email: authUser.email,
+          fullName: authUser.email.split('@')[0],
+          firstName: authUser.email.split('@')[0],
+          lastName: null,
+          avatarUrl: null,
+          emailVerified: false,
+          status: 'active' as const,
           preferences: {},
           lastLoginAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
-          sub: auth0Data.sub
-        })
-        .returning();
+          sub: null
+        };
 
-      // Create default metadata
-      await tx
-        .insert(userMetadata)
-        .values({
-          userId: newUser.id,
-          roles: ['user'],
-          lastLogin: new Date(),
-          updatedAt: new Date(),
-        });
+        const [createdUser] = await tx
+          .insert(users)
+          .values(newUser)
+          .returning();
 
-      return newUser;
-    });
-  }
+        // Create default workspace
+        const defaultWorkspace = await this.createDefaultWorkspace(createdUser.id, tx);
 
-  // New helper method for updating user last login
-  private async updateUserLastLogin(userId: string) {
-    await this.drizzle.database
-      .update(users)
-      .set({ 
-        lastLoginAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(users.id, userId));
+        return {
+          user: createdUser,
+          workspaces: [{
+            workspace: defaultWorkspace,
+            role: 'owner'
+          }]
+        };
+      });
+    } catch (error) {
+      console.error('Error in findOrCreateUser:', error);
+      throw error;
+    }
   }
 }

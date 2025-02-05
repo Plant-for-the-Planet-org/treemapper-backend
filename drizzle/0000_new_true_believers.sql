@@ -1,7 +1,8 @@
-CREATE TYPE "public"."entity_status" AS ENUM('active', 'archived', 'suspended');--> statement-breakpoint
-CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'rejected');--> statement-breakpoint
+CREATE TYPE "public"."entity_status" AS ENUM('active', 'archived', 'suspended', 'deleted');--> statement-breakpoint
+CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'rejected', 'expired');--> statement-breakpoint
+CREATE TYPE "public"."organization_user_role" AS ENUM('owner', 'admin', 'member');--> statement-breakpoint
 CREATE TYPE "public"."project_user_role" AS ENUM('owner', 'admin', 'manager', 'contributor', 'viewer');--> statement-breakpoint
-CREATE TYPE "public"."visibility" AS ENUM('public', 'private', 'workspace');--> statement-breakpoint
+CREATE TYPE "public"."visibility" AS ENUM('public', 'private', 'workspace', 'organization');--> statement-breakpoint
 CREATE TYPE "public"."workspace_user_role" AS ENUM('admin', 'member');--> statement-breakpoint
 CREATE TABLE "audit_logs" (
 	"id" uuid PRIMARY KEY NOT NULL,
@@ -13,6 +14,8 @@ CREATE TABLE "audit_logs" (
 	"actor_id" uuid NOT NULL,
 	"changes" jsonb,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"ip_address" varchar,
+	"user_agent" varchar,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -26,7 +29,9 @@ CREATE TABLE "project_invites" (
 	"role" "project_user_role" NOT NULL,
 	"status" "invite_status" DEFAULT 'pending' NOT NULL,
 	"message" text,
-	"resend_count" jsonb DEFAULT '0'::jsonb,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"resend_count" integer DEFAULT 0,
+	"last_resend_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"expires_at" timestamp NOT NULL,
 	"accepted_at" timestamp,
@@ -58,7 +63,11 @@ CREATE TABLE "project_users" (
 	"project_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
 	"role" "project_user_role" NOT NULL,
-	"joined_at" timestamp DEFAULT now() NOT NULL
+	"status" "entity_status" DEFAULT 'active' NOT NULL,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"joined_at" timestamp DEFAULT now() NOT NULL,
+	"last_access_at" timestamp,
+	"expires_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "projects" (
@@ -68,13 +77,13 @@ CREATE TABLE "projects" (
 	"slug" varchar NOT NULL,
 	"description" text,
 	"settings" jsonb DEFAULT '{}'::jsonb,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
 	"status" "entity_status" DEFAULT 'active' NOT NULL,
 	"visibility" "visibility" DEFAULT 'private' NOT NULL,
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp,
-	CONSTRAINT "projects_slug_unique" UNIQUE("slug")
+	"deleted_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "user_metadata" (
@@ -97,6 +106,7 @@ CREATE TABLE "users" (
 	"last_login_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp,
 	"sub" varchar,
 	CONSTRAINT "users_email_unique" UNIQUE("email"),
 	CONSTRAINT "users_sub_unique" UNIQUE("sub")
@@ -107,7 +117,11 @@ CREATE TABLE "workspace_users" (
 	"workspace_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
 	"role" "workspace_user_role" NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"status" "entity_status" DEFAULT 'active' NOT NULL,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"joined_at" timestamp DEFAULT now() NOT NULL,
+	"last_access_at" timestamp,
+	"expires_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "workspaces" (
@@ -115,13 +129,15 @@ CREATE TABLE "workspaces" (
 	"name" varchar NOT NULL,
 	"slug" varchar NOT NULL,
 	"description" text,
+	"is_default" boolean DEFAULT false NOT NULL,
 	"settings" jsonb DEFAULT '{}'::jsonb,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
 	"status" "entity_status" DEFAULT 'active' NOT NULL,
+	"visibility" "visibility" DEFAULT 'private' NOT NULL,
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp,
-	CONSTRAINT "workspaces_slug_unique" UNIQUE("slug")
+	"deleted_at" timestamp
 );
 --> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -144,6 +160,7 @@ CREATE INDEX "audit_logs_workspace_id_idx" ON "audit_logs" USING btree ("workspa
 CREATE INDEX "audit_logs_project_id_idx" ON "audit_logs" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "audit_logs_entity_type_idx" ON "audit_logs" USING btree ("entity_type");--> statement-breakpoint
 CREATE INDEX "audit_logs_actor_id_idx" ON "audit_logs" USING btree ("actor_id");--> statement-breakpoint
+CREATE INDEX "audit_logs_created_at_idx" ON "audit_logs" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "project_invites_token_idx" ON "project_invites" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "project_invites_project_id_idx" ON "project_invites" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "project_invites_workspace_id_idx" ON "project_invites" USING btree ("workspace_id");--> statement-breakpoint
@@ -154,14 +171,12 @@ CREATE INDEX "project_sites_status_idx" ON "project_sites" USING btree ("status"
 CREATE INDEX "project_users_project_id_idx" ON "project_users" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "project_users_user_id_idx" ON "project_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "unique_user_project_idx" ON "project_users" USING btree ("project_id","user_id");--> statement-breakpoint
-CREATE INDEX "project_slug_idx" ON "projects" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "project_workspace_id_idx" ON "projects" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "project_status_idx" ON "projects" USING btree ("status");--> statement-breakpoint
+CREATE UNIQUE INDEX "unique_workspace_project_slug_idx" ON "projects" USING btree ("workspace_id","slug");--> statement-breakpoint
 CREATE INDEX "user_metadata_user_id_idx" ON "user_metadata" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "email_idx" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "user_status_idx" ON "users" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "users_email_idx" ON "users" USING btree ("email");--> statement-breakpoint
+CREATE INDEX "users_status_idx" ON "users" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "workspace_users_workspace_id_idx" ON "workspace_users" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "workspace_users_user_id_idx" ON "workspace_users" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "unique_user_workspace_idx" ON "workspace_users" USING btree ("workspace_id","user_id");--> statement-breakpoint
-CREATE INDEX "workspace_slug_idx" ON "workspaces" USING btree ("slug");--> statement-breakpoint
-CREATE INDEX "workspace_status_idx" ON "workspaces" USING btree ("status");
+CREATE UNIQUE INDEX "unique_user_workspace_idx" ON "workspace_users" USING btree ("workspace_id","user_id");

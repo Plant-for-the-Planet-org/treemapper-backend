@@ -5,7 +5,7 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
   
-  @Get()
+  @Get('me')
   async getUsers(@Request() req) {
     // First find or create the user based on the Auth0 token
     const user = await this.usersService.findOrCreateUser(req.user);

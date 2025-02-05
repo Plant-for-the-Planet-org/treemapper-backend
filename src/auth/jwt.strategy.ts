@@ -80,7 +80,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           this.drizzle.database
             .select()
             .from(userMetadata)
-            .where(eq(userMetadata.userId, user.id))
+            .where(eq(userMetadata.userId, user.user.id))
             .limit(1),
           this.drizzle.database
             .select({
@@ -91,19 +91,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
               lastLoginAt: users.lastLoginAt
             })
             .from(users)
-            .where(eq(users.id, user.id))
+            .where(eq(users.id, user.user.id))
             .limit(1)
         ]);
 
         userData = {
           id: payload.sub,
-          internalId: user.id,
+          internalId: user.user.id,
           email: payload['https://app.plant-for-the-planet.org/email'],
           emailVerified: payload['https://app.plant-for-the-planet.org/email_verified'],
           fullName: userDetails.fullName,
           firstName: userDetails.firstName,
           lastName: userDetails.lastName ?? undefined,
-          status: userDetails.status,
+          status: userDetails.status === 'deleted' ? 'archived' : userDetails.status,
           roles: Array.isArray(metadata?.[0]?.roles) ? metadata[0].roles : ['user'],
           permissions: [],
           metadata: metadata?.[0] || {},
@@ -119,7 +119,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
 
       // Always check user status before returning
-      if (userData.status !== 'active') {
+      if (!userData || userData.status !== 'active') {
         throw new Error('User account is not active');
       }
 
