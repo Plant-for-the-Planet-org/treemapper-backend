@@ -1,11 +1,6 @@
 import { pgTable, uuid, varchar, text, jsonb, boolean, timestamp, pgEnum, index, uniqueIndex, integer } from 'drizzle-orm/pg-core';
 
-// Enhanced Enum definitions
-export const organizationUserRoleEnum = pgEnum('organization_user_role', [
-  'owner',    // Complete control over organization
-  'admin',    // Can manage workspaces and settings
-  'member'    // Basic organization access
-]);
+
 
 export const workspaceUserRoleEnum = pgEnum('workspace_user_role', [
   'admin',    // Full workspace control
@@ -41,26 +36,6 @@ export const visibilityEnum = pgEnum('visibility', [
   'organization' // Visible to all organization members
 ]);
 
-// // Organizations table
-// export const organizations = pgTable('organizations', {
-//   id: uuid('id').primaryKey(),
-//   name: varchar('name').notNull(),
-//   slug: varchar('slug').notNull().unique(),
-//   description: text('description'),
-//   settings: jsonb('settings').default({}),
-//   status: entityStatusEnum('status').notNull().default('active'),
-//   metadata: jsonb('metadata').default({}),
-//   createdAt: timestamp('created_at').notNull().defaultNow(),
-//   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-//   deletedAt: timestamp('deleted_at')
-// }, (table) => {
-//   return {
-//     slugIdx: index('organization_slug_idx').on(table.slug),
-//     statusIdx: index('organization_status_idx').on(table.status)
-//   };
-// });
-
-// Modified Users table
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
   email: varchar('email').notNull().unique(),
@@ -87,7 +62,6 @@ export const users = pgTable('users', {
 // Modified Workspaces table
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey(),
-  // organizationId: uuid('organization_id').notNull().references(() => organizations.id),
   name: varchar('name').notNull(),
   slug: varchar('slug').notNull(),
   description: text('description'),
@@ -102,10 +76,7 @@ export const workspaces = pgTable('workspaces', {
   deletedAt: timestamp('deleted_at')
 }, (table) => {
   return {
-    // orgIdIdx: index('workspace_org_id_idx').on(table.organizationId),
-    // statusIdx: index('workspace_status_idx').on(table.status),
-    // Ensure unique workspace slugs within an organization
-    // uniqueOrgSlug: uniqueIndex('unique_org_workspace_slug_idx').on(table.organizationId, table.slug)
+
   };
 });
 
@@ -132,7 +103,6 @@ export const workspaceUsers = pgTable('workspace_users', {
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey(),
   workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
-  // organizationId: uuid('organization_id').notNull().references(() => organizations.id),
   name: varchar('name').notNull(),
   slug: varchar('slug').notNull(),
   description: text('description'),
@@ -147,7 +117,6 @@ export const projects = pgTable('projects', {
 }, (table) => {
   return {
     workspaceIdIdx: index('project_workspace_id_idx').on(table.workspaceId),
-    // orgIdIdx: index('project_org_id_idx').on(table.organizationId),
     statusIdx: index('project_status_idx').on(table.status),
     // Ensure unique project slugs within a workspace
     uniqueWorkspaceSlug: uniqueIndex('unique_workspace_project_slug_idx').on(table.workspaceId, table.slug)
@@ -178,7 +147,6 @@ export const projectInvites = pgTable('project_invites', {
   id: uuid('id').primaryKey(),
   projectId: uuid('project_id').notNull().references(() => projects.id),
   workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
-  // organizationId: uuid('organization_id').notNull().references(() => organizations.id),
   email: varchar('email').notNull(),
   token: varchar('token').notNull().unique(),
   invitedByUserId: uuid('invited_by_user_id').notNull().references(() => users.id),
@@ -197,7 +165,6 @@ export const projectInvites = pgTable('project_invites', {
     tokenIdx: index('project_invites_token_idx').on(table.token),
     projectIdIdx: index('project_invites_project_id_idx').on(table.projectId),
     workspaceIdIdx: index('project_invites_workspace_id_idx').on(table.workspaceId),
-    // orgIdIdx: index('project_invites_org_id_idx').on(table.organizationId),
     emailIdx: index('project_invites_email_idx').on(table.email)
   };
 });

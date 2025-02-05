@@ -1,8 +1,11 @@
 // src/project-invite/project-invite.controller.ts
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../auth/user.decorator';
 import { ProjectInviteService } from './project-invite.service';
+import { CreateProjectInviteDto } from './dto/create-invite.dto';
+import { UserData } from 'src/auth/jwt.strategy';
+import { GetProjectInvitesQueryDto } from './dto/get-project-invites-query.dto';
 
 // Reuse the same AuthUser interface
 interface AuthUser {
@@ -20,42 +23,25 @@ interface AuthUser {
 export class ProjectInviteController {
   constructor(private readonly projectInviteService: ProjectInviteService) {}
 
-  @Post(':projectId/invite')
-  async createInvite(
-    @User() user: AuthUser,
-    @Param('projectId') projectId: string,
-    @Body() inviteData: { email: string; role: string }
+  @Post()
+  async createProjectInvite(
+    @Body() createInviteDto: CreateProjectInviteDto,
+    @User() user: UserData
   ) {
     return await this.projectInviteService.createInvite(
-      user.internalId,  // Use internalId instead of id
-      projectId,
-      inviteData.email,
-      inviteData.role
+      {
+        ...createInviteDto
+      },
+      user
     );
-  }
-
-  @Post('accept/:inviteId')
-  async acceptInvite(
-    @User() user: AuthUser,
-    @Param('inviteId') inviteId: string
-  ) {
-    return await this.projectInviteService.acceptInvite(inviteId, user.internalId);
-  }
-
-  @Post('reject/:inviteId')
-  async rejectInvite(
-    @User() user: AuthUser,
-    @Param('inviteId') inviteId: string
-  ) {
-    return await this.projectInviteService.rejectInvite(inviteId, user.internalId);
   }
 
   @Get(':projectId')
   async getProjectInvites(
-    @User() user: AuthUser,
-    @Param('projectId') projectId: string
+    @Param('projectId') projectId: string,
+    @Query() query: GetProjectInvitesQueryDto,
+    @User() user: UserData
   ) {
-    // You might want to add a check in the service to ensure the user has access to this project
-    return await this.projectInviteService.getInvites(projectId);
+    return await this.projectInviteService.getProjectInvites(projectId, user, query);
   }
 }

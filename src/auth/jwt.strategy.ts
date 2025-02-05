@@ -22,7 +22,7 @@ interface JwtPayload {
   azp: string;
 }
 
-interface UserData {
+export interface UserData {
   id: string;                    // Auth0 sub
   internalId: string;           // Database UUID
   email: string;
