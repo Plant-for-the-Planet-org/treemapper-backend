@@ -7,18 +7,17 @@ import * as compression from 'compression';
 import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
+  const app = await NestFactory.create(AppModule, {
+    cors: {
+      origin: '*', // For development
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    },
+  });
   // Security Middleware
   app.use(helmet());
   app.use(compression());
 
-  // CORS Configuration
-  app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
-  });
 
   // Global Prefix (optional)
   app.setGlobalPrefix('api');
