@@ -11,6 +11,7 @@ import { ProjectSitesModule } from './project-sites/project-sites.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { HealthModule } from './health/health.module';
 
 
 @Module({
@@ -27,7 +28,8 @@ import { RolesGuard } from './auth/roles.guard';
     ProjectsModule,
     CommonModule,
     ProjectInviteModule,
-    ProjectSitesModule
+    ProjectSitesModule,
+    HealthModule
   ],
   controllers: [],
   providers: [
