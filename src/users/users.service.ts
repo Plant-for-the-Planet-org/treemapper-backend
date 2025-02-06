@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/database.service';
 import { userMetadata, users } from '../../drizzle/schema/schema';
-import { workspaces, workspaceUsers } from '../../drizzle/schema/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuid4 } from 'uuid';
 import slugify from 'slugify';
@@ -9,51 +8,6 @@ import slugify from 'slugify';
 @Injectable()
 export class UsersService {
   constructor(private readonly drizzle: DrizzleService) {}
-
-  private async createDefaultWorkspace(userId: string, tx: any) {
-    const workspaceName = 'My Workspace';
-    const workspaceSlug = slugify(workspaceName, { lower: true });
-
-    const [workspace] = await tx
-      .insert(workspaces)
-      .values({
-        id: uuid4(),
-        name: workspaceName,
-        slug: workspaceSlug,
-        ownerId: userId,
-        createdBy: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    // Add user as workspace member with owner role
-    await tx
-      .insert(workspaceUsers)
-      .values({
-        id: uuid4(),
-        workspaceId: workspace.id,
-        userId: userId,
-        role: 'owner',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-    return workspace;
-  }
-
-  private async getUserWorkspaces(userId: string) {
-    const userWorkspaces = await this.drizzle.database
-      .select({
-        workspace: workspaces,
-        role: workspaceUsers.role,
-      })
-      .from(workspaceUsers)
-      .innerJoin(workspaces, eq(workspaces.id, workspaceUsers.workspaceId))
-      .where(eq(workspaceUsers.userId, userId));
-
-    return userWorkspaces;
-  }
 
   async getOrCreateUserByAuth0Data({ sub, email, emailVerified }) {
     // Use a transaction to ensure data consistency
@@ -96,30 +50,6 @@ export class UsersService {
         roles: ['user']
       });
 
-      
-
-      // Create default workspace
-      const [workspace] = await tx
-        .insert(workspaces)
-        .values({
-          id: uuid4(),
-          name: `${newUser.firstName}'s Workspace`,
-          slug: slugify(`${newUser.firstName}-workspace`),
-          isDefault: true,
-          status: 'active',
-          visibility: 'private',
-          createdBy: newUser.id // This fixes your current error
-        })
-        .returning();
-
-      // Create workspace user record
-      await tx.insert(workspaceUsers).values({
-        id: uuid4(),
-        workspaceId: workspace.id,
-        userId: newUser.id,
-        role: 'admin'
-      });
-
       return { user: newUser, isNew: true };
     });
   }
@@ -142,14 +72,8 @@ export class UsersService {
             updatedAt: new Date()
           })
           .where(eq(users.id, existingUser[0].id));
-
-        // Get user's workspaces
-        const workspaces = await this.getUserWorkspaces(existingUser[0].id);
-
         return {
-          user: existingUser[0],
-          workspaces: workspaces
-        };
+          user: existingUser[0]        };
       }
 
       // Create new user with default workspace in a transaction
@@ -175,13 +99,9 @@ export class UsersService {
           .values(newUser)
           .returning();
 
-        // Create default workspace
-        const defaultWorkspace = await this.createDefaultWorkspace(createdUser.id, tx);
-
         return {
           user: createdUser,
           workspaces: [{
-            workspace: defaultWorkspace,
             role: 'owner'
           }]
         };

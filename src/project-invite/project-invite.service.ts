@@ -5,9 +5,7 @@ import {
   projectInvites, 
   projectUsers, 
   projects,
-  workspaceUsers,
   users,
-  workspaceUserRoleEnum 
 } from '../../drizzle/schema/schema';
 import { CreateProjectInviteDto } from './dto/create-invite.dto';
 import { UserData } from '../auth/jwt.strategy';
@@ -23,7 +21,6 @@ export class ProjectInviteService {
     const [project] = await this.drizzle.database
       .select({
         id: projects.id,
-        workspaceId: projects.workspaceId,
         status: projects.status
       })
       .from(projects)
@@ -108,7 +105,6 @@ export class ProjectInviteService {
         .values({
           id: uuid(),
           projectId: dto.projectId,
-          workspaceId: project.workspaceId,
           email: dto.email,
           role: dto.role,
           status: 'pending',
@@ -118,32 +114,6 @@ export class ProjectInviteService {
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiry
         })
         .returning();
-
-      // If user exists but is not in workspace, create workspace user entry
-      if (existingUser) {
-        const [existingWorkspaceMember] = await tx
-          .select()
-          .from(workspaceUsers)
-          .where(and(
-            eq(workspaceUsers.workspaceId, project.workspaceId),
-            eq(workspaceUsers.userId, existingUser.id),
-            eq(workspaceUsers.status, 'active')
-          ))
-          .limit(1);
-
-        if (!existingWorkspaceMember) {
-          await tx
-            .insert(workspaceUsers)
-            .values({
-              id: uuid(),
-              workspaceId: project.workspaceId,
-              userId: existingUser.id,
-              role: 'member' as typeof workspaceUserRoleEnum.enumValues[number],
-              status: 'active'
-            });
-        }
-      }
-
       return newInvite;
     });
 

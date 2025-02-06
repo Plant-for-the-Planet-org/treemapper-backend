@@ -63,7 +63,7 @@ export const projects = pgTable('projects', {
   status: entityStatusEnum('status').notNull().default('active'),
   visibility: visibilityEnum('visibility').notNull().default('private'),
   isDefault: boolean('is_default').notNull().default(false), // New field to mark default project
-  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdBy: uuid('created_by').notNull().references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at')
@@ -78,8 +78,8 @@ export const projects = pgTable('projects', {
 // Project Users (Team Members) table
 export const projectUsers = pgTable('project_users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').notNull().references(() => projects.id),
+  userId: uuid('user_id').notNull().references(() => users.id),
   role: projectUserRoleEnum('role').notNull(),
   status: entityStatusEnum('status').notNull().default('active'),
   metadata: jsonb('metadata').default({}),
@@ -98,10 +98,10 @@ export const projectUsers = pgTable('project_users', {
 // Project Invites table
 export const projectInvites = pgTable('project_invites', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'CASCADE' }),
+  projectId: uuid('project_id').notNull().references(() => projects.id),
   email: varchar('email').notNull(),
   token: varchar('token').notNull().unique(),
-  invitedByUserId: uuid('invited_by_user_id').notNull().references(() => users.id, { onDelete: 'CASCADE' }),
+  invitedByUserId: uuid('invited_by_user_id').notNull().references(() => users.id),
   role: projectUserRoleEnum('role').notNull(),
   status: inviteStatusEnum('status').notNull().default('pending'),
   message: text('message'),
@@ -124,7 +124,7 @@ export const projectInvites = pgTable('project_invites', {
 // Project Sites table
 export const projectSites = pgTable('project_sites', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'CASCADE' }),
+  projectId: uuid('project_id').notNull().references(() => projects.id),
   name: varchar('name').notNull(),
   slug: varchar('slug').notNull(),
   description: text('description'),
@@ -136,7 +136,7 @@ export const projectSites = pgTable('project_sites', {
   address: jsonb('address'),
   // Additional fields
   metadata: jsonb('metadata').default({}),
-  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'CASCADE' }),
+  createdBy: uuid('created_by').notNull().references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at')
@@ -151,11 +151,11 @@ export const projectSites = pgTable('project_sites', {
 // Audit Logs table
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'CASCADE' }),
+  projectId: uuid('project_id').references(() => projects.id),
   entityType: varchar('entity_type').notNull(),
   entityId: uuid('entity_id').notNull(),
   action: varchar('action').notNull(),
-  actorId: uuid('actor_id').notNull().references(() => users.id, { onDelete: 'SET NULL' }),
+  actorId: uuid('actor_id').notNull().references(() => users.id),
   changes: jsonb('changes'),
   metadata: jsonb('metadata').default({}),
   ipAddress: varchar('ip_address'),

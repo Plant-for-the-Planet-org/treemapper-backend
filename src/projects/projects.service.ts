@@ -1,31 +1,20 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../database/database.service';
 import { CreateProjectDto } from './dto/create-project'
-import { and, eq, sql } from 'drizzle-orm';
-import { projects, projectUsers, workspaces, workspaceUsers } from '../../drizzle/schema/schema';
+import { and, eq, sql, desc, asc, or } from 'drizzle-orm';
+import { projectInvites, projects, projectSites, projectUsers } from '../../drizzle/schema/schema';
 import { UserData } from '../auth/jwt.strategy';
 import {v4 as uuid4} from 'uuid'
+import { GetUserProjectsParams, ProjectWithMembership } from './project.interface';
+
+
+
 
 @Injectable()
 export class ProjectService {
   constructor(private readonly drizzle: DrizzleService) {}
 
   async createProject(dto: CreateProjectDto, user: UserData) {
-    // Check if user has admin access to the workspace
-    const [workspaceUser] = await this.drizzle.database
-      .select()
-      .from(workspaceUsers)
-      .where(and(
-        eq(workspaceUsers.userId, user.internalId),
-        eq(workspaceUsers.workspaceId, dto.workspaceId),
-        eq(workspaceUsers.status, 'active')
-      ))
-      .limit(1);
-
-    if (!workspaceUser || workspaceUser.role !== 'admin') {
-      throw new ForbiddenException('You do not have permission to create projects in this workspace');
-    }
-
     // Use database transaction
     const project = await this.drizzle.database.transaction(async (tx) => {
       // Create the project
@@ -36,7 +25,6 @@ export class ProjectService {
           name: dto.name,
           slug: dto.slug,
           description: dto.description,
-          workspaceId: dto.workspaceId,
           settings: dto.settings || {},
           metadata: dto.metadata || {},
           visibility: dto.visibility || 'private',
@@ -88,56 +76,91 @@ export class ProjectService {
     return projectUser;
   }
 
+  async getUserProjects(
+    user: UserData,
+    params: GetUserProjectsParams = {}
+  ): Promise<{ data: ProjectWithMembership[]; total: number }> {
+    const {
+      status = 'active',
+      sort = 'updatedAt',
+      order = 'desc',
+      page = 1,
+      limit = 10,
+      search
+    } = params;
 
-  async getUserProjects(userId: string) {
-    // Get all active projects where user has access
-    const userProjects = await this.drizzle.database
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Build the base query conditions
+    const conditions = [
+      eq(projectUsers.userId, user.internalId),
+      eq(projectUsers.status, 'active')
+    ];
+
+    if (status) {
+      conditions.push(eq(projects.status, status));
+    }
+
+    if (search) {
+      conditions.push(
+        or(
+          sql`${projects.name} ILIKE ${`%${search}%`}`,
+          sql`${projects.description} ILIKE ${`%${search}%`}`
+        ) as any
+      );
+    }
+
+    // Get total count for pagination
+    const [{ count }] = await this.drizzle.database
       .select({
-        project: {
-          id: projects.id,
-          name: projects.name,
-          slug: projects.slug,
-          description: projects.description,
-          workspaceId: projects.workspaceId,
-          settings: projects.settings,
-          metadata: projects.metadata,
-          status: projects.status,
-          visibility: projects.visibility,
-          createdAt: projects.createdAt,
-          updatedAt: projects.updatedAt,
-        },
-        workspace: {
-          name: workspaces.name,
-          slug: workspaces.slug,
-        },
-        role: projectUsers.role,
-        lastAccess: projectUsers.lastAccessAt,
+        count: sql<number>`count(*)::int`,
       })
-      .from(projectUsers)
-      .innerJoin(projects, and(
-        eq(projects.id, projectUsers.projectId),
-        eq(projects.status, 'active')
-      ))
-      .innerJoin(workspaces, and(
-        eq(workspaces.id, projects.workspaceId),
-        eq(workspaces.status, 'active')
-      ))
-      .where(and(
-        eq(projectUsers.userId, userId),
-        eq(projectUsers.status, 'active')
-      ))
-      .orderBy(sql`${projects.updatedAt} DESC`);
+      .from(projects)
+      .innerJoin(projectUsers, eq(projects.id, projectUsers.projectId))
+      .where(and(...conditions));
 
-    // Transform the data to a more friendly format
-    return userProjects.map(({ project, workspace, role, lastAccess }) => ({
-      ...project,
-      workspace: {
-        id: project.workspaceId,
-        name: workspace.name,
-        slug: workspace.slug,
-      },
-      userRole: role,
-      lastAccess,
-    }));
+    // Build the sorting expression
+    const sortExpression = order === 'asc' ? asc : desc;
+    const sortColumn = 
+      sort === 'name' ? projects.name :
+      sort === 'createdAt' ? projects.createdAt :
+      projects.updatedAt;
+
+    // Main query to fetch projects with user role and member count
+    const projectsData = await this.drizzle.database
+      .select({
+        id: projects.id,
+        name: projects.name,
+        slug: projects.slug,
+        description: projects.description,
+        settings: projects.settings as Record<string, any>,
+        metadata: projects.metadata as Record<string, any>,
+        status: projects.status,
+        visibility: projects.visibility,
+        isDefault: projects.isDefault,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        userRole: projectUsers.role,
+        totalMembers: sql<number>`(
+          SELECT COUNT(*)::int 
+          FROM ${projectUsers} pu2 
+          WHERE pu2.project_id = ${projects.id} 
+          AND pu2.status = 'active'
+        )`
+      })
+      .from(projects)
+      .innerJoin(projectUsers, eq(projects.id, projectUsers.projectId))
+      .where(and(...conditions))
+      .orderBy(sortExpression(sortColumn))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      data: projectsData,
+      total: Number(count)
+    };
   }
+
+
 }
