@@ -5,10 +5,13 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+    "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -21,7 +24,8 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "drop": "drizzle-kit drop",
-    "check": "drizzle-kit check:pg"
+    "check": "drizzle-kit check:pg",
+    "heroku-postbuild": "yarn build"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
