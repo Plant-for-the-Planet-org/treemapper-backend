@@ -1,14 +1,27 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DrizzleService } from '../database/database.service';
-import { CreateProjectDto } from './dto/create-project'
+import { CreateProjectDto } from './dto/create-project';
 import { and, eq, sql, desc, asc, or } from 'drizzle-orm';
-import { projectInvites, projects, projectSites, projectUsers } from '../../drizzle/schema/schema';
+import {
+  projectInvites,
+  projects,
+  projectSites,
+  projectUsers,
+} from '../../drizzle/schema/schema';
 import { UserData } from '../auth/jwt.strategy';
-import {v4 as uuid4} from 'uuid'
-import { GetUserProjectsParams, ProjectWithMembership } from './project.interface';
-
-
-
+import { v4 as uuid4 } from 'uuid';
+import {
+  GetUserProjectsParams,
+  ProjectWithMembership,
+} from './project.interface';
+import {
+  generateProjectName,
+  generateProjectSlug,
+} from 'src/util/nameGeneration';
 
 @Injectable()
 export class ProjectService {
@@ -29,20 +42,18 @@ export class ProjectService {
           metadata: dto.metadata || {},
           visibility: dto.visibility || 'private',
           createdBy: user.internalId,
-          status: 'active'
+          status: 'active',
         })
         .returning();
 
       // Add the creator as project owner
-      await tx
-        .insert(projectUsers)
-        .values({
-          id: uuid4(),
-          projectId: newProject.id,
-          userId: user.internalId,
-          role: 'owner',
-          status: 'active'
-        });
+      await tx.insert(projectUsers).values({
+        id: uuid4(),
+        projectId: newProject.id,
+        userId: user.internalId,
+        role: 'owner',
+        status: 'active',
+      });
 
       return newProject;
     });
@@ -50,15 +61,21 @@ export class ProjectService {
     return project;
   }
 
-  async validateProjectAccess(projectId: string, user: UserData, requiredRole: 'owner' | 'admin' | 'manager' | 'contributor' | 'viewer') {
+  async validateProjectAccess(
+    projectId: string,
+    user: UserData,
+    requiredRole: 'owner' | 'admin' | 'manager' | 'contributor' | 'viewer',
+  ) {
     const [projectUser] = await this.drizzle.database
       .select()
       .from(projectUsers)
-      .where(and(
-        eq(projectUsers.projectId, projectId),
-        eq(projectUsers.userId, user.internalId),
-        eq(projectUsers.status, 'active')
-      ))
+      .where(
+        and(
+          eq(projectUsers.projectId, projectId),
+          eq(projectUsers.userId, user.internalId),
+          eq(projectUsers.status, 'active'),
+        ),
+      )
       .limit(1);
 
     if (!projectUser) {
@@ -69,7 +86,11 @@ export class ProjectService {
     const userRoleIndex = roles.indexOf(projectUser.role);
     const requiredRoleIndex = roles.indexOf(requiredRole);
 
-    if (userRoleIndex === -1 || requiredRoleIndex === -1 || userRoleIndex > requiredRoleIndex) {
+    if (
+      userRoleIndex === -1 ||
+      requiredRoleIndex === -1 ||
+      userRoleIndex > requiredRoleIndex
+    ) {
       throw new ForbiddenException('Insufficient permissions');
     }
 
@@ -78,7 +99,7 @@ export class ProjectService {
 
   async getUserProjects(
     user: UserData,
-    params: GetUserProjectsParams = {}
+    params: GetUserProjectsParams = {},
   ): Promise<{ data: ProjectWithMembership[]; total: number }> {
     const {
       status = 'active',
@@ -86,7 +107,7 @@ export class ProjectService {
       order = 'desc',
       page = 1,
       limit = 10,
-      search
+      search,
     } = params;
 
     // Calculate offset for pagination
@@ -95,7 +116,7 @@ export class ProjectService {
     // Build the base query conditions
     const conditions = [
       eq(projectUsers.userId, user.internalId),
-      eq(projectUsers.status, 'active')
+      eq(projectUsers.status, 'active'),
     ];
 
     if (status) {
@@ -106,8 +127,8 @@ export class ProjectService {
       conditions.push(
         or(
           sql`${projects.name} ILIKE ${`%${search}%`}`,
-          sql`${projects.description} ILIKE ${`%${search}%`}`
-        ) as any
+          sql`${projects.description} ILIKE ${`%${search}%`}`,
+        ) as any,
       );
     }
 
@@ -120,12 +141,29 @@ export class ProjectService {
       .innerJoin(projectUsers, eq(projects.id, projectUsers.projectId))
       .where(and(...conditions));
 
+    // If user has no projects, create a default project
+    if (count === 0) {
+      const defaultProject = await this.createDefaultProject(user);
+      return {
+        data: [
+          {
+            ...defaultProject,
+            userRole: 'admin',
+            totalMembers: 1,
+          },
+        ],
+        total: 1,
+      };
+    }
+
     // Build the sorting expression
     const sortExpression = order === 'asc' ? asc : desc;
-    const sortColumn = 
-      sort === 'name' ? projects.name :
-      sort === 'createdAt' ? projects.createdAt :
-      projects.updatedAt;
+    const sortColumn =
+      sort === 'name'
+        ? projects.name
+        : sort === 'createdAt'
+          ? projects.createdAt
+          : projects.updatedAt;
 
     // Main query to fetch projects with user role and member count
     const projectsData = await this.drizzle.database
@@ -147,7 +185,7 @@ export class ProjectService {
           FROM ${projectUsers} pu2 
           WHERE pu2.project_id = ${projects.id} 
           AND pu2.status = 'active'
-        )`
+        )`,
       })
       .from(projects)
       .innerJoin(projectUsers, eq(projects.id, projectUsers.projectId))
@@ -158,9 +196,41 @@ export class ProjectService {
 
     return {
       data: projectsData,
-      total: Number(count)
+      total: Number(count),
     };
   }
 
+  // Add this new method to create a default project
+  private async createDefaultProject(user: UserData): Promise<any> {
+    return await this.drizzle.database.transaction(async (tx) => {
+      const projName = generateProjectName();
+      // Create default project
+      const [newProject] = await tx
+        .insert(projects)
+        .values({
+          id: uuid4(),
+          name: projName,
+          slug: generateProjectSlug(projName), // Ensure unique slug
+          description: 'This is your default project',
+          settings: {},
+          metadata: {},
+          visibility: 'private',
+          createdBy: user.internalId,
+          status: 'active',
+          isDefault: true,
+        })
+        .returning();
 
+      // Add user as admin
+      await tx.insert(projectUsers).values({
+        id: uuid4(),
+        projectId: newProject.id,
+        userId: user.internalId,
+        role: 'admin',
+        status: 'active',
+      });
+
+      return newProject;
+    });
+  }
 }
