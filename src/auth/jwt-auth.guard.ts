@@ -2,9 +2,12 @@ import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
   constructor(private reflector: Reflector) {
     super();
   }
@@ -23,15 +26,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
-    // Add debugging logs
-    console.log('Auth Error:', err);
-    console.log('User:', user);
-    console.log('Info:', info);
-    console.log('Headers:', context.switchToHttp().getRequest().headers);
-
-    // If there's an error or no user, throw an error
+    const request = context.switchToHttp().getRequest();
+    
     if (err || !user) {
-      throw err || new UnauthorizedException('Invalid token or no token provided');
+      this.logger.error({
+        message: 'Authentication failed',
+        error: err?.message,
+        info: info?.message,
+        path: request.path,
+        method: request.method,
+        ip: request.ip,
+      });
+      
+      throw new UnauthorizedException(
+        err?.message || 'Authentication failed'
+      );
     }
 
     return user;
