@@ -1,9 +1,10 @@
 import { IsString, IsOptional, IsObject, IsEnum } from 'class-validator';
-import { visibilityEnum } from '../../../drizzle/schema/schema';
+import { visibilityEnum, entityStatusEnum } from '../../../drizzle/schema/schema';
 
-export class CreateSiteDto {
+export class UpdateSiteDto {
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
@@ -16,6 +17,10 @@ export class CreateSiteDto {
   @IsOptional()
   @IsEnum(visibilityEnum)
   visibility?: typeof visibilityEnum.enumValues[number];
+
+  @IsOptional()
+  @IsEnum(entityStatusEnum)
+  status?: typeof entityStatusEnum.enumValues[number];
 
   @IsOptional()
   @IsString()

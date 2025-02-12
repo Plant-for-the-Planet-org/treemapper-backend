@@ -11,6 +11,8 @@ import { CreateProjectInviteDto } from './dto/create-invite.dto';
 import { UserData } from '../auth/jwt.strategy';
 import { GetProjectInvitesQueryDto } from './dto/get-project-invites-query.dto'
 import { v4 as uuid } from 'uuid';
+import { UpdateProjectInviteDto } from './dto/accept-invite.dto';
+import { AcceptProjectInviteDto } from './dto/update-invite.dto';
 
 @Injectable()
 export class ProjectInviteService {
@@ -234,5 +236,188 @@ export class ProjectInviteService {
       resendCount: invite.resendCount,
       lastResendAt: invite.lastResendAt
     }));
+  }
+
+  async updateInvite(inviteId: string, dto: UpdateProjectInviteDto, user: UserData) {
+    // Get the invite with project details
+    const [invite] = await this.drizzle.database
+      .select({
+        invite: projectInvites,
+        project: {
+          id: projects.id,
+          status: projects.status
+        }
+      })
+      .from(projectInvites)
+      .innerJoin(projects, eq(projects.id, projectInvites.projectId))
+      .where(and(
+        eq(projectInvites.id, inviteId),
+        eq(projectInvites.status, 'pending')
+      ))
+      .limit(1);
+
+    if (!invite) {
+      throw new NotFoundException('Invite not found or already processed');
+    }
+
+    if (invite.project.status !== 'active') {
+      throw new BadRequestException('Project is not active');
+    }
+
+    // Check if user has permission to update invite
+    const [userProjectRole] = await this.drizzle.database
+      .select()
+      .from(projectUsers)
+      .where(and(
+        eq(projectUsers.projectId, invite.invite.projectId),
+        eq(projectUsers.userId, user.internalId),
+        eq(projectUsers.status, 'active')
+      ))
+      .limit(1);
+
+    if (!userProjectRole || !['owner', 'admin', 'manager'].includes(userProjectRole.role)) {
+      throw new ForbiddenException('You do not have permission to update this invite');
+    }
+
+    // Validate role hierarchy
+    if (dto.role) {
+      const roles = ['viewer', 'contributor', 'manager', 'admin', 'owner'];
+      const updaterRoleIndex = roles.indexOf(userProjectRole.role);
+      const newRoleIndex = roles.indexOf(dto.role);
+
+      if (newRoleIndex > updaterRoleIndex) {
+        throw new ForbiddenException('Cannot set role higher than your own');
+      }
+    }
+
+    // Update the invite
+    const [updatedInvite] = await this.drizzle.database
+      .update(projectInvites)
+      .set({
+        ...(dto.role && { role: dto.role }),
+        ...(dto.message && { message: dto.message }),
+        ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) })
+      })
+      .where(eq(projectInvites.id, inviteId))
+      .returning();
+
+    return {
+      id: updatedInvite.id,
+      email: updatedInvite.email,
+      role: updatedInvite.role,
+      status: updatedInvite.status,
+      message: updatedInvite.message,
+      expiresAt: updatedInvite.expiresAt
+    };
+  }
+
+  async acceptInvite(token: string, acceptDto: AcceptProjectInviteDto) {
+    console.log("LKSJDC")
+    return await this.drizzle.database.transaction(async (tx) => {
+      // Get the invite
+      const [invite] = await tx
+        .select({
+          invite: projectInvites,
+          project: {
+            id: projects.id,
+            status: projects.status
+          }
+        })
+        .from(projectInvites)
+        .innerJoin(projects, eq(projects.id, projectInvites.projectId))
+        .where(and(
+          eq(projectInvites.token, token),
+          eq(projectInvites.status, 'pending')
+        ))
+        .limit(1);
+
+      if (!invite) {
+        throw new NotFoundException('Invite not found or already processed');
+      }
+
+      if (invite.project.status !== 'active') {
+        throw new BadRequestException('Project is not active');
+      }
+
+      // Check if invite is expired
+      if (new Date() > invite.invite.expiresAt) {
+        await tx
+          .update(projectInvites)
+          .set({ status: 'expired' })
+          .where(eq(projectInvites.id, invite.invite.id));
+        throw new BadRequestException('Invite has expired');
+      }
+
+      // Get or create user
+      let userId: string;
+      const [existingUser] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.email, invite.invite.email))
+        .limit(1);
+
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        // Create new user
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            id: uuid(),
+            email: invite.invite.email,
+            fullName: acceptDto.fullName,
+            firstName: acceptDto.firstName,
+            lastName: acceptDto.lastName || null,
+            emailVerified: true, // Since they accessed the invite link
+            status: 'active'
+          })
+          .returning();
+        userId = newUser.id;
+      }
+
+      // Check if user is already a member
+      const [existingMember] = await tx
+        .select()
+        .from(projectUsers)
+        .where(and(
+          eq(projectUsers.projectId, invite.invite.projectId),
+          eq(projectUsers.userId, userId),
+          eq(projectUsers.status, 'active')
+        ))
+        .limit(1);
+
+      if (existingMember) {
+        throw new BadRequestException('You are already a member of this project');
+      }
+
+      // Create project membership
+      const [projectMembership] = await tx
+        .insert(projectUsers)
+        .values({
+          id: uuid(),
+          projectId: invite.invite.projectId,
+          userId: userId,
+          role: invite.invite.role,
+          status: 'active',
+          metadata: { acceptedFromInvite: invite.invite.id }
+        })
+        .returning();
+
+      // Update invite status
+      await tx
+        .update(projectInvites)
+        .set({
+          status: 'accepted',
+          acceptedAt: new Date()
+        })
+        .where(eq(projectInvites.id, invite.invite.id));
+
+      return {
+        userId,
+        projectId: invite.invite.projectId,
+        role: projectMembership.role,
+        status: projectMembership.status
+      };
+    });
   }
 }

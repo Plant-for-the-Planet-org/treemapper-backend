@@ -63,14 +63,14 @@ export class UsersService {
         .limit(1);
 
       if (existingUser.length > 0) {
-        // Update last login time
-        await this.drizzle.database
-          .update(users)
-          .set({
-            lastLoginAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, existingUser[0].id));
+        // // Update last login time
+        // await this.drizzle.database
+        //   .update(users)
+        //   .set({
+        //     lastLoginAt: new Date(),
+        //     updatedAt: new Date(),
+        //   })
+        //   .where(eq(users.id, existingUser[0].id));
         return {
           user: existingUser[0],
         };
@@ -113,6 +113,9 @@ export class UsersService {
       throw error;
     }
   }
+
+
+
   async updateUser(userId: string, updateData: UpdateUserDto) {
     try {
       // Validate that the user exists first
