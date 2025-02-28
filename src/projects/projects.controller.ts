@@ -1,29 +1,31 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ProjectsService } from './projects.service';
+import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
+import { ProjectService } from './projects.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../auth/user.decorator';
-
-// Interface for type safety
-interface AuthUser {
-  id: string;
-  internalId: string;
-  email: string;
-  emailVerified: boolean;
-  roles: string[];
-  permissions: string[];
-  metadata: Record<string, any>;
-}
+import { CreateProjectDto } from './dto/create-project';
+import { UserData } from '../auth/jwt.strategy';  // Import the UserData interface from JWT strategy
+import { GetUserProjectsParams } from './project.interface';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(
-    private readonly projectsService: ProjectsService,
+    private readonly projectsService: ProjectService,
   ) {}
   
   @Get()
-  async getUserProjects(@User() user: AuthUser) {
-    // Use the internalId (database UUID) directly
-    return await this.projectsService.getUserProjects(user.internalId);
+  async getUserProjects(
+    @User() user: UserData,
+    @Query() query: GetUserProjectsParams
+  ) {
+    return await this.projectsService.getUserProjects(user,query);
+  }
+
+  @Post()
+  async createProject(
+    @Body() createProjectDto: CreateProjectDto,
+    @User() user: UserData
+  ) {
+    return await this.projectsService.createProject(createProjectDto, user);
   }
 }

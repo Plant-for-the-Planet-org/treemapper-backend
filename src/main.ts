@@ -5,45 +5,47 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as compression from 'compression';
 import helmet from 'helmet';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  // Security Middleware
-  app.use(helmet());
-  app.use(compression());
-
-  // CORS Configuration
-  app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
+  const app = await NestFactory.create(AppModule, {
+    cors: {
+      origin: '*', // For development TODO: Need to update it for production
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    },
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+  // Security Middleware
+  // app.use(helmet());
+  // app.use(compression());
+
 
   // Global Prefix (optional)
   app.setGlobalPrefix('api');
 
-  // Global Guards
-  const reflector = app.get(Reflector);
-  app.useGlobalGuards(new JwtAuthGuard(reflector));
 
-  // Global Pipes
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Strip properties that don't have decorators
-      transform: true, // Transform payloads to DTO instances
-      forbidNonWhitelisted: true, // Throw errors if non-whitelisted values are provided
-      transformOptions: {
-        enableImplicitConversion: true, // Automatically transform primitive types
-      },
-    }),
-  );
+  app.use((req, res, next) => {
+    Logger.log(`${req.method} ${req.originalUrl}`, 'RequestLog');
+    next();
+  });
+  // // Global Pipes
+  // app.useGlobalPipes(
+  //   new ValidationPipe({
+  //     whitelist: true, // Strip properties that don't have decorators
+  //     transform: true, // Transform payloads to DTO instances
+  //     forbidNonWhitelisted: true, // Throw errors if non-whitelisted values are provided
+  //     transformOptions: {
+  //       enableImplicitConversion: true, // Automatically transform primitive types
+  //     },
+  //   }),
+  // );
 
   // Swagger Documentation
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('Your API Title')
-      .setDescription('Your API Description')
+      .setTitle('TreeMapper Backend')
+      .setDescription('Internal Documentation')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
@@ -59,6 +61,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
+  
   console.error('Application failed to start:', error);
   process.exit(1);
 });

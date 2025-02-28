@@ -1,151 +1,423 @@
-// src/project-invite/project-invite.service.ts
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../database/database.service';
-import { eq, and } from 'drizzle-orm';
-import { projectInvites, projects, projectUsers } from '../../drizzle/schema/schema';
-import { v4 as uuidv4 } from 'uuid';
+import { and, eq, desc } from 'drizzle-orm';
+import { 
+  projectInvites, 
+  projectUsers, 
+  projects,
+  users,
+} from '../../drizzle/schema/schema';
+import { CreateProjectInviteDto } from './dto/create-invite.dto';
+import { UserData } from '../auth/jwt.strategy';
+import { GetProjectInvitesQueryDto } from './dto/get-project-invites-query.dto'
+import { v4 as uuid } from 'uuid';
+import { UpdateProjectInviteDto } from './dto/accept-invite.dto';
+import { AcceptProjectInviteDto } from './dto/update-invite.dto';
 
 @Injectable()
 export class ProjectInviteService {
   constructor(private readonly drizzle: DrizzleService) {}
 
-  async createInvite(invitedByUserId: string, projectId: string, email: string, role: string) {
-    const db = this.drizzle.database;
-    
-    // Check if user has permission to invite
-    const userProject = await db
-      .select()
-      .from(projectUsers)
-      .where(
-        and(
-          eq(projectUsers.projectId, projectId),
-          eq(projectUsers.userId, invitedByUserId)
-        )
-      );
+  async createInvite(dto: CreateProjectInviteDto, inviter: UserData) {
+    // Get project details including workspace
+    const [project] = await this.drizzle.database
+      .select({
+        id: projects.id,
+        status: projects.status
+      })
+      .from(projects)
+      .where(and(
+        eq(projects.id, dto.projectId),
+        eq(projects.status, 'active')
+      ))
+      .limit(1);
 
-    if (!userProject.length || !['owner', 'admin'].includes(userProject[0].role)) {
-      throw new ForbiddenException('You do not have permission to invite users');
+    if (!project) {
+      throw new BadRequestException('Project not found or inactive');
     }
 
-    // Check if project exists
-    const project = await db
+    // Check if inviter has permission to invite (must be owner, admin, or manager)
+    const [inviterProjectRole] = await this.drizzle.database
+      .select()
+      .from(projectUsers)
+      .where(and(
+        eq(projectUsers.projectId, dto.projectId),
+        eq(projectUsers.userId, inviter.internalId),
+        eq(projectUsers.status, 'active')
+      ))
+      .limit(1);
+
+    if (!inviterProjectRole || !['owner', 'admin', 'manager'].includes(inviterProjectRole.role)) {
+      throw new ForbiddenException('You do not have permission to invite users to this project');
+    }
+
+    // Validate role hierarchy (can't invite with higher role than self)
+    const roles = ['viewer', 'contributor', 'manager', 'admin', 'owner'];
+    const inviterRoleIndex = roles.indexOf(inviterProjectRole.role);
+    const newRoleIndex = roles.indexOf(dto.role);
+
+    if (newRoleIndex > inviterRoleIndex) {
+      throw new ForbiddenException('Cannot invite user with higher role than your own');
+    }
+
+    // Check if user already exists
+    const [existingUser] = await this.drizzle.database
+      .select()
+      .from(users)
+      .where(eq(users.email, dto.email))
+      .limit(1);
+
+    // Check for existing invites
+    const [existingInvite] = await this.drizzle.database
+      .select()
+      .from(projectInvites)
+      .where(and(
+        eq(projectInvites.projectId, dto.projectId),
+        eq(projectInvites.email, dto.email),
+        eq(projectInvites.status, 'pending')
+      ))
+      .limit(1);
+
+    if (existingInvite) {
+      throw new BadRequestException('User already has a pending invite for this project');
+    }
+
+    // If user exists, check if they're already a member
+    if (existingUser) {
+      const [existingMember] = await this.drizzle.database
+        .select()
+        .from(projectUsers)
+        .where(and(
+          eq(projectUsers.projectId, dto.projectId),
+          eq(projectUsers.userId, existingUser.id),
+          eq(projectUsers.status, 'active')
+        ))
+        .limit(1);
+
+      if (existingMember) {
+        throw new BadRequestException('User is already a member of this project');
+      }
+    }
+
+    // Create invite
+    const invite = await this.drizzle.database.transaction(async (tx) => {
+      // Create the project invite
+      const [newInvite] = await tx
+        .insert(projectInvites)
+        .values({
+          id: uuid(),
+          projectId: dto.projectId,
+          email: dto.email,
+          role: dto.role,
+          status: 'pending',
+          token: uuid(),
+          message: dto.message,
+          invitedByUserId: inviter.internalId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiry
+        })
+        .returning();
+      return newInvite;
+    });
+
+    return {
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      status: invite.status,
+      expiresAt: invite.expiresAt
+    };
+  }
+  async getProjectInvites(projectId: string, user: UserData, query?: GetProjectInvitesQueryDto) {
+    // First check if user has access to view invites (must be owner, admin, or manager)
+    const [projectAccess] = await this.drizzle.database
+      .select()
+      .from(projectUsers)
+      .where(and(
+        eq(projectUsers.projectId, projectId),
+        eq(projectUsers.userId, user.internalId),
+        eq(projectUsers.status, 'active')
+      ))
+      .limit(1);
+
+    if (!projectAccess || !['owner', 'admin', 'manager'].includes(projectAccess.role)) {
+      throw new ForbiddenException('You do not have permission to view project invites');
+    }
+
+    // Verify project exists and is active
+    const [project] = await this.drizzle.database
       .select()
       .from(projects)
-      .where(eq(projects.id, projectId));
+      .where(and(
+        eq(projects.id, projectId),
+        eq(projects.status, 'active')
+      ))
+      .limit(1);
 
-    if (!project.length) {
-      throw new NotFoundException('Project not found');
+    if (!project) {
+      throw new NotFoundException('Project not found or inactive');
     }
 
-    // Check if invite already exists
-    const existingInvite = await db
-      .select()
-      .from(projectInvites)
-      .where(
-        and(
-          eq(projectInvites.projectId, projectId),
-          eq(projectInvites.email, email),
-          eq(projectInvites.status, 'pending')
-        )
-      );
-
-    if (existingInvite.length) {
-      return existingInvite[0];
-    }
-
-    // Create new invite
-    const invite = await db
-      .insert(projectInvites)
-      .values({
-        id: uuidv4(),
-        projectId,
-        email,
-        invitedByUserId,
-        role: role as 'owner' | 'admin' | 'manager' | 'contributor' | 'viewer',
-        status: 'pending',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiry
+    // Build the query for invites
+    let invitesQuery = this.drizzle.database
+      .select({
+        invite: {
+          id: projectInvites.id,
+          email: projectInvites.email,
+          role: projectInvites.role,
+          status: projectInvites.status,
+          message: projectInvites.message,
+          createdAt: projectInvites.createdAt,
+          expiresAt: projectInvites.expiresAt,
+          acceptedAt: projectInvites.acceptedAt,
+          rejectedAt: projectInvites.rejectedAt,
+          resendCount: projectInvites.resendCount,
+          lastResendAt: projectInvites.lastResendAt
+        },
+        invitedBy: {
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email
+        }
       })
-      .returning();
+      .from(projectInvites)
+      .innerJoin(users, eq(users.id, projectInvites.invitedByUserId))
+      .where(eq(projectInvites.projectId, projectId));
 
-    return invite[0];
+    // Apply status filter if provided
+    if (query?.status) {
+      invitesQuery = this.drizzle.database
+        .select({
+          invite: {
+            id: projectInvites.id,
+            email: projectInvites.email,
+            role: projectInvites.role,
+            status: projectInvites.status,
+            message: projectInvites.message,
+            createdAt: projectInvites.createdAt,
+            expiresAt: projectInvites.expiresAt,
+            acceptedAt: projectInvites.acceptedAt,
+            rejectedAt: projectInvites.rejectedAt,
+            resendCount: projectInvites.resendCount,
+            lastResendAt: projectInvites.lastResendAt
+          },
+          invitedBy: {
+            id: users.id,
+            fullName: users.fullName,
+            email: users.email
+          }
+        })
+        .from(projectInvites)
+        .innerJoin(users, eq(users.id, projectInvites.invitedByUserId))
+        .where(and(
+          eq(projectInvites.projectId, projectId),
+          eq(projectInvites.status, query.status)
+        ));
+    }
+
+    // Get invites ordered by creation date
+    const invites = await invitesQuery.orderBy(desc(projectInvites.createdAt));
+
+    // Transform the data for response
+    return invites.map(({ invite, invitedBy }) => ({
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      status: invite.status,
+      message: invite.message,
+      invitedBy: {
+        id: invitedBy.id,
+        fullName: invitedBy.fullName,
+        email: invitedBy.email
+      },
+      createdAt: invite.createdAt,
+      expiresAt: invite.expiresAt,
+      acceptedAt: invite.acceptedAt,
+      rejectedAt: invite.rejectedAt,
+      resendCount: invite.resendCount,
+      lastResendAt: invite.lastResendAt
+    }));
   }
 
-  async acceptInvite(inviteId: string, userId: string) {
-    const db = this.drizzle.database;
-
-    // Get invite
-    const invite = await db
-      .select()
+  async updateInvite(inviteId: string, dto: UpdateProjectInviteDto, user: UserData) {
+    // Get the invite with project details
+    const [invite] = await this.drizzle.database
+      .select({
+        invite: projectInvites,
+        project: {
+          id: projects.id,
+          status: projects.status
+        }
+      })
       .from(projectInvites)
-      .where(eq(projectInvites.id, inviteId));
+      .innerJoin(projects, eq(projects.id, projectInvites.projectId))
+      .where(and(
+        eq(projectInvites.id, inviteId),
+        eq(projectInvites.status, 'pending')
+      ))
+      .limit(1);
 
-    if (!invite.length || invite[0].status !== 'pending') {
-      throw new NotFoundException('Invalid or expired invite');
+    if (!invite) {
+      throw new NotFoundException('Invite not found or already processed');
     }
 
-    // Check if user already in project
-    const existingMember = await db
+    if (invite.project.status !== 'active') {
+      throw new BadRequestException('Project is not active');
+    }
+
+    // Check if user has permission to update invite
+    const [userProjectRole] = await this.drizzle.database
       .select()
       .from(projectUsers)
-      .where(
-        and(
-          eq(projectUsers.projectId, invite[0].projectId),
-          eq(projectUsers.userId, userId)
-        )
-      );
+      .where(and(
+        eq(projectUsers.projectId, invite.invite.projectId),
+        eq(projectUsers.userId, user.internalId),
+        eq(projectUsers.status, 'active')
+      ))
+      .limit(1);
 
-    if (existingMember.length) {
-      throw new ForbiddenException('You are already a member of this project');
+    if (!userProjectRole || !['owner', 'admin', 'manager'].includes(userProjectRole.role)) {
+      throw new ForbiddenException('You do not have permission to update this invite');
     }
 
-    // Begin transaction
-    return await db.transaction(async (tx) => {
-      // Update invite status
-      await tx
-        .update(projectInvites)
-        .set({ status: 'accepted' })
-        .where(eq(projectInvites.id, inviteId));
+    // Validate role hierarchy
+    if (dto.role) {
+      const roles = ['viewer', 'contributor', 'manager', 'admin', 'owner'];
+      const updaterRoleIndex = roles.indexOf(userProjectRole.role);
+      const newRoleIndex = roles.indexOf(dto.role);
 
-      // Add user to project
-      const projectUser = await tx
+      if (newRoleIndex > updaterRoleIndex) {
+        throw new ForbiddenException('Cannot set role higher than your own');
+      }
+    }
+
+    // Update the invite
+    const [updatedInvite] = await this.drizzle.database
+      .update(projectInvites)
+      .set({
+        ...(dto.role && { role: dto.role }),
+        ...(dto.message && { message: dto.message }),
+        ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) })
+      })
+      .where(eq(projectInvites.id, inviteId))
+      .returning();
+
+    return {
+      id: updatedInvite.id,
+      email: updatedInvite.email,
+      role: updatedInvite.role,
+      status: updatedInvite.status,
+      message: updatedInvite.message,
+      expiresAt: updatedInvite.expiresAt
+    };
+  }
+
+  async acceptInvite(token: string, acceptDto: AcceptProjectInviteDto) {
+    console.log("LKSJDC")
+    return await this.drizzle.database.transaction(async (tx) => {
+      // Get the invite
+      const [invite] = await tx
+        .select({
+          invite: projectInvites,
+          project: {
+            id: projects.id,
+            status: projects.status
+          }
+        })
+        .from(projectInvites)
+        .innerJoin(projects, eq(projects.id, projectInvites.projectId))
+        .where(and(
+          eq(projectInvites.token, token),
+          eq(projectInvites.status, 'pending')
+        ))
+        .limit(1);
+
+      if (!invite) {
+        throw new NotFoundException('Invite not found or already processed');
+      }
+
+      if (invite.project.status !== 'active') {
+        throw new BadRequestException('Project is not active');
+      }
+
+      // Check if invite is expired
+      if (new Date() > invite.invite.expiresAt) {
+        await tx
+          .update(projectInvites)
+          .set({ status: 'expired' })
+          .where(eq(projectInvites.id, invite.invite.id));
+        throw new BadRequestException('Invite has expired');
+      }
+
+      // Get or create user
+      let userId: string;
+      const [existingUser] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.email, invite.invite.email))
+        .limit(1);
+
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        // Create new user
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            id: uuid(),
+            email: invite.invite.email,
+            fullName: acceptDto.fullName,
+            firstName: acceptDto.firstName,
+            lastName: acceptDto.lastName || null,
+            emailVerified: true, // Since they accessed the invite link
+            status: 'active'
+          })
+          .returning();
+        userId = newUser.id;
+      }
+
+      // Check if user is already a member
+      const [existingMember] = await tx
+        .select()
+        .from(projectUsers)
+        .where(and(
+          eq(projectUsers.projectId, invite.invite.projectId),
+          eq(projectUsers.userId, userId),
+          eq(projectUsers.status, 'active')
+        ))
+        .limit(1);
+
+      if (existingMember) {
+        throw new BadRequestException('You are already a member of this project');
+      }
+
+      // Create project membership
+      const [projectMembership] = await tx
         .insert(projectUsers)
         .values({
-          id: uuidv4(),
-          projectId: invite[0].projectId,
-          userId,
-          role: invite[0].role
+          id: uuid(),
+          projectId: invite.invite.projectId,
+          userId: userId,
+          role: invite.invite.role,
+          status: 'active',
+          metadata: { acceptedFromInvite: invite.invite.id }
         })
         .returning();
 
-      return projectUser[0];
+      // Update invite status
+      await tx
+        .update(projectInvites)
+        .set({
+          status: 'accepted',
+          acceptedAt: new Date()
+        })
+        .where(eq(projectInvites.id, invite.invite.id));
+
+      return {
+        userId,
+        projectId: invite.invite.projectId,
+        role: projectMembership.role,
+        status: projectMembership.status
+      };
     });
-  }
-
-  async getInvites(projectId: string) {
-    const db = this.drizzle.database;
-    
-    return await db
-      .select()
-      .from(projectInvites)
-      .where(eq(projectInvites.projectId, projectId));
-  }
-
-  async rejectInvite(inviteId: string, userId: string) {
-    const db = this.drizzle.database;
-
-    const invite = await db
-      .select()
-      .from(projectInvites)
-      .where(eq(projectInvites.id, inviteId));
-
-    if (!invite.length || invite[0].status !== 'pending') {
-      throw new NotFoundException('Invalid or expired invite');
-    }
-
-    return await db
-      .update(projectInvites)
-      .set({ status: 'rejected' })
-      .where(eq(projectInvites.id, inviteId))
-      .returning();
   }
 }

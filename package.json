@@ -5,10 +5,13 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -18,13 +21,15 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "generate": "drizzle-kit generate:pg",
-    "migrate": "drizzle-kit migrate:pg",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
     "drop": "drizzle-kit drop",
-    "check": "drizzle-kit check:pg"
+    "check": "drizzle-kit check:pg",
+    "heroku-postbuild": "yarn build"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
+    "@nestjs/axios": "^4.0.0",
     "@nestjs/cache-manager": "^3.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
@@ -33,10 +38,12 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.0.3",
+    "axios": "^1.7.9",
     "cache-manager": "^6.4.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "compression": "^1.7.5",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.1",
     "helmet": "^8.0.0",
@@ -46,6 +53,7 @@
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "slugify": "^1.6.6",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.0.5"
   },
