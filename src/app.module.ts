@@ -1,10 +1,50 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { CacheModule } from '@nestjs/cache-manager';
+import { DatabaseModule } from './database/database.module';
+import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from './users/users.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ProjectsModule } from './projects/projects.module';
+import { CommonModule } from './common/common.module';
+import { ProjectInviteModule } from './project-invite/project-invite.module';
+import { ProjectSitesModule } from './project-sites/project-sites.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
+import { HealthModule } from './health/health.module';
+import { ProjectUsersModule } from './project-users/project-users.module';
+import { SpeciesModule } from './species/species.module';
+
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    CacheModule.register({
+      ttl: 3600, // Time to live in seconds (1 hour)
+      max: 100,  // Maximum number of items in cache
+      isGlobal: true // Make cache available everywhere
+    }),
+    AuthModule,
+    ConfigModule.forRoot({ isGlobal: true }),
+    DatabaseModule,
+    UsersModule,
+    ProjectsModule,
+    CommonModule,
+    ProjectInviteModule,
+    ProjectSitesModule,
+    HealthModule,
+    ProjectUsersModule,
+    SpeciesModule
+  ],
+  controllers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class AppModule {}
