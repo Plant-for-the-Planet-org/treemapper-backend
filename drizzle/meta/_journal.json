@@ -8,6 +8,13 @@
       "when": 1738812803566,
       "tag": "0000_fearless_virginia_dare",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1745866936460,
+      "tag": "0001_foamy_nighthawk",
+      "breakpoints": true
     }
   ]
 }

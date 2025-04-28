@@ -33,6 +33,9 @@ export const visibilityEnum = pgEnum('visibility', [
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email').notNull().unique(),
+  planetUser:boolean('planet_user').notNull().default(false),
+  migrated:boolean('migrated').notNull().default(false),
+  planetId:uuid('planet_id'),
   fullName: varchar('full_name').notNull(),
   firstName: varchar('first_name').notNull(),
   lastName: varchar('last_name'),
