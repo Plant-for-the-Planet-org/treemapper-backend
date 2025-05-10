@@ -74,17 +74,15 @@ export class UsersService {
       }
       return existingUser;
     }
-
     // Create new user
     const result = await this.drizzleService.db
       .insert(users)
       .values({
         auth0Id: userData.auth0Id,
         email: userData.email,
-        name: userData.name || userData.email.split('@')[0],
+        authName: userData.name || userData.email.split('@')[0],
       })
       .returning();
-    
     return result[0];
   }
 

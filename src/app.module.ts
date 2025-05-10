@@ -14,11 +14,11 @@ import { ProjectsModule } from './projects/projects.module';
       isGlobal: true,
     }),
     DatabaseModule,
-    UsersModule,
     AuthModule,
-    ProjectsModule,
+    UsersModule,
+    // ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
