@@ -1,5 +1,5 @@
 // src/users/dto/create-auth0-user.dto.ts
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class CreateAuth0UserDto {
   @IsNotEmpty()
@@ -13,8 +13,4 @@ export class CreateAuth0UserDto {
   @IsOptional()
   @IsString()
   name?: string;
-
-  @IsOptional()
-  @IsEnum(['superadmin', 'admin', 'viewer', 'contributor'])
-  role?: string;
 }

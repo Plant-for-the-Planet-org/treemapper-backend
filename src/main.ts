@@ -1,12 +1,21 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+  
+  // Enable CORS
+  app.enableCors();
+  
+  // Validation pipe
   app.useGlobalPipes(new ValidationPipe());
+  
+  // Global JWT guard (with public route exclusions)
   const jwtGuard = app.get(JwtAuthGuard);
   app.useGlobalGuards(jwtGuard);
 
@@ -15,10 +24,13 @@ async function bootstrap() {
     .setTitle('NestJS API')
     .setDescription('The NestJS API description')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
   
-  await app.listen(3000);
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  logger.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();

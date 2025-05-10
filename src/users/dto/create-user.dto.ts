@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum } from 'class-validator';
+// src/users/dto/create-user.dto.ts
+import { IsEmail, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class CreateUserDto {
   @IsNotEmpty()
@@ -12,10 +13,4 @@ export class CreateUserDto {
   @IsNotEmpty()
   @IsString()
   auth0Id: string;
-
-  @IsOptional()
-  @IsEnum(['superadmin', 'admin', 'viewer', 'contributor'], {
-    message: 'Role must be one of: superadmin, admin, viewer, contributor'
-  })
-  role?: string; // Optional because it has a default value in the schema
 }
