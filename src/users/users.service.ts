@@ -10,7 +10,6 @@ export class UsersService {
   constructor(private drizzleService: DrizzleService) {}
 
   async create(createUserDto: CreateUserDto) {
-        console.log("Here I am 6")
     const result = await this.drizzleService.db
       .insert(users)
       .values({
@@ -24,7 +23,6 @@ export class UsersService {
   }
 
   async findAll() {
-        console.log("Here I am 7")
     return this.drizzleService.db.select().from(users);
   }
 
@@ -52,7 +50,6 @@ export class UsersService {
 
   // Auth0 related methods
   async findByAuth0Id(auth0Id: string) {
-        console.log("Here I am 9")
     const result = await this.drizzleService.db
       .select()
       .from(users)
@@ -62,7 +59,6 @@ export class UsersService {
   }
 
   async createFromAuth0(userData: CreateAuth0UserDto) {
-        console.log("Here I am 10")
     // Check if user with this email already exists
     const existingUser = await this.findByEmail(userData.email);
     if (existingUser) {
