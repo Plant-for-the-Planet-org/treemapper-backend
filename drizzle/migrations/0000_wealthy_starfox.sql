@@ -3,11 +3,11 @@ CREATE TYPE "public"."project_role" AS ENUM('owner', 'admin', 'contributor', 'vi
 CREATE TYPE "public"."site_role" AS ENUM('admin', 'editor', 'viewer');--> statement-breakpoint
 CREATE TYPE "public"."tree_status" AS ENUM('alive', 'dead', 'unknown');--> statement-breakpoint
 CREATE TABLE "project_invites" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
 	"email" text NOT NULL,
 	"role" "project_role" DEFAULT 'contributor' NOT NULL,
-	"invited_by_id" integer NOT NULL,
+	"invited_by_id" uuid NOT NULL,
 	"status" "invite_status" DEFAULT 'pending' NOT NULL,
 	"token" uuid DEFAULT gen_random_uuid() NOT NULL,
 	"expires_at" timestamp NOT NULL,
@@ -18,9 +18,9 @@ CREATE TABLE "project_invites" (
 );
 --> statement-breakpoint
 CREATE TABLE "project_members" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
-	"user_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"user_id" uuid NOT NULL,
 	"role" "project_role" DEFAULT 'viewer' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -28,20 +28,26 @@ CREATE TABLE "project_members" (
 );
 --> statement-breakpoint
 CREATE TABLE "projects" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_name" text NOT NULL,
+	"project_type" text NOT NULL,
+	"ecosystem" text NOT NULL,
+	"project_scale" text NOT NULL,
+	"target" integer NOT NULL,
+	"project_website" text NOT NULL,
 	"description" text,
 	"is_public" boolean DEFAULT false NOT NULL,
-	"created_by_id" integer NOT NULL,
+	"created_by_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"metadata" jsonb
+	"metadata" jsonb,
+	"location" geometry(Geometry,4326)
 );
 --> statement-breakpoint
 CREATE TABLE "site_members" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"site_id" integer NOT NULL,
-	"user_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"site_id" uuid NOT NULL,
+	"user_id" uuid NOT NULL,
 	"role" "site_role" DEFAULT 'viewer' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -49,25 +55,26 @@ CREATE TABLE "site_members" (
 );
 --> statement-breakpoint
 CREATE TABLE "sites" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
 	"location" text,
+	"boundary" geometry(Geometry,4326),
 	"coordinates" jsonb,
-	"created_by_id" integer NOT NULL,
+	"created_by_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "species" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
 	"scientific_name" text NOT NULL,
 	"common_name" text,
 	"description" text,
-	"created_by_id" integer NOT NULL,
+	"created_by_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb,
@@ -75,23 +82,23 @@ CREATE TABLE "species" (
 );
 --> statement-breakpoint
 CREATE TABLE "tree_records" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"tree_id" integer NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tree_id" uuid NOT NULL,
 	"record_type" text NOT NULL,
 	"record_date" timestamp DEFAULT now() NOT NULL,
 	"notes" text,
 	"height" double precision,
 	"diameter" double precision,
 	"status" "tree_status",
-	"created_by_id" integer NOT NULL,
+	"created_by_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "trees" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"site_id" integer NOT NULL,
-	"species_id" integer,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"site_id" uuid NOT NULL,
+	"species_id" uuid,
 	"identifier" text,
 	"latitude" double precision NOT NULL,
 	"longitude" double precision NOT NULL,
@@ -101,19 +108,21 @@ CREATE TABLE "trees" (
 	"status" "tree_status" DEFAULT 'alive',
 	"health_notes" text,
 	"images" jsonb,
-	"created_by_id" integer NOT NULL,
+	"created_by_id" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"auth0_id" text NOT NULL,
 	"email" text NOT NULL,
 	"auth_name" text,
 	"name" text,
 	"avatar" text,
+	"planet_id" text DEFAULT '',
+	"ro_user" boolean DEFAULT false,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "users_auth0_id_unique" UNIQUE("auth0_id"),

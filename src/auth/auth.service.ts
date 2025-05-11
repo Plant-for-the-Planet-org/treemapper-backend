@@ -15,7 +15,6 @@ export class AuthService {
     try {
       // First try to find by Auth0 ID
       let user = await this.usersService.findByAuth0Id(auth0Id);
-      console.log('User found by Auth0 ID:', user);
       if (!user) {
         this.logger.log(`User with Auth0 ID ${auth0Id} not found, creating new user`);
         // Create a new user

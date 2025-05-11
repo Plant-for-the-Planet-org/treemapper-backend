@@ -1,6 +1,23 @@
 // src/database/schema/index.ts
-import { pgTable, serial, text, timestamp, pgEnum, integer, uuid, boolean, unique, jsonb, doublePrecision, date } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, pgEnum, integer, uuid, boolean, unique, jsonb, doublePrecision, date } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { customType } from 'drizzle-orm/pg-core';
+
+const geometry = (srid?: number) =>
+  customType<{
+    data: any; // actual JS object (GeoJSON or similar)
+    driverData: any; // raw string or binary from Postgres
+  }>({
+    dataType() {
+      return srid ? `geometry(Geometry,${srid})` : 'geometry';
+    },
+    toDriver(value: any): any {
+      return value;
+    },
+    fromDriver(value: any): any {
+      return value;
+    },
+  });
 
 // Create enums
 export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'contributor', 'viewer']);
@@ -10,33 +27,41 @@ export const treeStatusEnum = pgEnum('tree_status', ['alive', 'dead', 'unknown']
 
 // Users table with Auth0 integration
 export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').defaultRandom().primaryKey(),
   auth0Id: text('auth0_id').notNull().unique(),
   email: text('email').notNull().unique(),
   authName: text('auth_name'),
   name: text('name'),
   avatar: text('avatar'),
+  planetId: text('planet_id').default(''),
+  roUser: boolean('ro_user').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Projects table
 export const projects = pgTable('projects', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectName: text('project_name').notNull(), // Fixed typo: peoject_name -> project_name
+  projectType: text('project_type').notNull(), // Fixed typo: peoject_type -> project_type
+  ecosystem: text('ecosystem').notNull(),
+  projectScale: text('project_scale').notNull(),
+  target: integer('target').notNull(),
+  projectWebsite: text('project_website').notNull(),
   description: text('description'),
   isPublic: boolean('is_public').default(false).notNull(),
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  createdById: uuid('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  metadata: jsonb('metadata'), // For any extra project-specific data
+  metadata: jsonb('metadata'),
+  location: geometry(4326)('location')
 });
 
 // Project Members table (join table with roles)
 export const projectMembers = pgTable('project_members', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: projectRoleEnum('role').notNull().default('viewer'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -49,11 +74,11 @@ export const projectMembers = pgTable('project_members', {
 
 // Project Invites table
 export const projectInvites = pgTable('project_invites', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
   role: projectRoleEnum('role').notNull().default('contributor'),
-  invitedById: integer('invited_by_id').notNull().references(() => users.id),
+  invitedById: uuid('invited_by_id').notNull().references(() => users.id),
   status: inviteStatusEnum('status').notNull().default('pending'),
   token: uuid('token').defaultRandom().notNull().unique(),
   expiresAt: timestamp('expires_at').notNull(),
@@ -68,12 +93,12 @@ export const projectInvites = pgTable('project_invites', {
 
 // Species table
 export const species = pgTable('species', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   scientificName: text('scientific_name').notNull(),
   commonName: text('common_name'),
   description: text('description'),
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  createdById: uuid('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For species-specific attributes
@@ -86,13 +111,15 @@ export const species = pgTable('species', {
 
 // Sites table
 export const sites = pgTable('sites', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   description: text('description'),
-  location: text('location'),
+  location: text('location'), // Keep this as a text description of location
+  // Replace the JSONB coordinates with PostGIS geometry
+  boundary: geometry(4326)('boundary'),
   coordinates: jsonb('coordinates'), // GeoJSON for site boundaries
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  createdById: uuid('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For site-specific attributes
@@ -100,9 +127,9 @@ export const sites = pgTable('sites', {
 
 // Site Members table
 export const siteMembers = pgTable('site_members', {
-  id: serial('id').primaryKey(),
-  siteId: integer('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: siteRoleEnum('role').notNull().default('viewer'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -115,9 +142,9 @@ export const siteMembers = pgTable('site_members', {
 
 // Trees table
 export const trees = pgTable('trees', {
-  id: serial('id').primaryKey(),
-  siteId: integer('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
-  speciesId: integer('species_id').references(() => species.id, { onDelete: 'set null' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+  speciesId: uuid('species_id').references(() => species.id, { onDelete: 'set null' }),
   identifier: text('identifier'), // Optional tree identifier/tag
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
@@ -127,7 +154,7 @@ export const trees = pgTable('trees', {
   status: treeStatusEnum('status').default('alive'),
   healthNotes: text('health_notes'),
   images: jsonb('images'), // Array of image URLs or references
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  createdById: uuid('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For tree-specific attributes
@@ -135,20 +162,20 @@ export const trees = pgTable('trees', {
 
 // Tree Inventory Records (for tracking changes, health checks, etc.)
 export const treeRecords = pgTable('tree_records', {
-  id: serial('id').primaryKey(),
-  treeId: integer('tree_id').notNull().references(() => trees.id, { onDelete: 'cascade' }),
+  id: uuid('id').defaultRandom().primaryKey(),
+  treeId: uuid('tree_id').notNull().references(() => trees.id, { onDelete: 'cascade' }),
   recordType: text('record_type').notNull(), // e.g., 'health_check', 'maintenance', 'measurement'
   recordDate: timestamp('record_date').defaultNow().notNull(),
   notes: text('notes'),
   height: doublePrecision('height'), // Updated height if measured
   diameter: doublePrecision('diameter'), // Updated DBH if measured
   status: treeStatusEnum('status'), // Updated status if changed
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  createdById: uuid('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For record-specific data
 });
 
-// Define relationships
+// Define relationships - unchanged as these don't depend on column types
 export const userRelations = relations(users, ({ many }) => ({
   projectMemberships: many(projectMembers),
   siteMemberships: many(siteMembers),

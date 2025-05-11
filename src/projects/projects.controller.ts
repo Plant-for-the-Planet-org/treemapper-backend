@@ -1,24 +1,15 @@
+// src/projects/projects.controller.ts
 
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  Request,
-  ParseIntPipe,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
+import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
 import { ProjectRoles } from './decorators/project-roles.decorator';
+import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
@@ -26,83 +17,83 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
-  create(@Body() createProjectDto: CreateProjectDto, @Request() req) {
-    return this.projectsService.create(createProjectDto, req.user.userId);
+  create(@Body() createProjectDto: CreateProjectDto, @Req() req) {
+    return this.projectsService.create(createProjectDto, req.user.id);
   }
 
   @Get()
-  findAll(@Request() req) {
-    return this.projectsService.findAll(req.user.userId);
+  findAll(@Req() req) {
+    return this.projectsService.findAll(req.user.sub);
   }
 
-  @Get(':projectId')
-  @UseGuards(ProjectPermissionsGuard)
-  @ProjectRoles('owner', 'admin', 'editor', 'viewer')
-  findOne(@Param('projectId', ParseIntPipe) projectId: number, @Request() req) {
-    return this.projectsService.findOne(projectId, req.user.userId);
+  @Get(':id')
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.projectsService.findOne(id, req.user.sub);
   }
 
-  @Patch(':projectId')
-  @UseGuards(ProjectPermissionsGuard)
+  @Patch(':id')
   @ProjectRoles('owner', 'admin', 'editor')
-  update(
-    @Param('projectId', ParseIntPipe) projectId: number,
-    @Body() updateProjectDto: UpdateProjectDto,
-    @Request() req,
-  ) {
-    return this.projectsService.update(projectId, updateProjectDto, req.user.userId);
+  @UseGuards(ProjectPermissionsGuard)
+  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto, @Req() req) {
+    return this.projectsService.update(id, updateProjectDto, req.user.sub);
   }
 
-  @Delete(':projectId')
-  @UseGuards(ProjectPermissionsGuard)
+  @Delete(':id')
   @ProjectRoles('owner')
-  remove(@Param('projectId', ParseIntPipe) projectId: number, @Request() req) {
-    return this.projectsService.remove(projectId, req.user.userId);
+  @UseGuards(ProjectPermissionsGuard)
+  remove(@Param('id') id: string, @Req() req) {
+    return this.projectsService.remove(id, req.user.sub);
   }
 
-  @Get(':projectId/members')
+  @Get(':id/members')
+  @ProjectRoles('owner', 'admin', 'contributor', 'viewer')
   @UseGuards(ProjectPermissionsGuard)
-  @ProjectRoles('owner', 'admin', 'editor', 'viewer')
-  getMembers(@Param('projectId', ParseIntPipe) projectId: number) {
-    return this.projectsService.getMembers(projectId);
+  getMembers(@Param('id') id: string) {
+    return this.projectsService.getMembers(id);
   }
 
-  @Post(':projectId/members')
-  @UseGuards(ProjectPermissionsGuard)
+  @Post(':id/members')
   @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
   addMember(
-    @Param('projectId', ParseIntPipe) projectId: number,
+    @Param('id') id: string,
     @Body() addMemberDto: AddProjectMemberDto,
-    @Request() req,
+    @Req() req,
   ) {
-    return this.projectsService.addMember(projectId, addMemberDto, req.user.userId);
+    return this.projectsService.addMember(id, addMemberDto, req.user.sub);
   }
 
-  @Patch(':projectId/members/:memberId')
-  @UseGuards(ProjectPermissionsGuard)
+  @Post(':id/invites')
   @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  inviteMember(
+    @Param('id') id: string,
+    @Body() inviteDto: InviteProjectMemberDto,
+    @Req() req,
+  ) {
+    return this.projectsService.inviteMember(id, inviteDto.email, inviteDto.role, req.user.sub);
+  }
+
+  @Patch(':id/members/:memberId/role')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
   updateMemberRole(
-    @Param('projectId', ParseIntPipe) projectId: number,
-    @Param('memberId', ParseIntPipe) memberId: number,
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Body() updateRoleDto: UpdateProjectRoleDto,
-    @Request() req,
+    @Req() req,
   ) {
-    return this.projectsService.updateMemberRole(
-      projectId,
-      memberId,
-      updateRoleDto,
-      req.user.userId,
-    );
+    return this.projectsService.updateMemberRole(id, memberId, updateRoleDto, req.user.sub);
   }
 
-  @Delete(':projectId/members/:memberId')
-  @UseGuards(ProjectPermissionsGuard)
+  @Delete(':id/members/:memberId')
   @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
   removeMember(
-    @Param('projectId', ParseIntPipe) projectId: number,
-    @Param('memberId', ParseIntPipe) memberId: number,
-    @Request() req,
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @Req() req,
   ) {
-    return this.projectsService.removeMember(projectId, memberId, req.user.userId);
+    return this.projectsService.removeMember(id, memberId, req.user.sub);
   }
 }

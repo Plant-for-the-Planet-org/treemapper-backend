@@ -1,3 +1,5 @@
+// src/projects/guards/project-permissions.guard.ts
+
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ProjectsService } from '../projects.service';
@@ -10,36 +12,25 @@ export class ProjectPermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>('projectRoles', [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    
-    if (!requiredRoles) {
-      return true; // No specific roles required for this route
+    const roles = this.reflector.get<string[]>('projectRoles', context.getHandler());
+    if (!roles) {
+      return true;
     }
 
     const request = context.switchToHttp().getRequest();
-    const user = request.user; // From JWT Auth
-    
-    if (!user) {
+    const userId = request.user?.sub;
+    const projectId = request.params.id;
+
+    if (!userId || !projectId) {
       return false;
     }
 
-    // Get projectId from request params
-    const projectId = parseInt(request.params.projectId);
-    if (!projectId) {
-      return false;
-    }
-
-    // Check if user has permission for this project
-    const membership = await this.projectsService.getMemberRole(projectId, user.userId);
+    const membership = await this.projectsService.getMemberRole(projectId, userId);
     
     if (!membership) {
       throw new ForbiddenException('You do not have access to this project');
     }
-    
-    // Check if user's role is sufficient for this action
-    return requiredRoles.includes(membership.role);
+
+    return roles.includes(membership.role);
   }
 }

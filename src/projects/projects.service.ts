@@ -1,38 +1,75 @@
+// src/projects/projects.service.ts modifications
 
-// src/projects/projects.service.ts
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { projects, projectMembers, users } from '../database/schema';
+import { projects, projectMembers, users, projectInvites } from '../database/schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
 import { eq, and } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 @Injectable()
 export class ProjectsService {
   constructor(private drizzleService: DrizzleService) {}
+private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
 
-  async create(createProjectDto: CreateProjectDto, userId: string) {
-    // Find the user by Auth0 ID
-    const userQuery = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.auth0Id, userId));
-    
-    const user = userQuery[0];
-    
-    if (!user) {
-      throw new NotFoundException('User not found');
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
     }
     
-    // Create project
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' && 
+        locationInput.features && 
+        locationInput.features.length > 0 &&
+        locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
+    
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
+    
+    throw new BadRequestException('Invalid GeoJSON format');
+    
+  }
+  async create(createProjectDto: CreateProjectDto, userId: string) {
+    // Find the user by Auth0 ID
+ // Format location as PostGIS geometry if provided
+    let locationValue: any = null;
+    if (createProjectDto.location) {
+      try {
+        // Extract the geometry part if it's a Feature
+        const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
+        
+        // Use SQL raw to convert GeoJSON to PostGIS geometry
+        locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+      } catch (error) {
+        throw new BadRequestException('Invalid GeoJSON: ' + error.message);
+      }
+    }
+    
+    // Create project with updated schema fields
     const projectResult = await this.drizzleService.db
       .insert(projects)
       .values({
-        name: createProjectDto.name,
+        projectName: createProjectDto.projectName,
+        projectType: createProjectDto.projectType,
+        ecosystem: createProjectDto.ecosystem, 
+        projectScale: createProjectDto.projectScale,
+        target: createProjectDto.target,
+        projectWebsite: createProjectDto.projectWebsite,
         description: createProjectDto.description,
-        createdById: user.id,
+        isPublic: createProjectDto.isPublic || false,
+        createdById: userId,
+        metadata: createProjectDto.metadata || {},
+        location: locationValue,
       })
       .returning();
     
@@ -43,27 +80,15 @@ export class ProjectsService {
       .insert(projectMembers)
       .values({
         projectId: project.id,
-        userId: user.id,
+        userId: userId,
         role: 'owner',
       });
     
     return project;
   }
 
+
   async findAll(userId: string) {
-    // Find user
-    const userQuery = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.auth0Id, userId));
-    
-    const user = userQuery[0];
-    
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    
-    // Get all projects where user is a member
     const result = await this.drizzleService.db
       .select({
         project: projects,
@@ -71,7 +96,8 @@ export class ProjectsService {
       })
       .from(projectMembers)
       .innerJoin(projects, eq(projectMembers.projectId, projects.id))
-      .where(eq(projectMembers.userId, user.id));
+      .innerJoin(users, eq(projectMembers.userId, users.id))
+      .where(eq(users.auth0Id, userId));
     
     return result.map(({ project, role }) => ({
       ...project,
@@ -79,7 +105,7 @@ export class ProjectsService {
     }));
   }
 
-  async findOne(projectId: number, userId: string) {
+  async findOne(projectId: string, userId: string) {
     // Find user
     const userQuery = await this.drizzleService.db
       .select()
@@ -123,11 +149,11 @@ export class ProjectsService {
     };
   }
 
-  async update(projectId: number, updateProjectDto: UpdateProjectDto, userId: string) {
+  async update(projectId: string, updateProjectDto: UpdateProjectDto, userId: string) {
     // Check if user has permission (only owner/admin can update project details)
     const membership = await this.getMemberRole(projectId, userId);
     
-    if (!membership || !['owner', 'admin', 'editor'].includes(membership.role)) {
+    if (!membership || !['owner', 'admin'].includes(membership.role)) {
       throw new ForbiddenException('You do not have permission to update this project');
     }
     
@@ -141,7 +167,7 @@ export class ProjectsService {
     return result[0];
   }
 
-  async remove(projectId: number, userId: string) {
+  async remove(projectId: string, userId: string) {
     // Only owner can delete a project
     const membership = await this.getMemberRole(projectId, userId);
     
@@ -157,7 +183,7 @@ export class ProjectsService {
     return { success: true };
   }
 
-  async getMembers(projectId: number) {
+  async getMembers(projectId: string) {
     // Get all members of a project with their roles
     const result = await this.drizzleService.db
       .select({
@@ -174,7 +200,7 @@ export class ProjectsService {
     return result;
   }
 
-  async addMember(projectId: number, addMemberDto: AddProjectMemberDto, currentUserId: string) {
+  async addMember(projectId: string, addMemberDto: AddProjectMemberDto, currentUserId: string) {
     // Only owner/admin can add members
     const membership = await this.getMemberRole(projectId, currentUserId);
     
@@ -228,9 +254,9 @@ export class ProjectsService {
     const result = await this.drizzleService.db
       .insert(projectMembers)
       .values({
-        projectId,
+        projectId: projectId,
         userId: userToAdd.id,
-        role: addMemberDto.role as any,
+        role: addMemberDto.role as 'owner' | 'admin' | 'contributor' | 'viewer',
       })
       .returning();
     
@@ -242,8 +268,8 @@ export class ProjectsService {
   }
 
   async updateMemberRole(
-    projectId: number,
-    memberId: number,
+    projectId: string,
+    memberId: string,
     updateRoleDto: UpdateProjectRoleDto,
     currentUserId: string
   ) {
@@ -290,7 +316,7 @@ export class ProjectsService {
     // Update role
     const result = await this.drizzleService.db
       .update(projectMembers)
-      .set({ role: updateRoleDto.role as any })
+      .set({ role: updateRoleDto.role as 'owner' | 'admin' | 'contributor' | 'viewer' })
       .where(
         and(
           eq(projectMembers.projectId, projectId),
@@ -307,7 +333,7 @@ export class ProjectsService {
     };
   }
 
-  async removeMember(projectId: number, memberId: number, currentUserId: string) {
+  async removeMember(projectId: string, memberId: string, currentUserId: string) {
     // Only owner/admin can remove members
     const membership = await this.getMemberRole(projectId, currentUserId);
     
@@ -355,7 +381,101 @@ export class ProjectsService {
     return { success: true };
   }
 
-  async getMemberRole(projectId: number, auth0UserId: string) {
+  // New method for project invites
+  async inviteMember(projectId: string, email: string, role: string, currentUserId: string) {
+    // Only owner/admin can invite members
+    const membership = await this.getMemberRole(projectId, currentUserId);
+    
+    if (!membership || !['owner', 'admin'].includes(membership.role)) {
+      throw new ForbiddenException('You do not have permission to invite members');
+    }
+    
+    // Get current user ID
+    const userQuery = await this.drizzleService.db
+      .select()
+      .from(users)
+      .where(eq(users.auth0Id, currentUserId));
+    
+    if (userQuery.length === 0) {
+      throw new NotFoundException('User not found');
+    }
+    
+    const inviter = userQuery[0];
+    
+    // Check if project exists
+    const projectQuery = await this.drizzleService.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    
+    if (projectQuery.length === 0) {
+      throw new NotFoundException('Project not found');
+    }
+    
+    // Check if user is already a member by email
+    const existingUserQuery = await this.drizzleService.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+    
+    if (existingUserQuery.length > 0) {
+      const existingUser = existingUserQuery[0];
+      
+      const existingMemberQuery = await this.drizzleService.db
+        .select()
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, projectId),
+            eq(projectMembers.userId, existingUser.id)
+          )
+        );
+      
+      if (existingMemberQuery.length > 0) {
+        throw new ConflictException('User is already a member of this project');
+      }
+    }
+    
+    // Check for existing invitation
+    const existingInviteQuery = await this.drizzleService.db
+      .select()
+      .from(projectInvites)
+      .where(
+        and(
+          eq(projectInvites.projectId, projectId),
+          eq(projectInvites.email, email),
+          eq(projectInvites.status, 'pending')
+        )
+      );
+    
+    if (existingInviteQuery.length > 0) {
+      throw new ConflictException('An invite has already been sent to this email');
+    }
+    
+    // Cannot assign owner role via invite
+    if (role === 'owner') {
+      throw new ForbiddenException('Cannot assign owner role via invitation');
+    }
+    
+    // Create invitation
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 7); // 7 days expiry
+    
+    const result = await this.drizzleService.db
+      .insert(projectInvites)
+      .values({
+        projectId,
+        email,
+        role: role as any,
+        invitedById: inviter.id,
+        expiresAt: expiryDate,
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async getMemberRole(projectId: string, auth0UserId: string) {
     // Find user by Auth0 ID
     const userQuery = await this.drizzleService.db
       .select()

@@ -26,7 +26,7 @@ export class UsersService {
     return this.drizzleService.db.select().from(users);
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const result = await this.drizzleService.db
       .select()
       .from(users)
@@ -86,7 +86,7 @@ export class UsersService {
     return result[0];
   }
 
-  async update(id: number, updateData: Partial<Omit<typeof users.$inferInsert, 'id' | 'auth0Id' | 'createdAt' | 'updatedAt'>>) {
+  async update(id: string, updateData: Partial<Omit<typeof users.$inferInsert, 'id' | 'auth0Id' | 'createdAt' | 'updatedAt'>>) {
     const result = await this.drizzleService.db
       .update(users)
       .set({ 
@@ -120,7 +120,7 @@ export class UsersService {
     return result[0];
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     const result = await this.drizzleService.db
       .delete(users)
       .where(eq(users.id, id))

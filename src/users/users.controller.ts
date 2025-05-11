@@ -8,7 +8,6 @@ export class UsersController {
 
   @Get('me')
   async getCurrentUser(@Request() req) {
-    console.log('Current user:', req.user);
     return {
       message: '',
       statusCode: 200,
@@ -25,7 +24,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id', ParseIntPipe) id: string) {
     return this.usersService.findOne(id);
   }
 }
