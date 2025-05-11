@@ -23,7 +23,7 @@ export class ProjectsController {
 
   @Get()
   findAll(@Req() req) {
-    return this.projectsService.findAll(req.user.sub);
+    return this.projectsService.findAll(req.user.auth0Id);
   }
 
   @Get(':id')
