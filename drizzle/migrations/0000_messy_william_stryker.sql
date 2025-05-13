@@ -6,6 +6,7 @@ CREATE TABLE "project_invites" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" uuid NOT NULL,
 	"email" text NOT NULL,
+	"message" text DEFAULT '',
 	"role" "project_role" DEFAULT 'contributor' NOT NULL,
 	"invited_by_id" uuid NOT NULL,
 	"status" "invite_status" DEFAULT 'pending' NOT NULL,

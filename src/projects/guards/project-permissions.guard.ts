@@ -18,7 +18,7 @@ export class ProjectPermissionsGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const userId = request.user?.sub;
+    const userId = request.user?.id;
     const projectId = request.params.id;
 
     if (!userId || !projectId) {
@@ -30,7 +30,7 @@ export class ProjectPermissionsGuard implements CanActivate {
     if (!membership) {
       throw new ForbiddenException('You do not have access to this project');
     }
-
+    console.log("ISDJC",membership)
     return roles.includes(membership.role);
   }
 }

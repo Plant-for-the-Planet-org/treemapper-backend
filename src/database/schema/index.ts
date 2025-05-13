@@ -42,8 +42,8 @@ export const users = pgTable('users', {
 // Projects table
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
-  projectName: text('project_name').notNull(), // Fixed typo: peoject_name -> project_name
-  projectType: text('project_type').notNull(), // Fixed typo: peoject_type -> project_type
+  projectName: text('project_name').notNull(),
+  projectType: text('project_type').notNull(),
   ecosystem: text('ecosystem').notNull(),
   projectScale: text('project_scale').notNull(),
   target: integer('target').notNull(),
@@ -77,6 +77,7 @@ export const projectInvites = pgTable('project_invites', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
+  message: text('message').default(''),
   role: projectRoleEnum('role').notNull().default('contributor'),
   invitedById: uuid('invited_by_id').notNull().references(() => users.id),
   status: inviteStatusEnum('status').notNull().default('pending'),

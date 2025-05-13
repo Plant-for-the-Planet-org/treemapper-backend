@@ -23,7 +23,7 @@ export class ProjectsController {
 
   @Get()
   findAll(@Req() req) {
-    return this.projectsService.findAll(req.user.auth0Id);
+    return this.projectsService.findAll(req.user.id);
   }
 
   @Get(':id')
@@ -71,7 +71,8 @@ export class ProjectsController {
     @Body() inviteDto: InviteProjectMemberDto,
     @Req() req,
   ) {
-    return this.projectsService.inviteMember(id, inviteDto.email, inviteDto.role, req.user.sub);
+    console.log("I am not here")
+    return this.projectsService.inviteMember(id, inviteDto.email, inviteDto.role, req.user.id, req.user.authName, inviteDto.message);
   }
 
   @Patch(':id/members/:memberId/role')

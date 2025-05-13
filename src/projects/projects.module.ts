@@ -4,9 +4,10 @@ import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
 import { DatabaseModule } from '../database/database.module';
 import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [DatabaseModule],  // This should be present
+  imports: [DatabaseModule,NotificationModule],  // This should be present
   controllers: [ProjectsController],
   providers: [ProjectsService, ProjectPermissionsGuard],
   exports: [ProjectsService],

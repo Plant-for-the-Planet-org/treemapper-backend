@@ -98,7 +98,7 @@ export class CreateProjectDto {
   @IsString()
   projectWebsite: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
   description?: string;
 
@@ -110,7 +110,7 @@ export class CreateProjectDto {
   @IsObject()
   metadata?: Record<string, any>;
 
-  @IsOptional()
+  @IsNotEmpty()
   @ValidateNested()
   @Type(() => LocationInput)
   location?: LocationInput;

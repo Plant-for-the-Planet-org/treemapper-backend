@@ -1,5 +1,5 @@
 {
-  "id": "d38107e5-a281-4432-8fb4-241d21b032bf",
+  "id": "a9ebb5ee-3c35-48d7-a4e9-2daaa2336f00",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -26,6 +26,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
         },
         "role": {
           "name": "role",
