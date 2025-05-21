@@ -148,36 +148,10 @@ export class ProjectsService {
     }
   }
 
-  async findOne(projectId: string, userId: string) {
-    // Find user
-    const userQuery = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.auth0Id, userId));
-
-    const user = userQuery[0];
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Check if user is a member of the project
-    const membershipQuery = await this.drizzleService.db
-      .select()
-      .from(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, user.id)
-        )
-      );
-
-    if (membershipQuery.length === 0) {
-      throw new ForbiddenException('You do not have access to this project');
-    }
-
+  async findOne(projectId: string) {
     // Get project
-    const projectQuery = await this.drizzleService.db
+    try {
+      const projectQuery = await this.drizzleService.db
       .select()
       .from(projects)
       .where(eq(projects.id, projectId));
@@ -186,10 +160,22 @@ export class ProjectsService {
       throw new NotFoundException('Project not found');
     }
 
-    return {
-      ...projectQuery[0],
-      userRole: membershipQuery[0].role,
+    return  {
+        message: 'Fetched project details',
+        statusCode: 200,
+        error: null,
+        data: projectQuery[0],
+        code: 'fetch_single_project_details',
     };
+    } catch (error) {
+      return {
+        message: 'Failed to fetch Project details',
+        statusCode: 500,
+        error: "Error",
+        data: null,
+        code: 'failed_fetching_project_details',
+      }
+    }
   }
 
   async update(projectId: string, updateProjectDto: UpdateProjectDto, userId: string) {
@@ -425,87 +411,103 @@ export class ProjectsService {
   }
 
   async inviteMember(projectId: string, email: string, role: string, currentUserId: string, inviterName, message: string) {
-    console.log(projectId, email, role, currentUserId, inviterName)
-    const project = await this.drizzleService.db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .then(results => {
-        if (results.length === 0) throw new NotFoundException('Project not found');
-        return results[0];
-      });
-
-    // Check if user already exists by email
-    const existingUser = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
-      .then(results => results[0] || null);
-
-    if (existingUser) {
-      const existingMembership = await this.drizzleService.db
+    try {
+      const project = await this.drizzleService.db
         .select()
-        .from(projectMembers)
+        .from(projects)
+        .where(eq(projects.id, projectId))
+        .then(results => {
+          if (results.length === 0) throw new NotFoundException('Project not found');
+          return results[0];
+        });
+
+      // Check if user already exists by email
+      const existingUser = await this.drizzleService.db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .then(results => results[0] || null);
+
+      if (existingUser) {
+        const existingMembership = await this.drizzleService.db
+          .select()
+          .from(projectMembers)
+          .where(
+            and(
+              eq(projectMembers.projectId, projectId),
+              eq(projectMembers.userId, existingUser.id)
+            )
+          )
+          .then(results => results[0] || null);
+
+        if (existingMembership) {
+          throw new ConflictException('User is already a member of this project');
+        }
+      }
+
+      // Check for existing pending invitation
+      const existingInvite = await this.drizzleService.db
+        .select()
+        .from(projectInvites)
         .where(
           and(
-            eq(projectMembers.projectId, projectId),
-            eq(projectMembers.userId, existingUser.id)
+            eq(projectInvites.projectId, projectId),
+            eq(projectInvites.email, email),
+            eq(projectInvites.status, 'pending')
           )
         )
         .then(results => results[0] || null);
 
-      if (existingMembership) {
-        throw new ConflictException('User is already a member of this project');
+      if (existingInvite) {
+        throw new ConflictException('An invite has already been sent to this email');
       }
-    }
 
-    // Check for existing pending invitation
-    const existingInvite = await this.drizzleService.db
-      .select()
-      .from(projectInvites)
-      .where(
-        and(
-          eq(projectInvites.projectId, projectId),
-          eq(projectInvites.email, email),
-          eq(projectInvites.status, 'pending')
-        )
-      )
-      .then(results => results[0] || null);
+      // Cannot assign owner role via invite
+      if (role === 'owner') {
+        throw new ForbiddenException('Cannot assign owner role via invitation');
+      }
 
-    if (existingInvite) {
-      throw new ConflictException('An invite has already been sent to this email');
-    }
+      // Create invitation
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 7); // 7 days expiry
 
-    // Cannot assign owner role via invite
-    if (role === 'owner') {
-      throw new ForbiddenException('Cannot assign owner role via invitation');
-    }
+      const [invitation] = await this.drizzleService.db
+        .insert(projectInvites)
+        .values({
+          projectId,
+          email,
+          role: role as 'owner' | 'admin' | 'contributor' | 'viewer',
+          invitedById: currentUserId,
+          expiresAt: expiryDate,
+          message: message || ''
+        })
+        .returning();
 
-    // Create invitation
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 7); // 7 days expiry
-
-    const [invitation] = await this.drizzleService.db
-      .insert(projectInvites)
-      .values({
-        projectId,
+      this.notificationService.sendProjectInviteEmail({
         email,
-        role: role as 'owner' | 'admin' | 'contributor' | 'viewer',
-        invitedById: currentUserId,
+        projectName: project.projectName,
+        role,
+        inviterName: inviterName,
+        token: invitation.token,
         expiresAt: expiryDate,
-        message: message || ''
+        projectId
       })
-      .returning();
-
-    this.notificationService.sendProjectInviteEmail({
-      email,
-      projectName: project.projectName,
-      role,
-      inviterName: inviterName,
-      token: invitation.token,
-      expiresAt: expiryDate
-    })
-    return invitation;
+      return {
+        message: 'Invitation sent',
+        statusCode: 200,
+        error: null,
+        data: invitation,
+        code: 'invitation_sent',
+      };
+    } catch (error) {
+      return {
+        message: 'Failed to send invitation',
+        statusCode: 500,
+        error: "Error",
+        data: null,
+        code: 'invitation_sent_failed',
+      };
+    }
   }
 
   async getMemberRole(projectId: string, userId: string) {

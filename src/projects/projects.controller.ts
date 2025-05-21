@@ -10,6 +10,7 @@ import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProjectRoles } from './decorators/project-roles.decorator';
 import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
+import { Public } from 'src/auth/public.decorator';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
@@ -27,8 +28,9 @@ export class ProjectsController {
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id') id: string, @Req() req) {
-    return this.projectsService.findOne(id, req.user.sub);
+    return this.projectsService.findOne(id);
   }
 
   @Patch(':id')
