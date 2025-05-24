@@ -1,5 +1,5 @@
 {
-  "id": "a9ebb5ee-3c35-48d7-a4e9-2daaa2336f00",
+  "id": "9a9093be-c5ab-4834-886a-8642d5cacee7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -337,96 +337,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.site_members": {
-      "name": "site_members",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "site_id": {
-          "name": "site_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "site_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'viewer'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "site_members_site_id_sites_id_fk": {
-          "name": "site_members_site_id_sites_id_fk",
-          "tableFrom": "site_members",
-          "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "site_members_user_id_users_id_fk": {
-          "name": "site_members_user_id_users_id_fk",
-          "tableFrom": "site_members",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "site_members_site_id_user_id_unique": {
-          "name": "site_members_site_id_user_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "user_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1021,15 +931,6 @@
         "owner",
         "admin",
         "contributor",
-        "viewer"
-      ]
-    },
-    "public.site_role": {
-      "name": "site_role",
-      "schema": "public",
-      "values": [
-        "admin",
-        "editor",
         "viewer"
       ]
     },

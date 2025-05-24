@@ -118,7 +118,6 @@ export class ProjectsService {
         .select({
           project: {
             ...projects,
-            // Convert PostGIS location to GeoJSON
             location: sql`ST_AsGeoJSON(${projects.location})::json`.as('location')
           },
           role: projectMembers.role,

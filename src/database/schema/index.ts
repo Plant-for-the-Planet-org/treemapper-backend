@@ -21,7 +21,6 @@ const geometry = (srid?: number) =>
 
 // Create enums
 export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'contributor', 'viewer']);
-export const siteRoleEnum = pgEnum('site_role', ['admin', 'editor', 'viewer']);
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined']);
 export const treeStatusEnum = pgEnum('tree_status', ['alive', 'dead', 'unknown']);
 
@@ -110,7 +109,7 @@ export const species = pgTable('species', {
   };
 });
 
-// Sites table
+// Sites table - NO SITE MEMBERS, access controlled via project membership
 export const sites = pgTable('sites', {
   id: uuid('id').defaultRandom().primaryKey(),
   projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
@@ -124,21 +123,6 @@ export const sites = pgTable('sites', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For site-specific attributes
-});
-
-// Site Members table
-export const siteMembers = pgTable('site_members', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: siteRoleEnum('role').notNull().default('viewer'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => {
-  return {
-    // Ensure a user can only be added once to a site
-    uniqueMember: unique().on(table.siteId, table.userId),
-  };
 });
 
 // Trees table
@@ -176,14 +160,18 @@ export const treeRecords = pgTable('tree_records', {
   metadata: jsonb('metadata'), // For record-specific data
 });
 
-// Define relationships - unchanged as these don't depend on column types
+// ============================================================================
+// RELATIONS - UPDATED TO REMOVE SITE MEMBERSHIPS
+// ============================================================================
+
 export const userRelations = relations(users, ({ many }) => ({
   projectMemberships: many(projectMembers),
-  siteMemberships: many(siteMembers),
+  // REMOVED: siteMemberships: many(siteMembers),
   createdProjects: many(projects, { relationName: 'createdBy' }),
   createdSpecies: many(species, { relationName: 'createdBy' }),
   createdSites: many(sites, { relationName: 'createdBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
+  createdTreeRecords: many(treeRecords, { relationName: 'createdBy' }),
   sentInvites: many(projectInvites, { relationName: 'invitedBy' }),
 }));
 
@@ -235,6 +223,7 @@ export const speciesRelations = relations(species, ({ one, many }) => ({
   trees: many(trees),
 }));
 
+// UPDATED: Site relations - NO MORE SITE MEMBERS
 export const siteRelations = relations(sites, ({ one, many }) => ({
   project: one(projects, {
     fields: [sites.projectId],
@@ -245,19 +234,8 @@ export const siteRelations = relations(sites, ({ one, many }) => ({
     references: [users.id],
     relationName: 'createdBy',
   }),
-  members: many(siteMembers),
+  // REMOVED: members: many(siteMembers),
   trees: many(trees),
-}));
-
-export const siteMemberRelations = relations(siteMembers, ({ one }) => ({
-  site: one(sites, {
-    fields: [siteMembers.siteId],
-    references: [sites.id],
-  }),
-  user: one(users, {
-    fields: [siteMembers.userId],
-    references: [users.id],
-  }),
 }));
 
 export const treeRelations = relations(trees, ({ one, many }) => ({
@@ -288,21 +266,3 @@ export const treeRecordRelations = relations(treeRecords, ({ one }) => ({
     relationName: 'createdBy',
   }),
 }));
-
-// Export all schemas
-export default {
-  users,
-  projects,
-  projectMembers,
-  projectInvites,
-  species,
-  sites,
-  siteMembers,
-  trees,
-  treeRecords,
-  // Enums
-  projectRoleEnum,
-  siteRoleEnum,
-  inviteStatusEnum,
-  treeStatusEnum,
-};
