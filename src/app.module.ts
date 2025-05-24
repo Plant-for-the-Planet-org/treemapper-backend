@@ -10,6 +10,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { EmailModule } from './email/email.module';
 import { SitesModule } from './sites/sites.module';
 import { SpeciesModule } from './species/species.module';
+import { TreeModule } from './trees/trees.module';
+
 
 @Module({
   imports: [
@@ -22,7 +24,8 @@ import { SpeciesModule } from './species/species.module';
     ProjectsModule,
     EmailModule,
     SitesModule,
-    SpeciesModule
+    SpeciesModule,
+    TreeModule
   ],
   controllers: [AppController],
   providers: [AppService],
