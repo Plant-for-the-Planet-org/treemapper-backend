@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { EmailModule } from './email/email.module';
 import { SitesModule } from './sites/sites.module';
+import { SpeciesModule } from './species/species.module';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { SitesModule } from './sites/sites.module';
     UsersModule,
     ProjectsModule,
     EmailModule,
-    SitesModule
+    SitesModule,
+    SpeciesModule
   ],
   controllers: [AppController],
   providers: [AppService],

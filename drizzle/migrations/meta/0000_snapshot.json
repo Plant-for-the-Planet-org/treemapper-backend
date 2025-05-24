@@ -1,5 +1,5 @@
 {
-  "id": "9a9093be-c5ab-4834-886a-8642d5cacee7",
+  "id": "48472f8b-6e67-44d5-9302-3ada973a1469",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -461,12 +461,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "scientific_name": {
           "name": "scientific_name",
           "type": "text",
@@ -485,11 +479,18 @@
           "primaryKey": false,
           "notNull": false
         },
-        "created_by_id": {
-          "name": "created_by_id",
-          "type": "uuid",
+        "default_image": {
+          "name": "default_image",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -513,41 +514,13 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "species_project_id_projects_id_fk": {
-          "name": "species_project_id_projects_id_fk",
-          "tableFrom": "species",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "species_created_by_id_users_id_fk": {
-          "name": "species_created_by_id_users_id_fk",
-          "tableFrom": "species",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "species_project_id_scientific_name_unique": {
-          "name": "species_project_id_scientific_name_unique",
+        "species_scientific_name_unique": {
+          "name": "species_scientific_name_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "project_id",
             "scientific_name"
           ]
         }
@@ -683,8 +656,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "species_id": {
-          "name": "species_id",
+        "user_species_id": {
+          "name": "user_species_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -787,12 +760,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "trees_species_id_species_id_fk": {
-          "name": "trees_species_id_species_id_fk",
+        "trees_user_species_id_user_species_id_fk": {
+          "name": "trees_user_species_id_user_species_id_fk",
           "tableFrom": "trees",
-          "tableTo": "species",
+          "tableTo": "user_species",
           "columnsFrom": [
-            "species_id"
+            "user_species_id"
           ],
           "columnsTo": [
             "id"
@@ -816,6 +789,112 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_species": {
+      "name": "user_species",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "species_id": {
+          "name": "species_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "local_name": {
+          "name": "local_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custom_image": {
+          "name": "custom_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_species_user_id_users_id_fk": {
+          "name": "user_species_user_id_users_id_fk",
+          "tableFrom": "user_species",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "user_species_species_id_species_id_fk": {
+          "name": "user_species_species_id_species_id_fk",
+          "tableFrom": "user_species",
+          "tableTo": "species",
+          "columnsFrom": [
+            "species_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_species_user_id_species_id_unique": {
+          "name": "user_species_user_id_species_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id",
+            "species_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

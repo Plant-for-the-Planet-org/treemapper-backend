@@ -54,7 +54,7 @@ export class SitesController {
     @Body() createSiteDto: CreateSiteDto,
     @Request() req: any,
   ): Promise<Site> {
-    return this.sitesService.create(createSiteDto, projectId, req.user.sub);
+    return this.sitesService.create(createSiteDto, projectId, req.user.id);
   }
 
   @Get()
@@ -71,7 +71,7 @@ export class SitesController {
     @Query() query: SiteQueryDto,
     @Request() req: any,
   ): Promise<{ sites: Site[]; total: number; page: number; limit: number }> {
-    return this.sitesService.findAll(query, req.user.sub);
+    return this.sitesService.findAll(query, req.user.id);
   }
 
   @Get('projects/:projectId')

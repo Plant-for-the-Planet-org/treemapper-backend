@@ -60,15 +60,15 @@ CREATE TABLE "sites" (
 --> statement-breakpoint
 CREATE TABLE "species" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"project_id" uuid NOT NULL,
 	"scientific_name" text NOT NULL,
 	"common_name" text,
 	"description" text,
-	"created_by_id" uuid NOT NULL,
+	"default_image" text,
+	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb,
-	CONSTRAINT "species_project_id_scientific_name_unique" UNIQUE("project_id","scientific_name")
+	CONSTRAINT "species_scientific_name_unique" UNIQUE("scientific_name")
 );
 --> statement-breakpoint
 CREATE TABLE "tree_records" (
@@ -88,7 +88,7 @@ CREATE TABLE "tree_records" (
 CREATE TABLE "trees" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
-	"species_id" uuid,
+	"user_species_id" uuid,
 	"identifier" text,
 	"latitude" double precision NOT NULL,
 	"longitude" double precision NOT NULL,
@@ -102,6 +102,19 @@ CREATE TABLE "trees" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb
+);
+--> statement-breakpoint
+CREATE TABLE "user_species" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"species_id" uuid NOT NULL,
+	"local_name" text,
+	"custom_image" text,
+	"notes" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"metadata" jsonb,
+	CONSTRAINT "user_species_user_id_species_id_unique" UNIQUE("user_id","species_id")
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -126,10 +139,10 @@ ALTER TABLE "project_members" ADD CONSTRAINT "project_members_user_id_users_id_f
 ALTER TABLE "projects" ADD CONSTRAINT "projects_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "species" ADD CONSTRAINT "species_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "species" ADD CONSTRAINT "species_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trees" ADD CONSTRAINT "trees_species_id_species_id_fk" FOREIGN KEY ("species_id") REFERENCES "public"."species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "trees" ADD CONSTRAINT "trees_user_species_id_user_species_id_fk" FOREIGN KEY ("user_species_id") REFERENCES "public"."user_species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_species" ADD CONSTRAINT "user_species_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_species" ADD CONSTRAINT "user_species_species_id_species_id_fk" FOREIGN KEY ("species_id") REFERENCES "public"."species"("id") ON DELETE cascade ON UPDATE no action;

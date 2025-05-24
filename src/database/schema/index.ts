@@ -91,21 +91,34 @@ export const projectInvites = pgTable('project_invites', {
   };
 });
 
-// Species table
+// Global Species table - managed by super admin/developer
 export const species = pgTable('species', {
   id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  scientificName: text('scientific_name').notNull(),
+  scientificName: text('scientific_name').notNull().unique(),
   commonName: text('common_name'),
   description: text('description'),
-  createdById: uuid('created_by_id').notNull().references(() => users.id),
+  defaultImage: text('default_image'), // Default image URL for this species
+  isActive: boolean('is_active').default(true).notNull(), // To soft delete/deactivate species
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   metadata: jsonb('metadata'), // For species-specific attributes
+});
+
+// User Species table - user's customized version of global species
+export const userSpecies = pgTable('user_species', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  speciesId: uuid('species_id').notNull().references(() => species.id, { onDelete: 'cascade' }),
+  localName: text('local_name'), // User's custom local name for this species
+  customImage: text('custom_image'), // User's custom image URL
+  notes: text('notes'), // User's personal notes about this species
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  metadata: jsonb('metadata'), // For user-specific species attributes
 }, (table) => {
   return {
-    // Ensure unique scientific names within a project
-    uniqueSpecies: unique().on(table.projectId, table.scientificName),
+    // Ensure a user can only have one customization per species
+    uniqueUserSpecies: unique().on(table.userId, table.speciesId),
   };
 });
 
@@ -125,11 +138,11 @@ export const sites = pgTable('sites', {
   metadata: jsonb('metadata'), // For site-specific attributes
 });
 
-// Trees table
+// Trees table - now references userSpecies instead of species directly
 export const trees = pgTable('trees', {
   id: uuid('id').defaultRandom().primaryKey(),
   siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
-  speciesId: uuid('species_id').references(() => species.id, { onDelete: 'set null' }),
+  userSpeciesId: uuid('user_species_id').references(() => userSpecies.id, { onDelete: 'set null' }),
   identifier: text('identifier'), // Optional tree identifier/tag
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
@@ -161,14 +174,13 @@ export const treeRecords = pgTable('tree_records', {
 });
 
 // ============================================================================
-// RELATIONS - UPDATED TO REMOVE SITE MEMBERSHIPS
+// RELATIONS - UPDATED FOR NEW SPECIES STRUCTURE
 // ============================================================================
 
 export const userRelations = relations(users, ({ many }) => ({
   projectMemberships: many(projectMembers),
-  // REMOVED: siteMemberships: many(siteMembers),
   createdProjects: many(projects, { relationName: 'createdBy' }),
-  createdSpecies: many(species, { relationName: 'createdBy' }),
+  userSpecies: many(userSpecies),
   createdSites: many(sites, { relationName: 'createdBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
   createdTreeRecords: many(treeRecords, { relationName: 'createdBy' }),
@@ -184,7 +196,6 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   members: many(projectMembers),
   invites: many(projectInvites),
   sites: many(sites),
-  species: many(species),
 }));
 
 export const projectMemberRelations = relations(projectMembers, ({ one }) => ({
@@ -210,20 +221,24 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
   }),
 }));
 
-export const speciesRelations = relations(species, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [species.projectId],
-    references: [projects.id],
-  }),
-  createdBy: one(users, {
-    fields: [species.createdById],
+// Global species relations - no user/project dependencies
+export const speciesRelations = relations(species, ({ many }) => ({
+  userSpecies: many(userSpecies),
+}));
+
+// User species relations - connects users to global species with customizations
+export const userSpeciesRelations = relations(userSpecies, ({ one, many }) => ({
+  user: one(users, {
+    fields: [userSpecies.userId],
     references: [users.id],
-    relationName: 'createdBy',
+  }),
+  species: one(species, {
+    fields: [userSpecies.speciesId],
+    references: [species.id],
   }),
   trees: many(trees),
 }));
 
-// UPDATED: Site relations - NO MORE SITE MEMBERS
 export const siteRelations = relations(sites, ({ one, many }) => ({
   project: one(projects, {
     fields: [sites.projectId],
@@ -234,7 +249,6 @@ export const siteRelations = relations(sites, ({ one, many }) => ({
     references: [users.id],
     relationName: 'createdBy',
   }),
-  // REMOVED: members: many(siteMembers),
   trees: many(trees),
 }));
 
@@ -243,9 +257,9 @@ export const treeRelations = relations(trees, ({ one, many }) => ({
     fields: [trees.siteId],
     references: [sites.id],
   }),
-  species: one(species, {
-    fields: [trees.speciesId],
-    references: [species.id],
+  userSpecies: one(userSpecies, {
+    fields: [trees.userSpeciesId],
+    references: [userSpecies.id],
   }),
   createdBy: one(users, {
     fields: [trees.createdById],
