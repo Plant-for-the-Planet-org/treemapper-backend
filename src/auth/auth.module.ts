@@ -8,7 +8,6 @@ import { JwtStrategy } from './jwt.strategy';
 import { Auth0Config } from './auth0.config';
 import { UsersModule } from '../users/users.module';
 import { JwtAuthGuard } from './jwt-auth.guard';
-// import { RolesGuard } from './roles.guard';
 
 @Module({
   imports: [
@@ -21,13 +20,11 @@ import { JwtAuthGuard } from './jwt-auth.guard';
     AuthService, 
     JwtStrategy, 
     Auth0Config, 
-    JwtAuthGuard, // Make sure JwtAuthGuard is provided
-    // RolesGuard    // Make sure RolesGuard is provided
+    JwtAuthGuard,
   ],
   exports: [
     AuthService,
-    JwtAuthGuard // Export JwtAuthGuard so it can be used globally
-    // RolesGuard    // Export RolesGuard so it can be used globally
+    JwtAuthGuard
   ],
 })
 export class AuthModule {}
