@@ -6,11 +6,11 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { ProjectsModule } from './projects/projects.module';
-import { EmailModule } from './email/email.module';
-import { SitesModule } from './sites/sites.module';
-import { SpeciesModule } from './species/species.module';
-import { TreeModule } from './trees/trees.module';
+// import { ProjectsModule } from './projects/projects.module';
+// import { EmailModule } from './email/email.module';
+// import { SitesModule } from './sites/sites.module';
+// import { SpeciesModule } from './species/species.module';
+// import { TreeModule } from './trees/trees.module';
 
 
 @Module({
@@ -21,11 +21,11 @@ import { TreeModule } from './trees/trees.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    ProjectsModule,
-    EmailModule,
-    SitesModule,
-    SpeciesModule,
-    TreeModule
+    // ProjectsModule,
+    // EmailModule,
+    // SitesModule,
+    // SpeciesModule,
+    // TreeModule
   ],
   controllers: [AppController],
   providers: [AppService],
