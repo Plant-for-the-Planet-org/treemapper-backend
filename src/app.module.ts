@@ -6,7 +6,9 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-// import { ProjectsModule } from './projects/projects.module';
+import { ProjectsModule } from './projects/projects.module';
+import { ProjectInvitesModule } from './project-invites/project-invites.module';
+
 // import { EmailModule } from './email/email.module';
 // import { SitesModule } from './sites/sites.module';
 // import { SpeciesModule } from './species/species.module';
@@ -21,11 +23,8 @@ import { AuthModule } from './auth/auth.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    // ProjectsModule,
-    // EmailModule,
-    // SitesModule,
-    // SpeciesModule,
-    // TreeModule
+    ProjectsModule,
+    ProjectInvitesModule
   ],
   controllers: [AppController],
   providers: [AppService],

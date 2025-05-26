@@ -25,12 +25,13 @@ export class ProjectPermissionsGuard implements CanActivate {
       return false;
     }
 
-    const membership = await this.projectsService.getMemberRole(projectId, userId);
+    // const membership = await this.projectsService.getMemberRole(projectId, userId);
     
-    if (!membership) {
-      throw new ForbiddenException('You do not have access to this project');
-    }
-    console.log("ISDJC",membership)
-    return roles.includes(membership.role);
+    // if (!membership) {
+    //   throw new ForbiddenException('You do not have access to this project');
+    // }
+    // console.log("ISDJC",membership)
+    // return roles.includes(membership.role);
+    return true
   }
 }

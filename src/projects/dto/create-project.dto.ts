@@ -1,117 +1,137 @@
-// src/projects/dto/create-project.dto.ts
-import { IsNotEmpty, IsString, IsOptional, IsBoolean, IsNumber, IsObject, ValidateNested, IsArray, IsEnum, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
-
-// Define all possible GeoJSON geometry types
-export enum GeoJSONGeometryType {
-  Point = 'Point',
-  LineString = 'LineString',
-  Polygon = 'Polygon',
-  MultiPoint = 'MultiPoint',
-  MultiLineString = 'MultiLineString',
-  MultiPolygon = 'MultiPolygon',
-  GeometryCollection = 'GeometryCollection'
-}
-
-// Define all possible GeoJSON types including Feature
-export enum GeoJSONType {
-  Feature = 'Feature',
-  FeatureCollection = 'FeatureCollection',
-  Point = 'Point',
-  LineString = 'LineString',
-  Polygon = 'Polygon',
-  MultiPoint = 'MultiPoint',
-  MultiLineString = 'MultiLineString',
-  MultiPolygon = 'MultiPolygon',
-  GeometryCollection = 'GeometryCollection'
-}
-
-// GeoJSON Geometry class
-export class GeoJSONGeometry {
-  @IsNotEmpty()
-  @IsEnum(GeoJSONGeometryType)
-  type: GeoJSONGeometryType;
-
-  @IsNotEmpty()
-  @IsArray()
-  coordinates: any[];
-}
-
-// GeoJSON Feature class
-export class GeoJSONFeature {
-  @IsNotEmpty()
-  @IsIn(['Feature'])
-  type: string;
-
-  @IsNotEmpty()
-  @ValidateNested()
-  @Type(() => GeoJSONGeometry)
-  geometry: GeoJSONGeometry;
-
-  @IsOptional()
-  @IsObject()
-  properties?: Record<string, any>;
-}
-
-// Union type for location
-export class LocationInput {
-  @IsNotEmpty()
-  @IsString()
-  type: string;
-
-  @IsOptional()
-  @IsArray()
-  coordinates?: any[];
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => GeoJSONGeometry)
-  geometry?: GeoJSONGeometry;
-
-  @IsOptional()
-  @IsObject()
-  properties?: Record<string, any>;
-}
+import { 
+  IsString, 
+  IsOptional, 
+  IsBoolean, 
+  IsInt, 
+  IsUrl, 
+  IsObject,
+  MaxLength, 
+  MinLength, 
+  Min,
+  IsLatitude,
+  IsLongitude,
+  Length
+} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsSlug, IsGeoJSON } from '../../common/decorator/validation.decorators';
 
 export class CreateProjectDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
+  @MaxLength(36)
+  guid?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  discr?: string = 'base';
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  @IsSlug({ message: 'Slug must contain only lowercase letters, numbers, and hyphens' })
+  slug: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  purpose?: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
   projectName: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  projectType: string;
+  projectType?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  ecosystem: string;
+  ecosystem?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  projectScale: string;
+  projectScale?: string;
 
-  @IsNotEmpty()
-  @IsNumber()
-  target: number;
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  target?: number;
 
-  @IsNotEmpty()
-  @IsString()
-  projectWebsite: string;
+  @IsOptional()
+  @IsUrl()
+  projectWebsite?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   description?: string;
 
   @IsOptional()
+  @IsString()
+  classification?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  image?: string;
+
+  @IsOptional()
+  @IsUrl()
+  videoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 2)
+  @Transform(({ value }) => value?.toUpperCase())
+  country?: string;
+
+  @IsOptional()
+  @IsGeoJSON({ message: 'Invalid GeoJSON format' })
+  location?: any;
+
+  @IsOptional()
+  @IsString()
+  originalGeometry?: string;
+
+  @IsOptional()
+  @IsLatitude()
+  geoLatitude?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  geoLongitude?: number;
+
+  @IsOptional()
+  @IsUrl()
+  url?: string;
+
+  @IsOptional()
+  @IsString()
+  linkText?: string;
+
+  @IsOptional()
   @IsBoolean()
-  isPublic?: boolean;
+  isActive?: boolean = true;
+
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean = true;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  intensity?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  revisionPeriodicityLevel?: string;
 
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
-
-  @IsNotEmpty()
-  @ValidateNested()
-  @Type(() => LocationInput)
-  location?: LocationInput;
+  metadata?: {
+    customFields?: Record<string, any>;
+    settings?: Record<string, any>;
+  };
 }

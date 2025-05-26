@@ -7,7 +7,7 @@ import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
 import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [DatabaseModule,NotificationModule],  // This should be present
+  imports: [DatabaseModule,NotificationModule],
   controllers: [ProjectsController],
   providers: [ProjectsService, ProjectPermissionsGuard],
   exports: [ProjectsService],

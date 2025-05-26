@@ -59,7 +59,7 @@ export class NotificationService {
     token: string;
     expiresAt: Date;
     role: string;
-    projectId: string;
+    projectId: number | string;
   }): Promise<boolean> {
     const inviteUrl = `${this.frontendUrl}?project-invite=${token}&projectId=${projectId}`;
     const expiryDate = new Date(expiresAt).toLocaleDateString();

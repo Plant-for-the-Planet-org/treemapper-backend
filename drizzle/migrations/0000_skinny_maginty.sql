@@ -299,12 +299,10 @@ CREATE TABLE "project_members" (
 CREATE TABLE "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"guid" varchar(36) NOT NULL,
-	"uid" varchar(64),
-	"remote_uid" varchar(255),
 	"discr" varchar(20) DEFAULT 'base' NOT NULL,
 	"created_by_id" integer NOT NULL,
 	"slug" varchar(255) NOT NULL,
-	"purpose" varchar(64) NOT NULL,
+	"purpose" varchar(64),
 	"name" varchar(255) NOT NULL,
 	"project_type" text,
 	"ecosystem" text,
@@ -323,7 +321,7 @@ CREATE TABLE "projects" (
 	"url" text,
 	"link_text" text,
 	"is_active" boolean DEFAULT true NOT NULL,
-	"is_public" boolean DEFAULT false NOT NULL,
+	"is_public" boolean DEFAULT true NOT NULL,
 	"intensity" varchar(100),
 	"revision_periodicity_level" varchar(100),
 	"metadata" jsonb,
@@ -331,7 +329,6 @@ CREATE TABLE "projects" (
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"deleted_at" timestamp,
 	CONSTRAINT "projects_guid_unique" UNIQUE("guid"),
-	CONSTRAINT "projects_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "projects_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint

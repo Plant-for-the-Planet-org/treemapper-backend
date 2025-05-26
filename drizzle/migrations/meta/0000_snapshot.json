@@ -1,5 +1,5 @@
 {
-  "id": "d16de060-a853-4586-97b7-118728bde6fe",
+  "id": "96c9afc1-fdea-4569-ab2a-33a4ca5d3eca",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3224,18 +3224,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "remote_uid": {
-          "name": "remote_uid",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "discr": {
           "name": "discr",
           "type": "varchar(20)",
@@ -3259,7 +3247,7 @@
           "name": "purpose",
           "type": "varchar(64)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -3375,7 +3363,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "intensity": {
           "name": "intensity",
@@ -3455,13 +3443,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "guid"
-          ]
-        },
-        "projects_uid_unique": {
-          "name": "projects_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
           ]
         },
         "projects_slug_unique": {

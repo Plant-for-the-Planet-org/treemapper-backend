@@ -1,516 +1,479 @@
-// src/projects/projects.service.ts modifications
-
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import { 
+  Injectable, 
+  NotFoundException, 
+  ConflictException, 
+  BadRequestException,
+  ForbiddenException 
+} from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { projects, projectMembers, users, projectInvites } from '../database/schema';
+import { projects, users, projectMembers, sites } from '../database/schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { AddProjectMemberDto } from './dto/add-project-member.dto';
-import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
-import { eq, and } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
-import { NotificationService } from '../notification/notification.service';
+import { ProjectQueryDto } from './dto/project-query.dto';
+import { Project, PublicProject } from './entities/project.entity';
+import { 
+  eq, 
+  and, 
+  or, 
+  like, 
+  desc, 
+  asc, 
+  count, 
+  isNull,
+  sql 
+} from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(
-    private drizzleService: DrizzleService,
-    private notificationService: NotificationService,
-  ) { }
-  private getGeoJSONForPostGIS(locationInput: any): any {
-    if (!locationInput) {
-      return null;
+  constructor(private drizzleService: DrizzleService) {}
+
+  // ============================================================================
+  // CREATE OPERATIONS
+  // ============================================================================
+
+  async create(createProjectDto: CreateProjectDto, userId: number): Promise<Project> {
+    // Check if slug already exists
+    const existingProject = await this.findBySlug(createProjectDto.slug);
+    if (existingProject) {
+      throw new ConflictException({
+        message: 'Project with this slug already exists',
+        error: { slug: createProjectDto.slug },
+        code: 'slug_already_exists',
+      });
     }
 
-    // If it's a Feature, extract the geometry
-    if (locationInput.type === 'Feature' && locationInput.geometry) {
-      return locationInput.geometry;
-    }
-
-    // If it's a FeatureCollection, extract the first geometry
-    if (locationInput.type === 'FeatureCollection' &&
-      locationInput.features &&
-      locationInput.features.length > 0 &&
-      locationInput.features[0].geometry) {
-      return locationInput.features[0].geometry;
-    }
-
-    // If it's already a geometry object, use it directly
-    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
-      return locationInput;
-    }
-
-    throw new BadRequestException('Invalid GeoJSON format');
-
-  }
-  async create(createProjectDto: CreateProjectDto, userId: string) {
     try {
-      let locationValue: any = null;
-      if (createProjectDto.location) {
-        try {
-          // Extract the geometry part if it's a Feature
-          const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
-
-          // Use SQL raw to convert GeoJSON to PostGIS geometry
-          locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
-        } catch (error) {
-          return {
-            message: 'Invalid geoJSON provide',
-            statusCode: 400,
-            error: "Error",
-            data: null,
-            code: 'invalid_project_geoJSON',
-          }
-        }
-      }
-
-      // Create project with updated schema fields
-      const projectResult = await this.drizzleService.db
+      const result = await this.drizzleService.db
         .insert(projects)
         .values({
-          projectName: createProjectDto.projectName,
-          projectType: createProjectDto.projectType,
-          ecosystem: createProjectDto.ecosystem,
-          projectScale: createProjectDto.projectScale,
-          target: createProjectDto.target,
-          projectWebsite: createProjectDto.projectWebsite,
-          description: createProjectDto.description,
-          isPublic: createProjectDto.isPublic || false,
+          ...createProjectDto,
+          guid: createProjectDto.guid || randomUUID(),
           createdById: userId,
-          metadata: createProjectDto.metadata || {},
-          location: locationValue,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         })
         .returning();
 
-      const project = projectResult[0];
+      const project = result[0];
 
-      // Add creator as project owner
+      // Add creator as owner to project members
       await this.drizzleService.db
         .insert(projectMembers)
         .values({
           projectId: project.id,
           userId: userId,
           role: 'owner',
+          joinedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
 
-      return {
-        message: 'Project created successfully',
-        statusCode: 200,
-        error: null,
-        data: project,
-        code: 'project_created',
-      };
+      return project;
     } catch (error) {
-      return {
-        message: 'Failed to create Project',
-        statusCode: 500,
-        error: "Error",
-        data: null,
-        code: 'failed_creating_project',
-      }
+      throw new BadRequestException({
+        message: 'Failed to create project',
+        error: error.message,
+        code: 'project_creation_failed',
+      });
     }
   }
 
+  // ============================================================================
+  // READ OPERATIONS
+  // ============================================================================
 
-  async findAll(userId: string) {
-    try {
-      const result = await this.drizzleService.db
-        .select({
-          project: {
-            ...projects,
-            location: sql`ST_AsGeoJSON(${projects.location})::json`.as('location')
-          },
-          role: projectMembers.role,
-        })
-        .from(projectMembers)
-        .innerJoin(projects, eq(projectMembers.projectId, projects.id))
-        .innerJoin(users, eq(projectMembers.userId, users.id))
-        .where(eq(users.id, userId));
-      return {
-        message: 'User projects',
-        statusCode: 200,
-        error: null,
-        data: result.map(({ project, role }) => ({
+  async findAll(query: ProjectQueryDto): Promise<{
+    projects: PublicProject[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search, 
+      projectType, 
+      ecosystem, 
+      projectScale,
+      classification,
+      country,
+      purpose,
+      isActive, 
+      isPublic, 
+      sortBy, 
+      sortOrder,
+      createdById 
+    } = query;
+    
+    const offset = (page - 1) * limit;
+
+    // Build WHERE conditions
+    const conditions: any[] = [];
+    
+    conditions.push(isNull(projects.deletedAt)); // Only non-deleted projects
+
+    if (search) {
+      conditions.push(
+        or(
+          like(projects.projectName, `%${search}%`),
+          like(projects.description, `%${search}%`),
+          like(projects.slug, `%${search}%`)
+        )
+      );
+    }
+
+    if (projectType) conditions.push(eq(projects.projectType, projectType));
+    if (ecosystem) conditions.push(eq(projects.ecosystem, ecosystem));
+    if (projectScale) conditions.push(eq(projects.projectScale, projectScale));
+    if (classification) conditions.push(eq(projects.classification, classification));
+    if (country) conditions.push(eq(projects.country, country));
+    if (purpose) conditions.push(eq(projects.purpose, purpose));
+    if (isActive !== undefined) conditions.push(eq(projects.isActive, isActive));
+    if (isPublic !== undefined) conditions.push(eq(projects.isPublic, isPublic));
+    if (createdById) conditions.push(eq(projects.createdById, createdById));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Get total count
+    const totalResult = await this.drizzleService.db
+      .select({ count: count() })
+      .from(projects)
+      .where(whereClause);
+
+    const total = totalResult[0].count;
+
+    // Get projects with pagination
+    // Ensure sortBy is a valid key of projects, fallback to 'createdAt' if not provided or invalid
+    const validSortKeys = [
+      'id', 'guid', 'discr', 'createdById', 'slug', 'purpose', 'projectName', 'projectType',
+      'ecosystem', 'projectScale', 'target', 'projectWebsite', 'description', 'classification',
+      'image', 'videoUrl', 'country', 'location', 'originalGeometry', 'geoLatitude', 'geoLongitude',
+      'url', 'linkText', 'isActive', 'isPublic', 'intensity', 'revisionPeriodicityLevel', 'metadata',
+      'createdAt', 'updatedAt'
+    ] as const;
+    type ProjectSortKey = typeof validSortKeys[number];
+    const sortKey: ProjectSortKey = (sortBy && validSortKeys.includes(sortBy as ProjectSortKey))
+      ? (sortBy as ProjectSortKey)
+      : 'createdAt';
+    const orderBy = sortOrder === 'asc' ? asc(projects[sortKey]) : desc(projects[sortKey]);
+
+    const result = await this.drizzleService.db
+      .select({
+        id: projects.id,
+        guid: projects.guid,
+        discr: projects.discr,
+        createdById: projects.createdById,
+        slug: projects.slug,
+        purpose: projects.purpose,
+        projectName: projects.projectName,
+        projectType: projects.projectType,
+        ecosystem: projects.ecosystem,
+        projectScale: projects.projectScale,
+        target: projects.target,
+        projectWebsite: projects.projectWebsite,
+        description: projects.description,
+        classification: projects.classification,
+        image: projects.image,
+        videoUrl: projects.videoUrl,
+        country: projects.country,
+        location: projects.location,
+        originalGeometry: projects.originalGeometry,
+        geoLatitude: projects.geoLatitude,
+        geoLongitude: projects.geoLongitude,
+        url: projects.url,
+        linkText: projects.linkText,
+        isActive: projects.isActive,
+        isPublic: projects.isPublic,
+        intensity: projects.intensity,
+        revisionPeriodicityLevel: projects.revisionPeriodicityLevel,
+        metadata: projects.metadata,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        // Creator info
+        creatorName: users.name,
+        creatorEmail: users.email,
+      })
+      .from(projects)
+      .leftJoin(users, eq(projects.createdById, users.id))
+      .where(whereClause)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(offset);
+
+    // Add member and site counts
+    const projectsWithCounts = await Promise.all(
+      result.map(async (project) => {
+        const [memberCountResult, siteCountResult] = await Promise.all([
+          this.drizzleService.db
+            .select({ count: count() })
+            .from(projectMembers)
+            .where(eq(projectMembers.projectId, project.id)),
+          
+          this.drizzleService.db
+            .select({ count: count() })
+            .from(sites)
+            .where(and(eq(sites.projectId, project.id), isNull(sites.deletedAt)))
+        ]);
+
+        return {
           ...project,
-          userRole: role,
-        })),
-        code: 'fetched_user_project',
-      }
-    } catch (error) {
-      return {
-        message: 'Failed to fetch user Projects',
-        statusCode: 500,
-        error: "Error",
-        data: null,
-        code: 'failed_fetching_user_project',
-      }
-    }
+          createdBy: {
+            id: project.createdById,
+            name: project.creatorName,
+            email: project.creatorEmail,
+          },
+          memberCount: memberCountResult[0].count,
+          siteCount: siteCountResult[0].count,
+        };
+      })
+    );
+
+    return {
+      projects: projectsWithCounts,
+      total,
+      page,
+      limit,
+    };
   }
 
-  async findOne(projectId: string) {
-    // Get project
-    try {
-      const projectQuery = await this.drizzleService.db
+  async findOne(id: number): Promise<PublicProject> {
+    const result = await this.drizzleService.db
+      .select({
+        id: projects.id,
+        guid: projects.guid,
+        discr: projects.discr,
+        createdById: projects.createdById,
+        slug: projects.slug,
+        purpose: projects.purpose,
+        projectName: projects.projectName,
+        projectType: projects.projectType,
+        ecosystem: projects.ecosystem,
+        projectScale: projects.projectScale,
+        target: projects.target,
+        projectWebsite: projects.projectWebsite,
+        description: projects.description,
+        classification: projects.classification,
+        image: projects.image,
+        videoUrl: projects.videoUrl,
+        country: projects.country,
+        location: projects.location,
+        originalGeometry: projects.originalGeometry,
+        geoLatitude: projects.geoLatitude,
+        geoLongitude: projects.geoLongitude,
+        url: projects.url,
+        linkText: projects.linkText,
+        isActive: projects.isActive,
+        isPublic: projects.isPublic,
+        intensity: projects.intensity,
+        revisionPeriodicityLevel: projects.revisionPeriodicityLevel,
+        metadata: projects.metadata,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        // Creator info
+        creatorName: users.name,
+        creatorEmail: users.email,
+      })
+      .from(projects)
+      .leftJoin(users, eq(projects.createdById, users.id))
+      .where(and(eq(projects.id, id), isNull(projects.deletedAt)));
+
+    if (result.length === 0) {
+      throw new NotFoundException({
+        message: `Project with ID ${id} not found`,
+        error: { projectId: id },
+        code: 'project_not_found',
+      });
+    }
+
+    const project = result[0];
+
+    // Get member and site counts
+    const [memberCountResult, siteCountResult] = await Promise.all([
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projectMembers)
+        .where(eq(projectMembers.projectId, project.id)),
+      
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(sites)
+        .where(and(eq(sites.projectId, project.id), isNull(sites.deletedAt)))
+    ]);
+
+    return {
+      ...project,
+      createdById:project.createdById,
+    };
+  }
+
+  async findByGuid(guid: string): Promise<PublicProject> {
+    const result = await this.drizzleService.db
       .select()
       .from(projects)
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.guid, guid), isNull(projects.deletedAt)));
 
-    if (projectQuery.length === 0) {
-      throw new NotFoundException('Project not found');
+    if (result.length === 0) {
+      throw new NotFoundException({
+        message: `Project with GUID ${guid} not found`,
+        error: { projectGuid: guid },
+        code: 'project_not_found',
+      });
     }
-
-    return  {
-        message: 'Fetched project details',
-        statusCode: 200,
-        error: null,
-        data: projectQuery[0],
-        code: 'fetch_single_project_details',
-    };
-    } catch (error) {
-      return {
-        message: 'Failed to fetch Project details',
-        statusCode: 500,
-        error: "Error",
-        data: null,
-        code: 'failed_fetching_project_details',
-      }
-    }
-  }
-
-  async update(projectId: string, updateProjectDto: UpdateProjectDto, userId: string) {
-    // Check if user has permission (only owner/admin can update project details)
-    const membership = await this.getMemberRole(projectId, userId);
-
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to update this project');
-    }
-
-    // Update project
-    const result = await this.drizzleService.db
-      .update(projects)
-      .set(updateProjectDto)
-      .where(eq(projects.id, projectId))
-      .returning();
 
     return result[0];
   }
 
-  async remove(projectId: string, userId: string) {
-    // Only owner can delete a project
-    const membership = await this.getMemberRole(projectId, userId);
-
-    if (!membership || membership.role !== 'owner') {
-      throw new ForbiddenException('Only the project owner can delete the project');
-    }
-
-    // Delete the project
-    await this.drizzleService.db
-      .delete(projects)
-      .where(eq(projects.id, projectId));
-
-    return { success: true };
-  }
-
-  async getMembers(projectId: string) {
-    // Get all members of a project with their roles
+  async findBySlug(slug: string): Promise<Project | null> {
     const result = await this.drizzleService.db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        role: projectMembers.role,
-        joinedAt: projectMembers.createdAt,
-      })
-      .from(projectMembers)
-      .innerJoin(users, eq(projectMembers.userId, users.id))
-      .where(eq(projectMembers.projectId, projectId));
-
-    return result;
-  }
-
-  async addMember(projectId: string, addMemberDto: AddProjectMemberDto, currentUserId: string) {
-    // Only owner/admin can add members
-    const membership = await this.getMemberRole(projectId, currentUserId);
-
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to add members to this project');
-    }
-
-    // Check if project exists
-    const projectQuery = await this.drizzleService.db
       .select()
       .from(projects)
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.slug, slug), isNull(projects.deletedAt)))
+      .limit(1);
 
-    if (projectQuery.length === 0) {
-      throw new NotFoundException('Project not found');
-    }
-
-    // Find user by email
-    const userQuery = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.email, addMemberDto.email));
-
-    if (userQuery.length === 0) {
-      throw new NotFoundException('User not found');
-    }
-
-    const userToAdd = userQuery[0];
-
-    // Check if user is already a member
-    const existingMemberQuery = await this.drizzleService.db
-      .select()
-      .from(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, userToAdd.id)
-        )
-      );
-
-    if (existingMemberQuery.length > 0) {
-      throw new ConflictException('User is already a member of this project');
-    }
-
-    // Cannot change owner's role
-    if (addMemberDto.role === 'owner') {
-      throw new ForbiddenException('Cannot assign owner role');
-    }
-
-    // Add member
-    const result = await this.drizzleService.db
-      .insert(projectMembers)
-      .values({
-        projectId: projectId,
-        userId: userToAdd.id,
-        role: addMemberDto.role as 'owner' | 'admin' | 'contributor' | 'viewer',
-      })
-      .returning();
-
-    return {
-      ...userToAdd,
-      role: result[0].role,
-      joinedAt: result[0].createdAt,
-    };
+    return result[0] || null;
   }
 
-  async updateMemberRole(
-    projectId: string,
-    memberId: string,
-    updateRoleDto: UpdateProjectRoleDto,
-    currentUserId: string
-  ) {
-    // Only owner/admin can update roles
-    const membership = await this.getMemberRole(projectId, currentUserId);
-
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to update member roles');
-    }
-
-    // Find the member to update
-    const memberQuery = await this.drizzleService.db
-      .select()
-      .from(projectMembers)
-      .innerJoin(users, eq(projectMembers.userId, users.id))
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, memberId)
-        )
-      );
-
-    if (memberQuery.length === 0) {
-      throw new NotFoundException('Member not found in this project');
-    }
-
-    const memberToUpdate = memberQuery[0];
-
-    // Cannot change owner's role
-    if (memberToUpdate.project_members.role === 'owner') {
-      throw new ForbiddenException('Cannot change the role of the project owner');
-    }
-
-    // Cannot assign owner role
-    if (updateRoleDto.role === 'owner') {
-      throw new ForbiddenException('Cannot assign owner role');
-    }
-
-    // Admin cannot change another admin's role (only owner can)
-    if (membership.role === 'admin' && memberToUpdate.project_members.role === 'admin') {
-      throw new ForbiddenException('Admin cannot change another admin\'s role');
-    }
-
-    // Update role
-    const result = await this.drizzleService.db
-      .update(projectMembers)
-      .set({ role: updateRoleDto.role as 'owner' | 'admin' | 'contributor' | 'viewer' })
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, memberId)
-        )
-      )
-      .returning();
-
-    return {
-      userId: memberId,
-      name: memberToUpdate.users.name,
-      email: memberToUpdate.users.email,
-      role: result[0].role,
-    };
+  async findUserProjects(userId: number, query: Omit<ProjectQueryDto, 'createdById'>): Promise<{
+    projects: PublicProject[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.findAll({ ...query, createdById: userId });
   }
 
-  async removeMember(projectId: string, memberId: string, currentUserId: string) {
-    // Only owner/admin can remove members
-    const membership = await this.getMemberRole(projectId, currentUserId);
+  // ============================================================================
+  // UPDATE OPERATIONS
+  // ============================================================================
 
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to remove members');
-    }
+  async update(id: number, updateProjectDto: UpdateProjectDto, userId: number): Promise<PublicProject> {
+    // Check if project exists and user has permission
+    const project = await this.findOne(id);
+    await this.checkUserPermission(id, userId, ['owner', 'admin', 'manager']);
 
-    // Find the member to remove
-    const memberQuery = await this.drizzleService.db
-      .select()
-      .from(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, memberId)
-        )
-      );
-
-    if (memberQuery.length === 0) {
-      throw new NotFoundException('Member not found in this project');
-    }
-
-    const memberToRemove = memberQuery[0];
-
-    // Cannot remove the owner
-    if (memberToRemove.role === 'owner') {
-      throw new ForbiddenException('Cannot remove the project owner');
-    }
-
-    // Admin cannot remove another admin (only owner can)
-    if (membership.role === 'admin' && memberToRemove.role === 'admin') {
-      throw new ForbiddenException('Admin cannot remove another admin');
-    }
-
-    // Remove member
-    await this.drizzleService.db
-      .delete(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.projectId, projectId),
-          eq(projectMembers.userId, memberId)
-        )
-      );
-
-    return { success: true };
-  }
-
-  async inviteMember(projectId: string, email: string, role: string, currentUserId: string, inviterName, message: string) {
     try {
-      const project = await this.drizzleService.db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, projectId))
-        .then(results => {
-          if (results.length === 0) throw new NotFoundException('Project not found');
-          return results[0];
-        });
-
-      // Check if user already exists by email
-      const existingUser = await this.drizzleService.db
-        .select()
-        .from(users)
-        .where(eq(users.email, email))
-        .then(results => results[0] || null);
-
-      if (existingUser) {
-        const existingMembership = await this.drizzleService.db
-          .select()
-          .from(projectMembers)
-          .where(
-            and(
-              eq(projectMembers.projectId, projectId),
-              eq(projectMembers.userId, existingUser.id)
-            )
-          )
-          .then(results => results[0] || null);
-
-        if (existingMembership) {
-          throw new ConflictException('User is already a member of this project');
-        }
-      }
-
-      // Check for existing pending invitation
-      const existingInvite = await this.drizzleService.db
-        .select()
-        .from(projectInvites)
-        .where(
-          and(
-            eq(projectInvites.projectId, projectId),
-            eq(projectInvites.email, email),
-            eq(projectInvites.status, 'pending')
-          )
-        )
-        .then(results => results[0] || null);
-
-      if (existingInvite) {
-        throw new ConflictException('An invite has already been sent to this email');
-      }
-
-      // Cannot assign owner role via invite
-      if (role === 'owner') {
-        throw new ForbiddenException('Cannot assign owner role via invitation');
-      }
-
-      // Create invitation
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7); // 7 days expiry
-
-      const [invitation] = await this.drizzleService.db
-        .insert(projectInvites)
-        .values({
-          projectId,
-          email,
-          role: role as 'owner' | 'admin' | 'contributor' | 'viewer',
-          invitedById: currentUserId,
-          expiresAt: expiryDate,
-          message: message || ''
+      const result = await this.drizzleService.db
+        .update(projects)
+        .set({
+          ...updateProjectDto,
+          updatedAt: new Date(),
         })
+        .where(eq(projects.id, id))
         .returning();
 
-      this.notificationService.sendProjectInviteEmail({
-        email,
-        projectName: project.projectName,
-        role,
-        inviterName: inviterName,
-        token: invitation.token,
-        expiresAt: expiryDate,
-        projectId
-      })
-      return {
-        message: 'Invitation sent',
-        statusCode: 200,
-        error: null,
-        data: invitation,
-        code: 'invitation_sent',
-      };
+      return result[0];
     } catch (error) {
-      return {
-        message: 'Failed to send invitation',
-        statusCode: 500,
-        error: "Error",
-        data: null,
-        code: 'invitation_sent_failed',
-      };
+      throw new BadRequestException({
+        message: 'Failed to update project',
+        error: error.message,
+        code: 'project_update_failed',
+      });
     }
   }
 
-  async getMemberRole(projectId: string, userId: string) {
-    const membershipQuery = await this.drizzleService.db
+  async updateBySlug(slug: string, updateProjectDto: UpdateProjectDto, userId: number): Promise<PublicProject> {
+    const project = await this.findBySlug(slug);
+    if (!project) {
+      throw new NotFoundException({
+        message: `Project with slug ${slug} not found`,
+        error: { slug },
+        code: 'project_not_found',
+      });
+    }
+
+    return this.update(project.id, updateProjectDto, userId);
+  }
+
+  async deactivate(id: number, userId: number): Promise<PublicProject> {
+    await this.checkUserPermission(id, userId, ['owner', 'admin']);
+    return this.update(id, { isActive: false }, userId);
+  }
+
+  async activate(id: number, userId: number): Promise<PublicProject> {
+    await this.checkUserPermission(id, userId, ['owner', 'admin']);
+    return this.update(id, { isActive: true }, userId);
+  }
+
+  async makePrivate(id: number, userId: number): Promise<PublicProject> {
+    await this.checkUserPermission(id, userId, ['owner', 'admin']);
+    return this.update(id, { isPublic: false }, userId);
+  }
+
+  async makePublic(id: number, userId: number): Promise<PublicProject> {
+    await this.checkUserPermission(id, userId, ['owner', 'admin']);
+    return this.update(id, { isPublic: true }, userId);
+  }
+
+  // ============================================================================
+  // DELETE OPERATIONS
+  // ============================================================================
+
+  async remove(id: number, userId: number): Promise<{ success: boolean; id: number }> {
+    // Only owners can delete projects
+    await this.checkUserPermission(id, userId, ['owner']);
+
+    // Soft delete
+    const result = await this.drizzleService.db
+      .update(projects)
+      .set({
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id });
+
+    return { success: true, id: result[0].id };
+  }
+
+  async hardDelete(id: number, userId: number): Promise<{ success: boolean; id: number }> {
+    // Only owners can hard delete projects
+    await this.checkUserPermission(id, userId, ['owner']);
+
+    const result = await this.drizzleService.db
+      .delete(projects)
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id });
+
+    if (result.length === 0) {
+      throw new NotFoundException({
+        message: `Project with ID ${id} not found`,
+        error: { projectId: id },
+        code: 'project_not_found',
+      });
+    }
+
+    return { success: true, id: result[0].id };
+  }
+
+  // ============================================================================
+  // UTILITY METHODS
+  // ============================================================================
+
+  async generateUniqueSlug(baseName: string): Promise<string> {
+    const baseSlug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    let slug = baseSlug;
+    let counter = 1;
+
+    while (await this.findBySlug(slug)) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
+    return slug;
+  }
+
+  async checkSlugExists(slug: string): Promise<boolean> {
+    const project = await this.findBySlug(slug);
+    return !!project;
+  }
+
+  async checkUserPermission(
+    projectId: number, 
+    userId: number, 
+    allowedRoles: string[] = []
+  ): Promise<void> {
+    const membership = await this.drizzleService.db
       .select()
       .from(projectMembers)
       .where(
@@ -518,151 +481,111 @@ export class ProjectsService {
           eq(projectMembers.projectId, projectId),
           eq(projectMembers.userId, userId)
         )
-      );
+      )
+      .limit(1);
 
-    if (membershipQuery.length === 0) {
-      return null;
+    if (membership.length === 0) {
+      throw new ForbiddenException({
+        message: 'You do not have access to this project',
+        error: { projectId, userId },
+        code: 'project_access_denied',
+      });
     }
 
-    return membershipQuery[0];
+    if (allowedRoles.length > 0 && !allowedRoles.includes(membership[0].role)) {
+      throw new ForbiddenException({
+        message: `Insufficient permissions. Required: ${allowedRoles.join(', ')}`,
+        error: { 
+          projectId, 
+          userId, 
+          userRole: membership[0].role, 
+          requiredRoles: allowedRoles 
+        },
+        code: 'insufficient_permissions',
+      });
+    }
   }
 
-  async acceptInvite(token: string, userId: string) {
-    // Find the invitation
-    const invite = await this.drizzleService.db
+  async getProjectStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    public: number;
+    private: number;
+    byType: Record<string, number>;
+    byCountry: Record<string, number>;
+  }> {
+    const [
+      totalResult,
+      activeResult,
+      inactiveResult,
+      publicResult,
+      privateResult
+    ] = await Promise.all([
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projects)
+        .where(isNull(projects.deletedAt)),
+      
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projects)
+        .where(and(eq(projects.isActive, true), isNull(projects.deletedAt))),
+      
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projects)
+        .where(and(eq(projects.isActive, false), isNull(projects.deletedAt))),
+
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projects)
+        .where(and(eq(projects.isPublic, true), isNull(projects.deletedAt))),
+
+      this.drizzleService.db
+        .select({ count: count() })
+        .from(projects)
+        .where(and(eq(projects.isPublic, false), isNull(projects.deletedAt))),
+    ]);
+
+    // Get counts by type
+    const typeResults = await this.drizzleService.db
       .select({
-        invite: projectInvites,
-        project: projects,
-        inviter: users,
+        type: projects.projectType,
+        count: count(),
       })
-      .from(projectInvites)
-      .innerJoin(projects, eq(projectInvites.projectId, projects.id))
-      .innerJoin(users, eq(projectInvites.invitedById, users.id))
-      .where(
-        and(
-          eq(projectInvites.token, token),
-          eq(projectInvites.status, 'pending'),
-        )
-      )
-      .then(results => results[0] || null);
+      .from(projects)
+      .where(isNull(projects.deletedAt))
+      .groupBy(projects.projectType);
 
-    if (!invite) {
-      throw new NotFoundException('Invitation not found or already processed');
-    }
+    const byType = typeResults.reduce((acc, curr) => {
+      acc[curr.type || 'unknown'] = curr.count;
+      return acc;
+    }, {} as Record<string, number>);
 
-    if (new Date(invite.invite.expiresAt) < new Date()) {
-      throw new BadRequestException('Invitation has expired');
-    }
-
-    // Get the accepting user
-    const [user] = await this.drizzleService.db
-      .select()
-      .from(users)
-      .where(eq(users.auth0Id, userId));
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Check if already a member
-    const existingMember = await this.drizzleService.db
-      .select()
-      .from(projectMembers)
-      .where(
-        and(
-          eq(projectMembers.projectId, invite.invite.projectId),
-          eq(projectMembers.userId, user.id),
-        )
-      )
-      .then(results => results[0] || null);
-
-    if (existingMember) {
-      throw new ConflictException('You are already a member of this project');
-    }
-
-    // Use a transaction to ensure data consistency
-    return await this.drizzleService.db.transaction(async (tx) => {
-      // Update invite status
-      await tx
-        .update(projectInvites)
-        .set({ status: 'accepted', updatedAt: new Date() })
-        .where(eq(projectInvites.id, invite.invite.id));
-
-      // Add user as project member
-      const [membership] = await tx
-        .insert(projectMembers)
-        .values({
-          projectId: invite.invite.projectId,
-          userId: user.id,
-          role: invite.invite.role,
-        })
-        .returning();
-
-      // Send notifications
-      await this.notificationService.sendInviteAcceptedEmail({
-        inviterEmail: invite.inviter.email,
-        inviterName: invite.inviter.name || invite.inviter.authName || '',
-        memberName: user.name || user.authName || user.email,
-        memberEmail: user.email,
-        projectName: invite.project.projectName,
-        projectId: invite.project.id,
-      });
-
-      await this.notificationService.sendNewMemberWelcomeEmail({
-        email: user.email,
-        name: user.name || user.authName || 'there',
-        projectName: invite.project.projectName,
-        projectId: invite.project.id,
-      });
-
-      return {
-        message: `You have successfully joined ${invite.project.projectName}`,
-        projectId: invite.project.id,
-        role: membership.role,
-      };
-    });
-  }
-
-  // Decline invite method
-  async declineInvite(token: string) {
-    // Find the invitation
-    const invite = await this.drizzleService.db
+    // Get counts by country
+    const countryResults = await this.drizzleService.db
       .select({
-        invite: projectInvites,
-        project: projects,
-        inviter: users,
+        country: projects.country,
+        count: count(),
       })
-      .from(projectInvites)
-      .innerJoin(projects, eq(projectInvites.projectId, projects.id))
-      .innerJoin(users, eq(projectInvites.invitedById, users.id))
-      .where(
-        and(
-          eq(projectInvites.token, token),
-          eq(projectInvites.status, 'pending'),
-        )
-      )
-      .then(results => results[0] || null);
+      .from(projects)
+      .where(isNull(projects.deletedAt))
+      .groupBy(projects.country);
 
-    if (!invite) {
-      throw new NotFoundException('Invitation not found or already processed');
-    }
-
-    // Update invite status
-    await this.drizzleService.db
-      .update(projectInvites)
-      .set({ status: 'declined', updatedAt: new Date() })
-      .where(eq(projectInvites.id, invite.invite.id));
-
-    // Send notification
-    await this.notificationService.sendInviteDeclinedEmail({
-      inviterEmail: invite.inviter.email,
-      inviterName: invite.inviter.name || invite.inviter.authName || '',
-      memberEmail: invite.invite.email,
-      projectName: invite.project.projectName,
-    });
+    const byCountry = countryResults.reduce((acc, curr) => {
+      acc[curr.country || 'unknown'] = curr.count;
+      return acc;
+    }, {} as Record<string, number>);
 
     return {
-      message: `You have declined the invitation to join ${invite.project.projectName}`,
+      total: totalResult[0].count,
+      active: activeResult[0].count,
+      inactive: inactiveResult[0].count,
+      public: publicResult[0].count,
+      private: privateResult[0].count,
+      byType,
+      byCountry,
     };
   }
 }
