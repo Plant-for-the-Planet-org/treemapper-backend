@@ -1,5 +1,4 @@
 // src/projects/guards/project-permissions.guard.ts
-
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ProjectsService } from '../projects.service';
@@ -19,9 +18,9 @@ export class ProjectPermissionsGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const userId = request.user?.id;
-    const projectId = request.params.id;
+    const projectId = parseInt(request.params.id, 10);
 
-    if (!userId || !projectId) {
+    if (!userId || !projectId || isNaN(projectId)) {
       return false;
     }
 
@@ -30,8 +29,13 @@ export class ProjectPermissionsGuard implements CanActivate {
     if (!membership) {
       throw new ForbiddenException('You do not have access to this project');
     }
-    console.log("ISDJC",membership)
-    return roles.includes(membership.role);
-    return true
+
+    const hasPermission = roles.includes(membership.role);
+    
+    if (!hasPermission) {
+      throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
+    }
+
+    return true;
   }
 }

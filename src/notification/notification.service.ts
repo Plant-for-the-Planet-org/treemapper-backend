@@ -94,7 +94,7 @@ export class NotificationService {
     memberName: string;
     memberEmail: string;
     projectName: string;
-    projectId: string;
+    projectId: string | number; 
   }): Promise<boolean> {
     const projectUrl = `${this.frontendUrl}/projects/${projectId}`;
 
@@ -150,7 +150,7 @@ export class NotificationService {
     email: string;
     name: string;
     projectName: string;
-    projectId: string;
+    projectId: string | number;
   }): Promise<boolean> {
     const projectUrl = `${this.frontendUrl}/projects/${projectId}`;
 

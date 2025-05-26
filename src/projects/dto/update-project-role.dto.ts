@@ -1,10 +1,8 @@
-// src/projects/dto/update-project-role.dto.ts
-import { IsNotEmpty, IsEnum } from 'class-validator';
+import { IsEnum } from 'class-validator';
 
 export class UpdateProjectRoleDto {
-  @IsNotEmpty()
-  @IsEnum(['admin', 'editor', 'viewer'], {
-    message: 'Role must be one of: admin, editor, viewer',
+  @IsEnum(['admin', 'manager', 'contributor', 'observer', 'researcher'], {
+    message: 'Role must be one of: admin, manager, contributor, observer, researcher'
   })
-  role: string;
+  role: 'admin' | 'manager' | 'contributor' | 'observer' | 'researcher';
 }

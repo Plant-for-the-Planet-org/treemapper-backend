@@ -10,7 +10,8 @@ import {
   Min,
   IsLatitude,
   IsLongitude,
-  Length
+  Length,
+  IsNumber
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { IsSlug, IsGeoJSON } from '../../common/decorator/validation.decorators';
@@ -25,12 +26,13 @@ export class CreateProjectDto {
   @IsString()
   @MaxLength(20)
   discr?: string = 'base';
-
+  
+  @IsOptional()
   @IsString()
   @MinLength(3)
   @MaxLength(255)
   @IsSlug({ message: 'Slug must contain only lowercase letters, numbers, and hyphens' })
-  slug: string;
+  slug?: string;
 
   @IsOptional()
   @IsString()
@@ -86,7 +88,6 @@ export class CreateProjectDto {
   @Transform(({ value }) => value?.toUpperCase())
   country?: string;
 
-  @IsOptional()
   @IsGeoJSON({ message: 'Invalid GeoJSON format' })
   location?: any;
 
@@ -95,10 +96,12 @@ export class CreateProjectDto {
   originalGeometry?: string;
 
   @IsOptional()
+  @IsNumber()
   @IsLatitude()
   geoLatitude?: number;
 
   @IsOptional()
+  @IsNumber()
   @IsLongitude()
   geoLongitude?: number;
 

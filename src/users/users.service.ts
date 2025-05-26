@@ -14,6 +14,45 @@ import { randomUUID } from 'crypto';
 export class UsersService {
   constructor(private drizzleService: DrizzleService) { }
 
+
+
+
+
+
+  async findOne(id: number): Promise<PublicUser> {
+    const result = await this.drizzleService.db
+      .select({
+        guid: users.guid,
+        email: users.email,
+        name: users.name,
+        firstname: users.firstname,
+        lastname: users.lastname,
+        displayName: users.displayName,
+        avatar: users.avatar,
+        slug: users.slug,
+        authName: users.authName,
+        type: users.type,
+        country: users.country,
+        url: users.url,
+        isPrivate: users.isPrivate,
+        bio: users.bio,
+        locale: users.locale,
+        isActive: users.isActive
+      })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)));
+
+    if (result.length === 0) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return result[0];
+  }
+
+
+  
+
+
   // ============================================================================
   // CREATE OPERATIONS
   // ============================================================================
@@ -172,39 +211,7 @@ export class UsersService {
     };
   }
 
-  async findOne(id: number): Promise<PublicUser> {
-    const result = await this.drizzleService.db
-      .select({
-        id: users.id,
-        guid: users.guid,
-        email: users.email,
-        name: users.name,
-        firstname: users.firstname,
-        lastname: users.lastname,
-        displayName: users.displayName,
-        avatar: users.avatar,
-        slug: users.slug,
-        authName: users.authName,
-        type: users.type,
-        country: users.country,
-        url: users.url,
-        isPrivate: users.isPrivate,
-        bio: users.bio,
-        locale: users.locale,
-        isActive: users.isActive,
-        lastLoginAt: users.lastLoginAt,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(and(eq(users.id, id), isNull(users.deletedAt)));
 
-    if (result.length === 0) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    return result[0];
-  }
 
   async findByGuid(guid: string): Promise<PublicUser> {
     const result = await this.drizzleService.db

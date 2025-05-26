@@ -1,21 +1,15 @@
-// src/projects/dto/invite-project-member.dto.ts
-import { IsEmail, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
-import { projectRoleEnum } from '../../database/schema';
-
-// Extract the enum values
-const PROJECT_ROLE_VALUES = projectRoleEnum.enumValues;
+import { IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class InviteProjectMemberDto {
-  @IsNotEmpty()
   @IsEmail()
   email: string;
 
-  @IsOptional()
-  message: string;
-
-  @IsNotEmpty()
-  @IsEnum(PROJECT_ROLE_VALUES, {
-    message: `role must be one of the following values: ${PROJECT_ROLE_VALUES.join(', ')}`
+  @IsEnum(['admin', 'manager', 'contributor', 'observer', 'researcher'], {
+    message: 'Role must be one of: admin, manager, contributor, observer, researcher'
   })
-  role: string;
+  role: 'admin' | 'manager' | 'contributor' | 'observer' | 'researcher';
+
+  @IsOptional()
+  @IsString()
+  message?: string;
 }
