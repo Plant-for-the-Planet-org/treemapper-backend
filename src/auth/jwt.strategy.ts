@@ -29,19 +29,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     // Extract email from the custom namespace
     const email = payload['https://app.plant-for-the-planet.org/email'];
-    const emailVerified = payload['https://app.plant-for-the-planet.org/email_verified'];
-    if (!emailVerified) {
-      return {
-        message: 'Email not verified',
-        statusCode: 401,
-        error: 'Unauthorized',
-        data: null,
-        code: 'email_not_verified',
-      }
-    }
-    // Validate or create the user in our database
+    // const emailVerified = payload['https://app.plant-for-the-planet.org/email_verified'];
+    // if (!emailVerified) {
+    //   return {
+    //     message: 'Email not verified',
+    //     statusCode: 401,
+    //     error: 'Unauthorized',
+    //     data: null,
+    //     code: 'email_not_verified',
+    //   }
+    // }
+    // // Validate or create the user in our database
     const user = await this.authService.validateUser(payload.sub, email);
-    // Return combined user info
     return { ...user };
   }
 }

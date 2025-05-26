@@ -1,9 +1,9 @@
-import { 
-  Injectable, 
-  NotFoundException, 
-  ConflictException, 
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
   BadRequestException,
-  ForbiddenException 
+  ForbiddenException
 } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { projects, users, projectMembers, sites } from '../database/schema';
@@ -11,22 +11,22 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectQueryDto } from './dto/project-query.dto';
 import { Project, PublicProject } from './entities/project.entity';
-import { 
-  eq, 
-  and, 
-  or, 
-  like, 
-  desc, 
-  asc, 
-  count, 
+import {
+  eq,
+  and,
+  or,
+  like,
+  desc,
+  asc,
+  count,
   isNull,
-  sql 
+  sql
 } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private drizzleService: DrizzleService) {}
+  constructor(private drizzleService: DrizzleService) { }
 
   // ============================================================================
   // CREATE OPERATIONS
@@ -89,28 +89,28 @@ export class ProjectsService {
     page: number;
     limit: number;
   }> {
-    const { 
-      page = 1, 
-      limit = 20, 
-      search, 
-      projectType, 
-      ecosystem, 
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      projectType,
+      ecosystem,
       projectScale,
       classification,
       country,
       purpose,
-      isActive, 
-      isPublic, 
-      sortBy, 
+      isActive,
+      isPublic,
+      sortBy,
       sortOrder,
-      createdById 
+      createdById
     } = query;
-    
+
     const offset = (page - 1) * limit;
 
     // Build WHERE conditions
     const conditions: any[] = [];
-    
+
     conditions.push(isNull(projects.deletedAt)); // Only non-deleted projects
 
     if (search) {
@@ -209,7 +209,7 @@ export class ProjectsService {
             .select({ count: count() })
             .from(projectMembers)
             .where(eq(projectMembers.projectId, project.id)),
-          
+
           this.drizzleService.db
             .select({ count: count() })
             .from(sites)
@@ -294,7 +294,7 @@ export class ProjectsService {
         .select({ count: count() })
         .from(projectMembers)
         .where(eq(projectMembers.projectId, project.id)),
-      
+
       this.drizzleService.db
         .select({ count: count() })
         .from(sites)
@@ -303,7 +303,7 @@ export class ProjectsService {
 
     return {
       ...project,
-      createdById:project.createdById,
+      createdById: project.createdById,
     };
   }
 
@@ -446,6 +446,69 @@ export class ProjectsService {
     return { success: true, id: result[0].id };
   }
 
+  async getMemberRole(projectId: string | number, userId: number): Promise<{ role: string } | null> {
+    try {
+      // Convert projectId to number if it's a string
+      const numericProjectId = typeof projectId === 'string' ? parseInt(projectId, 10) : projectId;
+
+      // Validate that projectId is a valid number
+      if (isNaN(numericProjectId)) {
+        return null;
+      }
+
+      // Query the project_members table
+      const result = await  this.drizzleService.db
+        .select({ role: projectMembers.role })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, numericProjectId),
+            eq(projectMembers.userId, userId)
+          )
+        )
+        .limit(1);
+
+      // Return the first result or null if no membership found
+      return result.length > 0 ? result[0] : null;
+    } catch (error) {
+      // Log the error for debugging
+      console.error('Error fetching member role:', error);
+      return null;
+    }
+  }
+
+  // Alternative version that returns the full membership object if you need more details
+  async getMembershipDetails(projectId: string | number, userId: number) {
+    try {
+      const numericProjectId = typeof projectId === 'string' ? parseInt(projectId, 10) : projectId;
+
+      if (isNaN(numericProjectId)) {
+        return null;
+      }
+
+      const result = await this.drizzleService.db
+        .select({
+          id: projectMembers.id,
+          role: projectMembers.role,
+          joinedAt: projectMembers.joinedAt,
+          invitedAt: projectMembers.invitedAt,
+        })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, numericProjectId),
+            eq(projectMembers.userId, userId)
+          )
+        )
+        .limit(1);
+
+      return result.length > 0 ? result[0] : null;
+    } catch (error) {
+      console.error('Error fetching membership details:', error);
+      return null;
+    }
+  }
+
   // ============================================================================
   // UTILITY METHODS
   // ============================================================================
@@ -469,8 +532,8 @@ export class ProjectsService {
   }
 
   async checkUserPermission(
-    projectId: number, 
-    userId: number, 
+    projectId: number,
+    userId: number,
     allowedRoles: string[] = []
   ): Promise<void> {
     const membership = await this.drizzleService.db
@@ -495,11 +558,11 @@ export class ProjectsService {
     if (allowedRoles.length > 0 && !allowedRoles.includes(membership[0].role)) {
       throw new ForbiddenException({
         message: `Insufficient permissions. Required: ${allowedRoles.join(', ')}`,
-        error: { 
-          projectId, 
-          userId, 
-          userRole: membership[0].role, 
-          requiredRoles: allowedRoles 
+        error: {
+          projectId,
+          userId,
+          userRole: membership[0].role,
+          requiredRoles: allowedRoles
         },
         code: 'insufficient_permissions',
       });
@@ -526,12 +589,12 @@ export class ProjectsService {
         .select({ count: count() })
         .from(projects)
         .where(isNull(projects.deletedAt)),
-      
+
       this.drizzleService.db
         .select({ count: count() })
         .from(projects)
         .where(and(eq(projects.isActive, true), isNull(projects.deletedAt))),
-      
+
       this.drizzleService.db
         .select({ count: count() })
         .from(projects)
@@ -589,3 +652,6 @@ export class ProjectsService {
     };
   }
 }
+
+
+

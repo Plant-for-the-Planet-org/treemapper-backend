@@ -16,9 +16,6 @@ export class AuthService {
       // First try to find by Auth0 ID
       let user = await this.usersService.findByAuth0Id(auth0Id);
       if (!user) {
-        this.logger.log(`User with Auth0 ID ${auth0Id} not found, creating new user`);
-        // Create a new user
-        this.logger.log(`Creating new user with email ${email} and Auth0 ID ${auth0Id}`);
         user = await this.usersService.createFromAuth0({
           auth0Id,
           email,
@@ -27,7 +24,6 @@ export class AuthService {
       }
       return user
     } catch (error) {
-      this.logger.error(`Error validating user: ${error.message}`, error.stack);
       throw error;
     }
   }
