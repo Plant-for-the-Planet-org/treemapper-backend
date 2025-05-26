@@ -11,16 +11,16 @@ import { ValidationError } from 'class-validator';
 export class ValidationPipe extends NestValidationPipe {
   constructor() {
     super({
-      whitelist: true, // Strip non-whitelisted properties
-      forbidNonWhitelisted: true, // Throw error for non-whitelisted properties
-      transform: true, // Transform payload to DTO instance
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
       disableErrorMessages: false,
       validationError: {
         target: false,
         value: false,
       },
       exceptionFactory: (errors: ValidationError[]) => {
-        const messages = errors.map((error) => {
+        const errorDetails = errors.map((error) => {
           const constraints = error.constraints;
           return {
             field: error.property,
@@ -28,9 +28,10 @@ export class ValidationPipe extends NestValidationPipe {
           };
         });
         
-        return new BadRequestException({
+        throw new BadRequestException({
           message: 'Validation failed',
-          errors: messages,
+          error: errorDetails,
+          code: 'validation_failed',
         });
       },
     });

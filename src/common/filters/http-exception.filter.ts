@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { ErrorResponse } from '../interfaces/response.interface';
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -19,35 +20,61 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
-    const errorResponse = {
-      success: false,
+    // Extract error details
+    let message = exception.message;
+    let error = null;
+    let code = this.getErrorCode(status);
+
+    if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      const responseObj = exceptionResponse as any;
+      message = responseObj.message || message;
+      error = responseObj.errors || responseObj.error || null;
+      code = responseObj.code || code;
+    }
+
+    const errorResponse: ErrorResponse = {
       statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      method: request.method,
-      message: 
-        typeof exceptionResponse === 'string' 
-          ? exceptionResponse 
-          : (exceptionResponse as any).message || exception.message,
-      ...(typeof exceptionResponse === 'object' && exceptionResponse !== null 
-          ? exceptionResponse 
-          : {}),
+      message,
+      error,
+      data: null,
+      code,
     };
 
     // Log error for server errors
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
-        `${request.method} ${request.url}`,
+        `${request.method} ${request.url} - ${status} - ${message}`,
         exception.stack,
         'HttpExceptionFilter',
       );
     } else {
       this.logger.warn(
-        `${request.method} ${request.url} - ${status} - ${exception.message}`,
+        `${request.method} ${request.url} - ${status} - ${message}`,
         'HttpExceptionFilter',
       );
     }
 
     response.status(status).json(errorResponse);
+  }
+
+  private getErrorCode(status: number): string {
+    switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return 'bad_request';
+      case HttpStatus.UNAUTHORIZED:
+        return 'unauthorized';
+      case HttpStatus.FORBIDDEN:
+        return 'forbidden';
+      case HttpStatus.NOT_FOUND:
+        return 'not_found';
+      case HttpStatus.CONFLICT:
+        return 'conflict';
+      case HttpStatus.UNPROCESSABLE_ENTITY:
+        return 'validation_failed';
+      case HttpStatus.INTERNAL_SERVER_ERROR:
+        return 'internal_server_error';
+      default:
+        return 'error';
+    }
   }
 }
