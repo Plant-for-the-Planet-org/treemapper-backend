@@ -1,22 +1,87 @@
 // src/projects/projects.service.ts
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { projects, projectMembers, users, projectInvites } from '../database/schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { NotificationService } from '../notification/notification.service';
 import { v4 as uuidv4 } from 'uuid';
+
+
+export interface ProjectMemberResponse {
+  id: number;
+  userId: number;
+  role: string;
+  joinedAt: Date | null;
+  invitedAt: Date | null;
+  user: {
+    id: number;
+    name: string | null;
+    email: string;
+    displayName: string | null;
+    avatar: string | null;
+    isActive: boolean;
+  };
+}
+
+export interface ProjectInviteResponse {
+  id: number;
+  email: string;
+  role: string;
+  status: string;
+  message: string | null;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  createdAt: Date;
+  invitedBy: {
+    id: number;
+    name: string | null;
+    email: string;
+    displayName: string | null;
+  };
+}
+
+export interface ProjectInviteStatusResponse {
+  id: number;
+  email: string;
+  role: string;
+  message: string | null;
+  status: string;
+  expiresAt: Date;
+  createdAt: Date;
+  isExpired: boolean;
+  project: {
+    id: number;
+    name: string;
+    description: string | null;
+    slug: string;
+    country: string | null;
+    image: string | null;
+  };
+  invitedBy: {
+    id: number;
+    name: string | null;
+    email: string;
+    displayName: string | null;
+    avatar: string | null;
+  };
+}
+
+export interface ProjectMembersAndInvitesResponse {
+  members: ProjectMemberResponse[];
+  invitations: ProjectInviteResponse[];
+}
 
 @Injectable()
 export class ProjectsService {
   constructor(
     private drizzleService: DrizzleService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   private getGeoJSONForPostGIS(locationInput: any): any {
     if (!locationInput) {
@@ -320,7 +385,7 @@ export class ProjectsService {
       }
 
       // Remove undefined values
-      Object.keys(updateData).forEach(key => 
+      Object.keys(updateData).forEach(key =>
         updateData[key] === undefined && delete updateData[key]
       );
 
@@ -368,9 +433,9 @@ export class ProjectsService {
       // Soft delete the project
       await this.drizzleService.db
         .update(projects)
-        .set({ 
+        .set({
           deletedAt: new Date(),
-          isActive: false 
+          isActive: false
         })
         .where(eq(projects.id, projectId));
 
@@ -605,7 +670,7 @@ export class ProjectsService {
       // Update role
       const [result] = await this.drizzleService.db
         .update(projectMembers)
-        .set({ 
+        .set({
           role: updateRoleDto.role,
           updatedAt: new Date(),
         })
@@ -730,10 +795,21 @@ export class ProjectsService {
     }
   }
 
-  async inviteMember(projectId: number, email: string, role: string, currentUserId: number, inviterName: string, message?: string) {
+  async inviteMember(projectId: string, email: string, role: string, currentUserId: number, inviterName: string, message?: string) {
     try {
+
+      const project = await this.drizzleService.db
+        .select()
+        .from(projects)
+        .where(eq(projects.guid, projectId))
+        .then(results => {
+          if (results.length === 0) throw new NotFoundException('Project not found');
+          return results[0];
+        });
+
+
       // Only owner/admin can invite members
-      const membership = await this.getMemberRole(projectId, currentUserId);
+      const membership = await this.getMemberRole(project.id, currentUserId);
 
       if (!membership || !['owner', 'admin'].includes(membership.role)) {
         return {
@@ -745,14 +821,6 @@ export class ProjectsService {
         };
       }
 
-      const project = await this.drizzleService.db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, projectId))
-        .then(results => {
-          if (results.length === 0) throw new NotFoundException('Project not found');
-          return results[0];
-        });
 
       // Check if user already exists by email
       const existingUser = await this.drizzleService.db
@@ -767,7 +835,7 @@ export class ProjectsService {
           .from(projectMembers)
           .where(
             and(
-              eq(projectMembers.projectId, projectId),
+              eq(projectMembers.projectId, project.id),
               eq(projectMembers.userId, existingUser.id)
             )
           )
@@ -790,7 +858,7 @@ export class ProjectsService {
         .from(projectInvites)
         .where(
           and(
-            eq(projectInvites.projectId, projectId),
+            eq(projectInvites.projectId, project.id),
             eq(projectInvites.email, email),
             eq(projectInvites.status, 'pending')
           )
@@ -814,7 +882,7 @@ export class ProjectsService {
       const [invitation] = await this.drizzleService.db
         .insert(projectInvites)
         .values({
-          projectId,
+          projectId: project.id,
           email,
           role: role as 'admin' | 'manager' | 'contributor' | 'observer' | 'researcher',
           invitedById: currentUserId,
@@ -832,7 +900,6 @@ export class ProjectsService {
         inviterName: inviterName,
         token: invitation.token,
         expiresAt: expiryDate,
-        projectId
       });
 
       return {
@@ -874,7 +941,36 @@ export class ProjectsService {
     }
   }
 
-  async acceptInvite(token: string, userId: number) {
+  async getMemberRoleFromGuid(projectId: string, userId: number): Promise<{ role: string } | null> {
+    try {
+      const project = await this.drizzleService.db
+        .select()
+        .from(projects)
+        .where(eq(projects.guid, projectId))
+        .then(results => {
+          if (results.length === 0) throw new NotFoundException('Project not found');
+          return results[0];
+        });
+
+      const membershipQuery = await this.drizzleService.db
+        .select({ role: projectMembers.role })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, project.id),
+            eq(projectMembers.userId, userId)
+          )
+        )
+        .limit(1);
+
+      return membershipQuery.length > 0 ? membershipQuery[0] : null;
+    } catch (error) {
+      console.error('Error fetching member role:', error);
+      return null;
+    }
+  }
+
+  async acceptInvite(token: string, userId: number, email: string) {
     try {
       // Find the invitation
       const invite = await this.drizzleService.db
@@ -889,6 +985,7 @@ export class ProjectsService {
         .where(
           and(
             eq(projectInvites.token, token),
+            eq(projectInvites.email, email),
             eq(projectInvites.status, 'pending'),
           )
         )
@@ -957,10 +1054,10 @@ export class ProjectsService {
         // Update invite status
         await tx
           .update(projectInvites)
-          .set({ 
-            status: 'accepted', 
+          .set({
+            status: 'accepted',
             acceptedAt: new Date(),
-            updatedAt: new Date() 
+            updatedAt: new Date()
           })
           .where(eq(projectInvites.id, invite.invite.id));
 
@@ -978,22 +1075,22 @@ export class ProjectsService {
         return membership;
       });
 
-      // Send notifications
-      await this.notificationService.sendInviteAcceptedEmail({
-        inviterEmail: invite.inviter.email,
-        inviterName: invite.inviter.name || invite.inviter.authName || '',
-        memberName: user.name || user.authName || user.email,
-        memberEmail: user.email,
-        projectName: invite.project.projectName,
-        projectId: invite.project.id,
-      });
+      // // Send notifications
+      // await this.notificationService.sendInviteAcceptedEmail({
+      //   inviterEmail: invite.inviter.email,
+      //   inviterName: invite.inviter.name || invite.inviter.authName || '',
+      //   memberName: user.name || user.authName || user.email,
+      //   memberEmail: user.email,
+      //   projectName: invite.project.projectName,
+      //   projectId: invite.project.id,
+      // });
 
-      await this.notificationService.sendNewMemberWelcomeEmail({
-        email: user.email,
-        name: user.name || user.authName || 'there',
-        projectName: invite.project.projectName,
-        projectId: invite.project.id,
-      });
+      // await this.notificationService.sendNewMemberWelcomeEmail({
+      //   email: user.email,
+      //   name: user.name || user.authName || 'there',
+      //   projectName: invite.project.projectName,
+      //   projectId: invite.project.id,
+      // });
 
       return {
         message: `You have successfully joined ${invite.project.projectName}`,
@@ -1017,7 +1114,7 @@ export class ProjectsService {
     }
   }
 
-  async declineInvite(token: string) {
+  async declineInvite(token: string, email: string) {
     try {
       // Find the invitation
       const invite = await this.drizzleService.db
@@ -1032,6 +1129,7 @@ export class ProjectsService {
         .where(
           and(
             eq(projectInvites.token, token),
+            eq(projectInvites.email, email),
             eq(projectInvites.status, 'pending'),
           )
         )
@@ -1050,19 +1148,19 @@ export class ProjectsService {
       // Update invite status
       await this.drizzleService.db
         .update(projectInvites)
-        .set({ 
-          status: 'declined', 
-          updatedAt: new Date() 
+        .set({
+          status: 'declined',
+          updatedAt: new Date()
         })
         .where(eq(projectInvites.id, invite.invite.id));
 
-      // Send notification
-      await this.notificationService.sendInviteDeclinedEmail({
-        inviterEmail: invite.inviter.email,
-        inviterName: invite.inviter.name || invite.inviter.authName || '',
-        memberEmail: invite.invite.email,
-        projectName: invite.project.projectName,
-      });
+      // // Send notification
+      // await this.notificationService.sendInviteDeclinedEmail({
+      //   inviterEmail: invite.inviter.email,
+      //   inviterName: invite.inviter.name || invite.inviter.authName || '',
+      //   memberEmail: invite.invite.email,
+      //   projectName: invite.project.projectName,
+      // });
 
       return {
         message: `You have declined the invitation to join ${invite.project.projectName}`,
@@ -1132,4 +1230,193 @@ export class ProjectsService {
       };
     }
   }
+
+  async getProjectInviteStatus(token: string, email: string): Promise<ProjectInviteStatusResponse> {
+    try {
+      // Get invite details with project and inviter information
+      const inviteResult = await this.drizzleService.db
+        .select({
+          invite: {
+            id: projectInvites.id,
+            email: projectInvites.email,
+            role: projectInvites.role,
+            message: projectInvites.message,
+            status: projectInvites.status,
+            expiresAt: projectInvites.expiresAt,
+            createdAt: projectInvites.createdAt,
+            projectId: projectInvites.projectId,
+          },
+          project: {
+            id: projects.id,
+            name: projects.projectName,
+            description: projects.description,
+            slug: projects.slug,
+            country: projects.country,
+            image: projects.image,
+          },
+          invitedBy: {
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            displayName: users.displayName,
+            avatar: users.avatar,
+          }
+        })
+        .from(projectInvites)
+        .innerJoin(projects, eq(projectInvites.projectId, projects.id))
+        .innerJoin(users, eq(projectInvites.invitedById, users.id))
+        .where(eq(projectInvites.token, token))
+        .limit(1);
+
+      // Check if invite exists
+      if (!inviteResult.length) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+      const result = inviteResult[0];
+
+      // Verify email matches
+      if (result.invite.email.toLowerCase() !== email.toLowerCase()) {
+        throw new UnauthorizedException('Email does not match invitation');
+      }
+
+      // Check if invite is expired
+      const now = new Date();
+      const isExpired = result.invite.expiresAt < now;
+
+      // Prepare and return response data
+      return {
+        id: result.invite.id,
+        email: result.invite.email,
+        role: result.invite.role,
+        message: result.invite.message,
+        status: result.invite.status,
+        expiresAt: result.invite.expiresAt,
+        createdAt: result.invite.createdAt,
+        isExpired,
+        project: {
+          id: result.project.id,
+          name: result.project.name,
+          description: result.project.description,
+          slug: result.project.slug,
+          country: result.project.country,
+          image: result.project.image,
+        },
+        invitedBy: {
+          id: result.invitedBy.id,
+          name: result.invitedBy.name,
+          email: result.invitedBy.email,
+          displayName: result.invitedBy.displayName,
+          avatar: result.invitedBy.avatar,
+        }
+      };
+
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      console.error('Error fetching project invite status:', error);
+      throw new Error('Failed to fetch invitation details');
+    }
+  }
+
+
+  async getProjectMembersAndInvitations(projectId: string): Promise<ProjectMembersAndInvitesResponse> {
+    // Verify project exists
+    const project = await this.drizzleService.db
+      .select()
+      .from(projects)
+      .where(eq(projects.guid, projectId))
+      .limit(1)
+      .then(results => {
+        if (results.length === 0) throw new NotFoundException('Project not found');
+        return results[0];
+      });
+
+    // Get all members with user details
+    const members = await this.drizzleService.db
+      .select({
+        id: projectMembers.id,
+        userId: projectMembers.userId,
+        role: projectMembers.role,
+        joinedAt: projectMembers.joinedAt,
+        invitedAt: projectMembers.invitedAt,
+        user: {
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          displayName: users.displayName,
+          avatar: users.avatar,
+          isActive: users.isActive,
+        }
+      })
+      .from(projectMembers)
+      .innerJoin(users, eq(projectMembers.userId, users.id))
+      .where(eq(projectMembers.projectId, project.id))
+      .orderBy(desc(projectMembers.joinedAt));
+
+    // Get all invitations with inviter details
+    const invitations = await this.drizzleService.db
+      .select({
+        id: projectInvites.id,
+        email: projectInvites.email,
+        role: projectInvites.role,
+        status: projectInvites.status,
+        message: projectInvites.message,
+        expiresAt: projectInvites.expiresAt,
+        acceptedAt: projectInvites.acceptedAt,
+        createdAt: projectInvites.createdAt,
+        invitedBy: {
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          displayName: users.displayName,
+        }
+      })
+      .from(projectInvites)
+      .innerJoin(users, eq(projectInvites.invitedById, users.id))
+      .where(eq(projectInvites.projectId, project.id))
+      .orderBy(desc(projectInvites.createdAt));
+
+    // Calculate summary statistics
+    return {
+      members,
+      invitations
+    };
+  }
+
+  /**
+   * Calculate summary statistics for members and invitations
+   */
+  private calculateSummary(
+    members: ProjectMemberResponse[],
+    invitations: ProjectInviteResponse[]
+  ) {
+    const now = new Date();
+
+    // Count invitations by status
+    const pendingInvitations = invitations.filter(inv => inv.status === 'pending').length;
+    const acceptedInvitations = invitations.filter(inv => inv.status === 'accepted').length;
+    const expiredInvitations = invitations.filter(inv =>
+      inv.status === 'pending' && inv.expiresAt < now
+    ).length;
+
+    // Count members by role
+    const roleDistribution: Record<string, number> = {};
+    members.forEach(member => {
+      roleDistribution[member.role] = (roleDistribution[member.role] || 0) + 1;
+    });
+
+    return {
+      totalMembers: members.length,
+      totalPendingInvitations: pendingInvitations,
+      totalAcceptedInvitations: acceptedInvitations,
+      totalExpiredInvitations: expiredInvitations,
+      roleDistribution
+    };
+  }
+
+
+
 }

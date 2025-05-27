@@ -73,12 +73,7 @@ export function IsGeoJSON(validationOptions?: ValidationOptions) {
 // Validate Feature object
 function validateFeature(feature: any): boolean {
   // Feature must have geometry and properties
-  if (!feature.hasOwnProperty('geometry') || !feature.hasOwnProperty('properties')) {
-    return false;
-  }
-
-  // Properties can be null or object
-  if (feature.properties !== null && typeof feature.properties !== 'object') {
+  if (!feature.hasOwnProperty('geometry')) {
     return false;
   }
 

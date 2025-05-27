@@ -279,15 +279,15 @@ export class ProjectInvitesService {
                 });
 
             // Send welcome notification
-            await this.notificationService.sendProjectInviteEmail({
-                email: user.email,
-                projectName: invite.project?.name || 'Project',
-                projectId: invite.project?.id || '',
-                inviterName: user?.name || '',
-                token: inviteResponseDto.token,
-                expiresAt: invite.expiresAt,
-                role: invite.role,
-            });
+            // await this.notificationService.sendProjectInviteEmail({
+            //     email: user.email,
+            //     projectName: invite.project?.name || 'Project',
+            //     projectId: invite.project?.id || '',
+            //     inviterName: user?.name || '',
+            //     token: inviteResponseDto.token,
+            //     expiresAt: invite.expiresAt,
+            //     role: invite.role,
+            // });
         }
 
         return {

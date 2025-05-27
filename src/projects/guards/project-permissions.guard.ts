@@ -18,13 +18,13 @@ export class ProjectPermissionsGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const userId = request.user?.id;
-    const projectId = parseInt(request.params.id, 10);
+    const projectId = request.params?.id
 
-    if (!userId || !projectId || isNaN(projectId)) {
+    if (!userId || !projectId) {
       return false;
     }
 
-    const membership = await this.projectsService.getMemberRole(projectId, userId);
+    const membership = await this.projectsService.getMemberRoleFromGuid(projectId, userId);
     
     if (!membership) {
       throw new ForbiddenException('You do not have access to this project');

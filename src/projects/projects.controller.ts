@@ -1,18 +1,18 @@
 // src/projects/projects.controller.ts
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
   Req,
   ParseIntPipe,
   Query
 } from '@nestjs/common';
-import { ProjectsService } from './projects.service';
+import { ProjectMembersAndInvitesResponse, ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
@@ -24,11 +24,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProjectRoles } from './decorators/project-roles.decorator';
 import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
 import { Public } from '../auth/public.decorator';
+import { CurrentUser } from 'src/auth/current-user.decorator';
+import { User } from 'src/users/entities/user.entity';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(private readonly projectsService: ProjectsService) { }
 
   @Post()
   create(@Body() createProjectDto: CreateProjectDto, @Req() req) {
@@ -50,8 +52,8 @@ export class ProjectsController {
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   update(
-    @Param('id', ParseIntPipe) id: number, 
-    @Body() updateProjectDto: UpdateProjectDto, 
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateProjectDto: UpdateProjectDto,
     @Req() req
   ) {
     return this.projectsService.update(id, updateProjectDto, req.user.id);
@@ -65,7 +67,7 @@ export class ProjectsController {
   }
 
   @Get(':id/members')
-  @ProjectRoles('owner', 'admin', 'manager' ,'contributor','observer','researcher')
+  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
   @UseGuards(ProjectPermissionsGuard)
   getMembers(@Param('id', ParseIntPipe) id: number) {
     return this.projectsService.getMembers(id);
@@ -89,19 +91,24 @@ export class ProjectsController {
     return this.projectsService.getProjectInvites(id, req.user.id);
   }
 
+  @Get('invites/:invite/status')
+  getProjectInviteStatus(@Param('invite') invite: string, @Req() req) {
+    return this.projectsService.getProjectInviteStatus(invite, req.user.email);
+  }
+
   @Post(':id/invites')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   inviteMember(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() inviteDto: InviteProjectMemberDto,
     @Req() req,
   ) {
     return this.projectsService.inviteMember(
-      id, 
-      inviteDto.email, 
-      inviteDto.role, 
-      req.user.id, 
+      id,
+      inviteDto.email,
+      inviteDto.role,
+      req.user.id,
       req.user.name || req.user.authName || req.user.email,
       inviteDto.message
     );
@@ -109,13 +116,12 @@ export class ProjectsController {
 
   @Post('invites/accept')
   acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
-    return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id);
+    return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id, req.user.email);
   }
 
   @Post('invites/decline')
-  @Public()
-  declineInvite(@Body() declineInviteDto: DeclineInviteDto) {
-    return this.projectsService.declineInvite(declineInviteDto.token);
+  declineInvite(@Body() declineInviteDto: DeclineInviteDto, @Req() req) {
+    return this.projectsService.declineInvite(declineInviteDto.token, req.user.email);
   }
 
   @Patch(':id/members/:memberId/role')
@@ -140,4 +146,14 @@ export class ProjectsController {
   ) {
     return this.projectsService.removeMember(id, memberId, req.user.id);
   }
+
+  @Get(':id/allmembers')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectMembersAndInvitations(
+    @Param('id') id: string,
+  ): Promise<ProjectMembersAndInvitesResponse> {
+    return this.projectsService.getProjectMembersAndInvitations(id);
+  }
+
 }
