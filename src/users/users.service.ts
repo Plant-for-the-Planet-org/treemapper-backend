@@ -9,6 +9,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { User, PublicUser } from './entities/user.entity';
 import { eq, and, or, like, desc, asc, count, isNull } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 @Injectable()
 export class UsersService {
@@ -37,7 +38,8 @@ export class UsersService {
         isPrivate: users.isPrivate,
         bio: users.bio,
         locale: users.locale,
-        isActive: users.isActive
+        isActive: users.isActive,
+        migratedAt: users.migratedAt,
       })
       .from(users)
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -196,6 +198,7 @@ export class UsersService {
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
+        migratedAt: users.migratedAt,
       })
       .from(users)
       .where(whereClause)
@@ -236,6 +239,7 @@ export class UsersService {
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         authName: users.authName,
+        migratedAt:users.migratedAt,
       })
       .from(users)
       .where(and(eq(users.guid, guid), isNull(users.deletedAt)));
@@ -282,6 +286,7 @@ export class UsersService {
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         deletedAt: users.deletedAt,
+        migratedAt: users.migratedAt,
         supportPin: users.supportPin
       })
       .from(users)
@@ -306,7 +311,6 @@ export class UsersService {
       })
       .where(eq(users.id, id))
       .returning({
-        id: users.id,
         guid: users.guid,
         email: users.email,
         name: users.name,
@@ -326,6 +330,7 @@ export class UsersService {
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
+        migratedAt: users.migratedAt,
       });
 
     return result[0];
@@ -377,6 +382,10 @@ export class UsersService {
 
   async deactivate(id: number): Promise<PublicUser> {
     return await this.update(id, { isActive: false });
+  }
+
+   async migrateSuccess(id: number): Promise<PublicUser> {
+    return await this.update(id, { migratedAt: new Date() });
   }
 
   async activate(id: number): Promise<PublicUser> {

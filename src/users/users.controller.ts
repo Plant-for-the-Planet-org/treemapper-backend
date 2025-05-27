@@ -12,6 +12,7 @@ import {
   HttpStatus,
   HttpCode,
   NotFoundException,
+  Put,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,7 +36,7 @@ import { User } from './entities/user.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   async create(@Body() createUserDto: CreateUserDto) {
@@ -92,6 +93,11 @@ export class UsersController {
   @Patch(':id/activate')
   async activate(@Param('id', ParseIntPipe) id: number) {
     return await this.usersService.activate(id);
+  }
+
+  @Put('migrated')
+  async migrated(@CurrentUser() user: User) {
+    return await this.usersService.migrateSuccess(user.id);
   }
 
   @Delete(':id')

@@ -8,7 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ProjectInvitesModule } from './project-invites/project-invites.module';
-
+import { UserMigrationModule } from './migrate/migrate.module.ts';
 // import { SitesModule } from './sites/sites.module';
 // import { SpeciesModule } from './species/species.module';
 // import { TreeModule } from './trees/trees.module';
@@ -23,7 +23,8 @@ import { ProjectInvitesModule } from './project-invites/project-invites.module';
     AuthModule,
     UsersModule,
     ProjectsModule,
-    ProjectInvitesModule
+    UserMigrationModule
+    // ProjectInvitesModule
   ],
   controllers: [AppController],
   providers: [AppService],
