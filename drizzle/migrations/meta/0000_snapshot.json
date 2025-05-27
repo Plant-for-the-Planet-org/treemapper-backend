@@ -1,5 +1,5 @@
 {
-  "id": "d0b86d35-d8a8-45f8-89f3-d8b2fd79e2a9",
+  "id": "d97a724c-9640-4e60-8e73-936349e0102e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1122,6 +1122,12 @@
           "primaryKey": true,
           "notNull": true
         },
+        "guid": {
+          "name": "guid",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "project_id": {
           "name": "project_id",
           "type": "integer",
@@ -1304,20 +1310,18 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
+        "project_invites_guid_unique": {
+          "name": "project_invites_guid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "guid"
+          ]
+        },
         "project_invites_token_unique": {
           "name": "project_invites_token_unique",
           "nullsNotDistinct": false,
           "columns": [
             "token"
-          ]
-        },
-        "unique_project_invite": {
-          "name": "unique_project_invite",
-          "nullsNotDistinct": false,
-          "columns": [
-            "project_id",
-            "email",
-            "status"
           ]
         }
       },
@@ -1333,6 +1337,12 @@
           "name": "id",
           "type": "serial",
           "primaryKey": true,
+          "notNull": true
+        },
+        "guid": {
+          "name": "guid",
+          "type": "varchar(36)",
+          "primaryKey": false,
           "notNull": true
         },
         "project_id": {
@@ -1460,6 +1470,13 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
+        "project_members_guid_unique": {
+          "name": "project_members_guid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "guid"
+          ]
+        },
         "unique_project_member": {
           "name": "unique_project_member",
           "nullsNotDistinct": false,

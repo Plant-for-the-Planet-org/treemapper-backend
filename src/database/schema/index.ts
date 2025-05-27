@@ -178,6 +178,7 @@ export const projects = pgTable('projects', {
 
 export const projectMembers = pgTable('project_members', {
   id: serial('id').primaryKey(),
+  guid: varchar('guid', { length: 36 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: projectRoleEnum('role').notNull().default('contributor'),
@@ -198,6 +199,7 @@ export const projectMembers = pgTable('project_members', {
 
 export const projectInvites = pgTable('project_invites', {
   id: serial('id').primaryKey(),
+  guid: varchar('guid', { length: 36 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
   message: text('message').default(''),
@@ -210,7 +212,6 @@ export const projectInvites = pgTable('project_invites', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-  uniqueInvite: unique('unique_project_invite').on(table.projectId, table.email, table.status),
   projectIdIdx: index('project_invites_project_idx').on(table.projectId),
   emailIdx: index('project_invites_email_idx').on(table.email),
   statusIdx: index('project_invites_status_idx').on(table.status),

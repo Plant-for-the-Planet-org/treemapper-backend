@@ -105,6 +105,7 @@ CREATE TABLE "notifications" (
 --> statement-breakpoint
 CREATE TABLE "project_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
+	"guid" varchar(36) NOT NULL,
 	"project_id" integer NOT NULL,
 	"email" text NOT NULL,
 	"message" text DEFAULT '',
@@ -116,12 +117,13 @@ CREATE TABLE "project_invites" (
 	"accepted_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "project_invites_token_unique" UNIQUE("token"),
-	CONSTRAINT "unique_project_invite" UNIQUE("project_id","email","status")
+	CONSTRAINT "project_invites_guid_unique" UNIQUE("guid"),
+	CONSTRAINT "project_invites_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "project_members" (
 	"id" serial PRIMARY KEY NOT NULL,
+	"guid" varchar(36) NOT NULL,
 	"project_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
 	"role" "project_role" DEFAULT 'contributor' NOT NULL,
@@ -129,6 +131,7 @@ CREATE TABLE "project_members" (
 	"joined_at" timestamp DEFAULT now(),
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "project_members_guid_unique" UNIQUE("guid"),
 	CONSTRAINT "unique_project_member" UNIQUE("project_id","user_id")
 );
 --> statement-breakpoint

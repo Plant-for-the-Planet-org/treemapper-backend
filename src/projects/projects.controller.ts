@@ -124,6 +124,13 @@ export class ProjectsController {
     return this.projectsService.declineInvite(declineInviteDto.token, req.user.email);
   }
 
+  @Post(':id/invites/expire')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  expireInvite(@Body() declineInviteDto: DeclineInviteDto) {
+    return this.projectsService.expireInvite(declineInviteDto.token);
+  }
+
   @Patch(':id/members/:memberId/role')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
@@ -140,8 +147,8 @@ export class ProjectsController {
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   removeMember(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('memberId', ParseIntPipe) memberId: number,
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
     @Req() req,
   ) {
     return this.projectsService.removeMember(id, memberId, req.user.id);
