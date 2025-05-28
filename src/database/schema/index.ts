@@ -18,6 +18,7 @@ import {
   index,
   uniqueIndex,
   check,
+  bigint,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
@@ -48,7 +49,7 @@ const geometry = (srid?: number) =>
 
 // User and project enums
 export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'manager', 'contributor', 'observer', 'researcher',]);
-export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined', 'expired']);
+export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined', 'expired', 'discarded']);
 export const userTypeEnum = pgEnum('user_type', ['individual', 'education', 'tpo', 'organization', 'student']);
 
 // Site and tree enums
@@ -96,6 +97,7 @@ export const captureModeMethodEnum = pgEnum('capture_method', ['device', 'map', 
 // Image and media enums
 export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground']);
 
+
 // ============================================================================
 // USERS TABLE
 // ============================================================================
@@ -103,19 +105,20 @@ export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
-  auth0Id: text('auth0_id').notNull().unique(),
-  email: text('email').notNull().unique(),
-  authName: text('auth_name').notNull(),
-  name: text('name'),
-  firstname: text('firstname'),
-  lastname: text('lastname'),
-  displayName: text('display_name'),
+  auth0Id: varchar('auth0_id', { length: 500 }).notNull().unique(),
+  email: varchar('email', { length: 320 }).notNull().unique(),
+  authName: varchar('auth_name', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  firstname: varchar('firstname', { length: 255 }),
+  lastname: varchar('lastname', { length: 255 }),
+  displayName: varchar('display_name', { length: 400 }), // Change to varchar
   avatar: text('avatar'),
-  slug: text('slug'),
+  avatarCdn: text('avatar_cdn'),
+  slug: varchar('slug', { length: 100 }),
   type: userTypeEnum('type').default('individual'),
   country: varchar('country', { length: 2 }),
   url: text('url'),
-  supportPin: text('support_pin'),
+  supportPin: varchar('support_pin', { length: 20 }),
   isPrivate: boolean('is_private').default(false).notNull(),
   bio: text('bio'),
   locale: varchar('locale', { length: 10 }).default('en_US'),
@@ -123,13 +126,11 @@ export const users = pgTable('users', {
   lastLoginAt: timestamp('last_login_at'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
-  migratedAt: timestamp('migrated_at'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  migratedAt: timestamp('migrated_at', { withTimezone: true }),
 }, (table) => ({
   emailIdx: index('users_email_idx').on(table.email),
-  auth0IdIdx: index('users_auth0_id_idx').on(table.auth0Id),
-  typeIdx: index('users_type_idx').on(table.type),
-  activeIdx: index('users_active_idx').on(table.isActive)
+  auth0IdIdx: index('users_auth0_id_idx').on(table.auth0Id)
 }));
 
 // ============================================================================
@@ -139,39 +140,44 @@ export const users = pgTable('users', {
 export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
-  discr: varchar('discr', { length: 20 }).notNull().default('base'),
+  discr: varchar('discr', { length: 255 }).notNull().unique(),
   createdById: integer('created_by_id').notNull().references(() => users.id),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
-  purpose: varchar('purpose', { length: 64 }),
+  slug: varchar('slug', { length: 400 }).notNull().unique(),
+  purpose: varchar('purpose', { length: 100 }),
   projectName: varchar('name', { length: 255 }).notNull(),
-  projectType: text('project_type'),
-  ecosystem: text('ecosystem'),
-  projectScale: text('project_scale'),
+  projectType: varchar('project_type', { length: 100 }),
+  ecosystem: varchar('ecosystem', { length: 100 }),
+  projectScale: varchar('project_scale', { length: 100 }),
   target: integer('target'),
   projectWebsite: text('project_website'),
   description: text('description'),
-  classification: text('classification'),
-  image: varchar('image', { length: 255 }),
+  classification: varchar('classification', { length: 100 }),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  allImages: jsonb('images'),
   videoUrl: text('video_url'),
   country: varchar('country', { length: 2 }),
   location: geometry(4326)('location'),
-  originalGeometry: text('original_geometry'),
-  geoLatitude: real('geo_latitude'),
-  geoLongitude: real('geo_longitude'),
+  originalGeometry: jsonb('original_geometry').notNull(),
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
+  geometryType: varchar('geometry_type', { length: 50 }),
   url: text('url'),
-  linkText: text('link_text'),
+  linkText: varchar('link_text', { length: 100 }),
   isActive: boolean('is_active').notNull().default(true),
   isPublic: boolean('is_public').default(true).notNull(),
   intensity: varchar('intensity', { length: 100 }),
   revisionPeriodicityLevel: varchar('revision_periodicity_level', { length: 100 }),
-  metadata: jsonb('metadata'), // Expected: { customFields: object, settings: object }
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  locationIdx: index('projects_location_gist_idx').using('gist', table.location)
+  locationIdx: index('projects_location_gist_idx').using('gist', table.location),
+  slugIdx: index('projects_slug_idx').on(table.slug),
+  guidx: index('user_guid_idx').on(table.guid),
+  createdByIdx: index('projects_created_by_idx').on(table.createdById)
 }));
-
 // ============================================================================
 // PROJECT MEMBERS TABLE
 // ============================================================================
@@ -182,15 +188,15 @@ export const projectMembers = pgTable('project_members', {
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: projectRoleEnum('role').notNull().default('contributor'),
-  invitedAt: timestamp('invited_at'),
-  joinedAt: timestamp('joined_at').defaultNow(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  invitedAt: timestamp('invited_at', { withTimezone: true }),
+  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   uniqueMember: unique('unique_project_member').on(table.projectId, table.userId),
   projectIdIdx: index('project_members_project_idx').on(table.projectId),
   userIdIdx: index('project_members_user_idx').on(table.userId),
-  roleIdx: index('project_members_role_idx').on(table.role),
+  guidIdx: index('project_members_guid_idx').on(table.guid),
 }));
 
 // ============================================================================
@@ -201,24 +207,22 @@ export const projectInvites = pgTable('project_invites', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  email: text('email').notNull(),
-  message: text('message').default(''),
+  email: varchar('email', { length: 320 }).notNull(),
+  message: varchar('email', { length: 400 }).notNull(),
   role: projectRoleEnum('role').notNull().default('contributor'),
   invitedById: integer('invited_by_id').notNull().references(() => users.id),
   status: inviteStatusEnum('status').notNull().default('pending'),
   token: uuid('token').defaultRandom().notNull().unique(),
-  expiresAt: timestamp('expires_at').notNull(),
-  acceptedAt: timestamp('accepted_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   projectIdIdx: index('project_invites_project_idx').on(table.projectId),
   emailIdx: index('project_invites_email_idx').on(table.email),
-  statusIdx: index('project_invites_status_idx').on(table.status),
-  tokenIdx: index('project_invites_token_idx').on(table.token),
-  expiresAtIdx: index('project_invites_expires_idx').on(table.expiresAt),
+  tokenIdx: unique('project_invites_token_unique').on(table.token),
+  projectStatusIdx: index('project_invites_project_status_idx').on(table.projectId, table.status)
 }));
-
 // ============================================================================
 // SCIENTIFIC SPECIES TABLE
 // ============================================================================
@@ -227,16 +231,19 @@ export const scientificSpecies = pgTable('scientific_species', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
   scientificName: varchar('scientific_name', { length: 255 }).notNull().unique(),
-  commonName: varchar('common_name', { length: 255 }),
+  commonName: varchar('common_name', { length: 400 }),
   description: text('description'),
-  defaultImage: text('default_image'),
-  gbifId: varchar('gbif_id', { length: 50 }), // Global Biodiversity Information Facility
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
-  metadata: jsonb('metadata'), // Expected: { traits: object, references: array }
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  allImages: jsonb('images'),
+  gbifId: varchar('gbif_id', { length: 100 }), // Global Biodiversity Information Facility
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  metadata: jsonb('metadata'),
 }, (table) => ({
-  scientificNameIdx: index('scientific_species_name_idx').on(table.scientificName)
+  scientificNameIdx: index('scientific_species_name_idx').on(table.scientificName),
+  commonNameIdx: index('scientific_species_common_name_idx').on(table.commonName),
 }));
 
 // ============================================================================
@@ -250,18 +257,21 @@ export const userSpecies = pgTable('user_species', {
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   aliases: varchar('aliases', { length: 255 }),
   localName: varchar('local_name', { length: 255 }),
-  image: varchar('image', { length: 255 }),
-  description: varchar('description', { length: 255 }),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  allImages: jsonb('images'),
+  description: text('description'),
   notes: text('notes'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
+  favourite: boolean('favourite').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   metadata: jsonb('metadata'), // Expected: { customAttributes: object }
 }, (table) => ({
   uniqueUserSpecies: uniqueIndex('unique_user_species').on(table.userId, table.scientificSpeciesId),
   scientificSpeciesIdx: index('user_species_scientific_species_idx').on(table.scientificSpeciesId),
+  favouriteIdx: index('user_species_favourite_species_idx').on(table.favourite),
   userIdx: index('user_species_user_idx').on(table.userId),
-  aliasesIdx: index('user_species_aliases_idx').on(table.aliases),
 }));
 
 // ============================================================================
@@ -271,15 +281,21 @@ export const userSpecies = pgTable('user_species', {
 export const speciesImages = pgTable('species_images', {
   id: serial('id').primaryKey(),
   speciesId: integer('species_id').notNull().references(() => userSpecies.id, { onDelete: 'cascade' }),
-  // Image details
   filename: varchar('filename', { length: 255 }).notNull(),
   originalName: varchar('original_name', { length: 255 }),
-  mimeType: varchar('mime_type', { length: 100 }),
-  size: integer('size'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  mimeType: varchar('mime_type', { length: 50 }),
+  size: bigint('size', { mode: 'number' }),
+  width: integer('width'),
+  height: integer('height'),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  allImages: jsonb('images'),
+  isPrimary: boolean('is_primary').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   speciesIdIdx: index('species_images_species_id_idx').on(table.speciesId),
+  primaryImageIdx: index('species_images_primary_idx').on(table.speciesId, table.isPrimary),
   sizeCheck: check('species_images_size_check', sql`size IS NULL OR size > 0`)
 }));
 
@@ -291,35 +307,19 @@ export const sites = pgTable('sites', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-
-  // Basic site information
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
-  // Geographic data
-  location: geometry(4326)('boundary'),
-  geometry: jsonb('geometry'), // Expected: GeoJSON Point/Polygon
-
+  location: geometry(4326)('location'),
+  originalGeometry: jsonb('original_geometry').notNull(),
   status: siteStatusEnum('status').default('barren'),
-
-  // Site metrics
-  area: decimal('area', { precision: 12, scale: 4 }), // Area in hectares
-
-  // Created by
   createdById: integer('created_by_id').notNull().references(() => users.id),
-
-  // Timestamps
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   metadata: jsonb('metadata'), // Expected: { customFields: object, monitoring: object }
 }, (table) => ({
   projectIdIdx: index('sites_project_id_idx').on(table.projectId),
   locationIdx: index('sites_location_gist_idx').using('gist', table.location),
-  statusIdx: index('sites_status_idx').on(table.status),
-  // Composite indexes for common queries
-  projectStatusIdx: index('sites_project_status_idx').on(table.projectId, table.status),
-  // Check constraints
-  areaCheck: check('sites_area_check', sql`area IS NULL OR area > 0`)
 }));
 
 // ============================================================================
@@ -330,18 +330,22 @@ export const siteImages = pgTable('site_images', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
   siteId: integer('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
-
-  // Image details
   filename: varchar('filename', { length: 255 }).notNull(),
   originalName: varchar('original_name', { length: 255 }),
-  mimeType: varchar('mime_type', { length: 100 }),
-  size: integer('size'),
-  // Timestamps
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  mimeType: varchar('mime_type', { length: 50 }),
+  size: bigint('size', { mode: 'number' }),
+  width: integer('width'),
+  height: integer('height'),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  isPrimary: boolean('is_primary').default(false),
+  caption: text('caption'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   siteIdIdx: index('site_images_site_id_idx').on(table.siteId),
-  sizeCheck: check('site_images_size_check', sql`size IS NULL OR size > 0`)
+  primaryImageIdx: index('site_images_primary_idx').on(table.siteId, table.isPrimary)
 }));
 
 // ============================================================================
@@ -352,35 +356,37 @@ export const trees = pgTable('trees', {
   id: serial('id').primaryKey(),
   interventionId: integer('intervention_id').references(() => interventions.id, { onDelete: 'set null' }),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
-  speciesId: integer('species_id').references(() => userSpecies.id, { onDelete: 'set null' }),
+  scientificSpecies: integer('scientific_species').references(() => scientificSpecies.id, { onDelete: 'set null' }),
+  speciesName: varchar('species_name', { length: 100 }),
+  otherSpecies: varchar('other_species', { length: 100 }),
   tag: varchar('tag', { length: 100 }), // Tree tag/identifier
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
-  height: doublePrecision('height'), // in meters
-  diameter: doublePrecision('diameter'), // DBH in cm
+  height: doublePrecision('height').notNull(),
+  diameter: doublePrecision('diameter').notNull(),
   plantingDate: date('planting_date'),
   status: treeStatusEnum('status').default('alive').notNull(),
-  lastMeasurementDate: timestamp('last_measurement_date'),
-  nextMeasurementDate: timestamp('next_measurement_date'),
-  images: jsonb('images'), // Expected: Array of image URLs/references
-  mainImageUrl: text('main_image_url'),
+  lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }).defaultNow(),
+  nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
+  allImages: jsonb('images'),
+  type: varchar('type', { length: 100 }), // Tree tag/identifier
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  history: integer('histroy').references(() => treeRecords.id, { onDelete: 'set null' }),
   createdById: integer('created_by_id').notNull().references(() => users.id),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
-  metadata: jsonb('metadata'), // Expected: { customAttributes: object, measurements: array }
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  metadata: jsonb('metadata'),
 }, (table) => ({
   interventionIdx: index('trees_intervention_idx').on(table.interventionId),
   statusIdx: index('trees_status_idx').on(table.status),
   plantingDateIdx: index('trees_planting_date_idx').on(table.plantingDate),
   coordsIdx: index('trees_coords_idx').on(table.latitude, table.longitude),
   nextMeasurementIdx: index('trees_next_measurement_idx').on(table.nextMeasurementDate),
-  locationIdx: index('trees_location_gist_idx').using('gist', sql`ST_Point(longitude, latitude)`),
-  diameterCheck: check('trees_diameter_check', sql`diameter IS NULL OR diameter > 0`),
-  latitudeCheck: check('trees_latitude_check', sql`latitude >= -90 AND latitude <= 90`),
-  longitudeCheck: check('trees_longitude_check', sql`longitude >= -180 AND longitude <= 180`),
+  locationIdx: index('trees_location_gist_idx').using('gist', sql`ST_Point(longitude, latitude)`)
 }));
 
 // ============================================================================
@@ -396,17 +402,20 @@ export const treeRecords = pgTable('tree_records', {
   diameter: doublePrecision('diameter'),
   previousStatus: treeStatusEnum('previous_status'),
   newStatus: treeStatusEnum('new_status'),
-  images: jsonb('images'), // Expected: Array of image URLs/references
-  mainImageUrl: text('main_image_url'),
+  statusReason: varchar('status_reason', { length: 64 }),
+  allImages: jsonb('images'),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
   recordedById: integer('recorded_by_id').notNull().references(() => users.id),
   isPublic: boolean('is_public').default(true).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  metadata: jsonb('metadata'), // Expected: { devices: object, coordinates: object }
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  metadata: jsonb('metadata'),
 }, (table) => ({
   treeIdIdx: index('tree_records_tree_id_idx').on(table.treeId),
   recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById),
-  heightCheck: check('tree_records_height_check', sql`height IS NULL OR height > 0`),
-  diameterCheck: check('tree_records_diameter_check', sql`diameter IS NULL OR diameter > 0`)
+  guidIdx: index('tree_records_guid_idx').on(table.guid),
 }));
 
 // ============================================================================
@@ -416,65 +425,45 @@ export const treeRecords = pgTable('tree_records', {
 export const interventions = pgTable('interventions', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
-  hid: varchar('hid', { length: 16 }),
+  hid: varchar('hid', { length: 16 }).notNull().unique(),
   discr: interventionDiscriminatorEnum('discr').notNull().default('base'),
-  // Foreign keys
   projectId: integer('project_id').references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
-  scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
+  scientificSpecies: integer('scientific_species').references(() => scientificSpecies.id),
+  speciesName: varchar('sepcies_name', { length: 100 }),
+  otherSpecies: varchar('other_species', { length: 100 }),
   userId: integer('user_id').notNull().references(() => users.id),
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
-
-  // Intervention identification
   type: interventionTypeEnum('type').notNull(),
-  origin: varchar('origin', { length: 16 }).notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 64 }).notNull().unique(),
-
-  // Dates and timing
+  statusReason: varchar('status_reason', { length: 64 }),
+  plantedSpecies: jsonb('planted_species'),
   registrationDate: date('registration_date'),
-  interventionStartDate: timestamp('intervention_start_date'),
-  interventionEndDate: timestamp('intervention_end_date'),
-
-  // Capture information
+  interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),
+  interventionEndDate: timestamp('intervention_end_date', { withTimezone: true }).notNull(),
   captureMode: captureModeEnum('capture_mode').notNull(),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
-
-  // Geometric data
-  geometry: jsonb('geometry').notNull(), // Expected: GeoJSON Feature/FeatureCollection
+  location: geometry(4326)('location').notNull(),
   originalGeometry: jsonb('original_geometry').notNull(),
-  deviceLocation: jsonb('device_location'), // Expected: { lat: number, lng: number, accuracy?: number }
-
-  // Media
-  image: varchar('image', { length: 255 }),
-
-  // Tree and species data
-  treesPlanted: decimal('trees_planted', { precision: 20, scale: 2 }).notNull().default('0'),
-  sampleTreeCount: integer('sample_tree_count'),
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
+  geometryType: varchar('geometry_type', { length: 50 }),
+  deviceLocation: jsonb('device_location'),
+  allImages: jsonb('images'),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  treesPlanted: bigint('trees_planted', { mode: 'number' }).notNull().default(0),
+  sampleTreeCount: bigint('trees_planted', { mode: 'number' }),
   allocationPriority: allocationPriorityEnum('allocation_priority').notNull().default('manual'),
-
-  // Measurements and metadata
-  measurements: jsonb('measurements'), // Expected: { height: number, diameter: number, ... }
-  metadata: jsonb('metadata'), // Expected: { equipment: object, conditions: object }
-
-  // Description and tagging
+  metadata: jsonb('metadata'),
   tag: varchar('tag', { length: 255 }),
   description: varchar('description', { length: 2048 }),
-  otherSpecies: varchar('other_species', { length: 2048 }),
-
-  // Status tracking
   status: interventionStatusEnum('status').default('active'),
-  statusReason: varchar('status_reason', { length: 64 }),
-
-  // Privacy and permissions
   isPrivate: boolean('is_private').default(false).notNull(),
-
-  // Legacy support
   legacyId: integer('legacy_id'),
-
-  // Timestamps
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   discrIdx: index('interventions_discr_idx').on(table.discr),
   projectIdx: index('interventions_project_idx').on(table.projectId),
@@ -504,36 +493,23 @@ export const interventionImages = pgTable('intervention_images', {
   id: serial('id').primaryKey(),
   guid: varchar('guid', { length: 36 }).notNull().unique(),
   interventionId: integer('intervention_id').notNull().references(() => interventions.id, { onDelete: 'cascade' }),
-
-  // Image details
   filename: varchar('filename', { length: 255 }).notNull(),
   originalName: varchar('original_name', { length: 255 }),
-  mimeType: varchar('mime_type', { length: 100 }),
-  size: integer('size'),
+  mimeType: varchar('mime_type', { length: 50 }),
+  size: bigint('size', { mode: 'number' }),
   width: integer('width'),
   height: integer('height'),
-
-  // Organization
-  isMainImage: boolean('is_main_image').default(false).notNull(),
-  isPublic: boolean('is_public').default(true).notNull(),
-
-  // Quality and validation
-  isValidated: boolean('is_validated').default(false).notNull(),
-  validatedById: integer('validated_by_id').references(() => users.id),
-  validatedAt: timestamp('validated_at'),
-
-  // Timestamps
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  image: text('image'),
+  imageCdn: text('image_cdn'),
+  isPrimary: boolean('is_primary').default(false),
+  caption: text('caption'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  interventionIdIdx: index('intervention_images_intervention_idx').on(table.interventionId),
-  mainImageIdx: index('intervention_images_main_idx').on(table.interventionId, table.isMainImage),
-  validatedIdx: index('intervention_images_validated_idx').on(table.isValidated),
-  // Check constraints
-  sizeCheck: check('intervention_images_size_check', sql`size IS NULL OR size > 0`),
-  widthCheck: check('intervention_images_width_check', sql`width IS NULL OR width > 0`),
-  heightCheck: check('intervention_images_height_check', sql`height IS NULL OR height > 0`)
+  intervention: index('intervention_images_site_id_idx').on(table.interventionId)
 }));
+
 
 // ============================================================================
 // NOTIFICATIONS TABLE
@@ -752,12 +728,7 @@ export const interventionImagesRelations = relations(interventionImages, ({ one 
   intervention: one(interventions, {
     fields: [interventionImages.interventionId],
     references: [interventions.id],
-  }),
-  validatedBy: one(users, {
-    fields: [interventionImages.validatedById],
-    references: [users.id],
-    relationName: 'validatedBy',
-  }),
+  })
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
