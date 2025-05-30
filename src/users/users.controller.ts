@@ -44,8 +44,32 @@ export class UsersController {
   // }
 
   @Get('me')
-  async getProfile(@CurrentUser() user: User) {
-    return user
+  async getProfile(@CurrentUser() users: User) {
+    return {
+      uid: users.uid,
+      email: users.email,
+      name: users.name,
+      firstname: users.firstname,
+      lastname: users.lastname,
+      displayName: users.displayName,
+      avatar: users.avatar,
+      avatarCdn: users.avatarCdn,
+      slug: users.slug,
+      authName: users.authName,
+      type: users.type,
+      country: users.country,
+      url: users.url,
+      isPrivate: users.isPrivate,
+      bio: users.bio,
+      locale: users.locale,
+      isActive: users.isActive,
+      migratedAt: users.migratedAt,
+    }
+  }
+
+  @Put('migrated')
+  async migrated(@CurrentUser() user: User) {
+    return await this.usersService.migrateSuccess(user.id);
   }
 
 
@@ -99,10 +123,7 @@ export class UsersController {
   //   return await this.usersService.activate(id);
   // }
 
-  // @Put('migrated')
-  // async migrated(@CurrentUser() user: User) {
-  //   return await this.usersService.migrateSuccess(user.id);
-  // }
+
 
   // @Delete(':id')
   // @HttpCode(HttpStatus.OK)

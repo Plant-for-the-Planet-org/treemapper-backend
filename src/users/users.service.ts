@@ -71,30 +71,8 @@ export class UsersService {
     migratedAt: users.migratedAt,
   } as const;
 
-  async findOne(id: number): Promise<PublicUser> {
-    const cacheKey = CACHE_KEYS.USER.PROFILE(id);
-    const result = await this.cacheService.getOrSet(
-      cacheKey,
-      async () => {
-        const queryResult = await this.drizzleService.db
-          .select(this.PUBLIC_USER_SELECT)
-          .from(users)
-          .where(and(eq(users.id, id), isNull(users.deletedAt)))
-          .limit(1);
 
-        return queryResult[0] || null;
-      },
-      CACHE_TTL.MEDIUM
-    );
-
-    if (!result) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    return result;
-  }
-
-  async createFromAuth0(auth0Id:string,email:string,name: string): Promise<User> {
+  async createFromAuth0(auth0Id: string, email: string, name: string): Promise<User> {
     try {
       const existingUser = await this.drizzleService.db
         .select(this.FULL_USER_SELECT)
@@ -112,7 +90,7 @@ export class UsersService {
             uid: generateUid('usr'),
             auth0Id: auth0Id,
             email: email,
-            authName:name || email.split('@')[0],
+            authName: name || email.split('@')[0],
             isActive: true,
             lastLoginAt: new Date(),
           })
@@ -153,18 +131,8 @@ export class UsersService {
   async findById(id: number): Promise<User | null> {
     const cacheKey = CACHE_KEYS.USER.BY_ID(id);
 
-    return await this.cacheService.getOrSet(
-      cacheKey,
-      async () => {
-        const result = await this.drizzleService.db
-          .select(this.FULL_USER_SELECT)
-          .from(users)
-          .where(and(eq(users.id, id), isNull(users.deletedAt)))
-          .limit(1);
-
-        return result[0] || null;
-      },
-      CACHE_TTL.MEDIUM
+    return await this.cacheService.get(
+      cacheKey
     );
   }
 
@@ -176,6 +144,7 @@ export class UsersService {
       await Promise.all([
         this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), user, CACHE_TTL.MEDIUM),
         this.cacheService.set(CACHE_KEYS.USER.BY_EMAIL(user.email), user, CACHE_TTL.MEDIUM),
+        this.cacheService.set(CACHE_KEYS.USER.BY_ID(user.id), user, CACHE_TTL.MEDIUM),
       ]);
       this.logger.debug(`Cached user: ${user.auth0Id}`);
     } catch (error) {
@@ -183,6 +152,83 @@ export class UsersService {
       // Don't throw - cache failure shouldn't break user operations
     }
   }
+
+
+  async migrateSuccess(id: number): Promise<PublicUser> {
+    return await this.updateUseMigration(id);
+  }
+
+  async updateUseMigration(id: number): Promise<PublicUser> {
+    const result = await this.drizzleService.db
+      .update(users)
+      .set({
+        updatedAt: new Date(),
+        migratedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning({
+        uid: users.uid,
+        email: users.email,
+        name: users.name,
+        firstname: users.firstname,
+        lastname: users.lastname,
+        displayName: users.displayName,
+        avatar: users.avatar,
+        avatarCdn: users.avatarCdn,
+        slug: users.slug,
+        authName: users.authName,
+        type: users.type,
+        country: users.country,
+        url: users.url,
+        isPrivate: users.isPrivate,
+        bio: users.bio,
+        locale: users.locale,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        migratedAt: users.migratedAt,
+      });
+
+    return result[0];
+  }
+
+
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
+    const result = await this.drizzleService.db
+      .update(users)
+      .set({
+        ...updateUserDto,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning({
+        uid: users.uid,
+        email: users.email,
+        name: users.name,
+        firstname: users.firstname,
+        lastname: users.lastname,
+        displayName: users.displayName,
+        avatar: users.avatar,
+        avatarCdn: users.avatarCdn,
+        slug: users.slug,
+        authName: users.authName,
+        type: users.type,
+        country: users.country,
+        url: users.url,
+        isPrivate: users.isPrivate,
+        bio: users.bio,
+        locale: users.locale,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        migratedAt: users.migratedAt,
+      });
+
+    return result[0];
+  }
+
 
   // private async updateLastLoginInCache(userId: number): Promise<void> {
   //   try {
@@ -424,43 +470,6 @@ export class UsersService {
   // // UPDATE OPERATIONS
   // // ============================================================================
 
-  // async update(id: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
-  //   // Check if user exists
-  //   await this.findOne(id);
-  //   const result = await this.drizzleService.db
-  //     .update(users)
-  //     .set({
-  //       ...updateUserDto,
-  //       updatedAt: new Date(),
-  //     })
-  //     .where(eq(users.id, id))
-  //     .returning({
-  //       uid: users.uid,
-  //       email: users.email,
-  //       name: users.name,
-  //       firstname: users.firstname,
-  //       lastname: users.lastname,
-  //       displayName: users.displayName,
-  //       avatar: users.avatar,
-  //       avatarCdn: users.avatarCdn,
-  //       slug: users.slug,
-  //       authName: users.authName,
-  //       type: users.type,
-  //       country: users.country,
-  //       url: users.url,
-  //       isPrivate: users.isPrivate,
-  //       bio: users.bio,
-  //       locale: users.locale,
-  //       isActive: users.isActive,
-  //       lastLoginAt: users.lastLoginAt,
-  //       createdAt: users.createdAt,
-  //       updatedAt: users.updatedAt,
-  //       migratedAt: users.migratedAt,
-  //     });
-
-  //   return result[0];
-  // }
-
   // async updateByAuth0Id(auth0Id: string, updateData: Partial<UpdateUserDto>): Promise<User> {
   //   const result = await this.drizzleService.db
   //     .update(users)
@@ -509,9 +518,7 @@ export class UsersService {
   //   return await this.update(id, { isActive: false });
   // }
 
-  // async migrateSuccess(id: number): Promise<PublicUser> {
-  //   return await this.update(id, { migratedAt: new Date() });
-  // }
+
 
   // async activate(id: number): Promise<PublicUser> {
   //   return await this.update(id, { isActive: true });
