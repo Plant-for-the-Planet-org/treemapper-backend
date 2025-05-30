@@ -1,5 +1,6 @@
 import { Controller, Get, Headers, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
 import { UserMigrationService, MigrationCheckResult } from './migrate.service';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('migrate')
 export class UserController {
