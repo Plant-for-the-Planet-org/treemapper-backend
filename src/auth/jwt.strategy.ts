@@ -1,5 +1,5 @@
 // src/auth/jwt.strategy.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { passportJwtSecret } from 'jwks-rsa';
@@ -27,20 +27,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    // Extract email from the custom namespace
-    const email = payload['https://app.plant-for-the-planet.org/email'];
-    // const emailVerified = payload['https://app.plant-for-the-planet.org/email_verified'];
-    // if (!emailVerified) {
-    //   return {
-    //     message: 'Email not verified',
-    //     statusCode: 401,
-    //     error: 'Unauthorized',
-    //     data: null,
-    //     code: 'email_not_verified',
-    //   }
-    // }
-    // // Validate or create the user in our database
-    const user = await this.authService.validateUser(payload.sub, email);
-    return { ...user };
+    try {
+      const email = payload['https://app.plant-for-the-planet.org/email'] || payload.email;
+
+      if (!email) {
+        throw new UnauthorizedException('Email not found in token');
+      }
+
+      const user = await this.authService.validateUser(payload.sub, email, payload.name);
+      if (!user.isActive) {
+        throw new UnauthorizedException('User account is inactive');
+      }
+
+      return user;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
   }
 }

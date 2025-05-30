@@ -18,6 +18,7 @@ import {
   uniqueIndex,
   check,
   bigint,
+  char,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
@@ -139,7 +140,7 @@ export const users = pgTable('users', {
   avatarCdn: text('avatar_cdn'),
   slug: varchar('slug', { length: 100 }),
   type: userTypeEnum('type').default('individual'),
-  country: varchar('country', { length: 2 }),
+  country: char('country', { length: 2 }),
   url: text('url'),
   supportPin: varchar('support_pin', { length: 20 }),
   isPrivate: boolean('is_private').default(false).notNull(),
@@ -244,7 +245,7 @@ export const projectInvites = pgTable('project_invites', {
 }, (table) => ({
   projectIdIdx: index('project_invites_project_idx').on(table.projectId),
   emailIdx: index('project_invites_email_idx').on(table.email),
-  tokenIdx: unique('project_invites_token_unique').on(table.token),
+  tokenIdx: unique('project_invites_token').on(table.token),
   projectStatusIdx: index('project_invites_project_status_idx').on(table.projectId, table.status)
 }));
 

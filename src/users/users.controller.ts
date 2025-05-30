@@ -38,77 +38,81 @@ import { User } from './entities/user.entity';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
-  @Post()
-  async create(@Body() createUserDto: CreateUserDto) {
-    return await this.usersService.create(createUserDto);
-  }
+  // @Post()
+  // async create(@Body() createUserDto: CreateUserDto) {
+  //   return await this.usersService.create(createUserDto);
+  // }
 
   @Get('me')
   async getProfile(@CurrentUser() user: User) {
-    return await this.usersService.findOne(user.id);
+    return user
   }
 
-  @Get('stats')
-  async getStats() {
-    return await this.usersService.getUserStats();
-  }
 
-  @Get('check-email')
-  async checkEmail(@Query('email') email: string) {
-    const exists = await this.usersService.checkEmailExists(email);
-    return { exists };
-  }
 
-  @Get('by-guid/:guid')
-  async findByGuid(@Param('guid') guid: string) {
-    return await this.usersService.findByGuid(guid);
-  }
 
-  @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return await this.usersService.findOne(id);
-  }
 
-  @Patch('me')
-  async updateProfile(
-    @CurrentUser() user: User,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
-    return await this.usersService.update(user.id, updateUserDto);
-  }
+  // @Get('stats')
+  // async getStats() {
+  //   return await this.usersService.getUserStats();
+  // }
 
-  @Patch(':id')
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
-    return await this.usersService.update(id, updateUserDto);
-  }
+  // @Get('check-email')
+  // async checkEmail(@Query('email') email: string) {
+  //   const exists = await this.usersService.checkEmailExists(email);
+  //   return { exists };
+  // }
 
-  @Patch(':id/deactivate')
-  async deactivate(@Param('id', ParseIntPipe) id: number) {
-    return await this.usersService.deactivate(id);
-  }
+  // @Get('by-guid/:guid')
+  // async findByGuid(@Param('guid') guid: string) {
+  //   return await this.usersService.findByuid(guid);
+  // }
 
-  @Patch(':id/activate')
-  async activate(@Param('id', ParseIntPipe) id: number) {
-    return await this.usersService.activate(id);
-  }
+  // @Get(':id')
+  // async findOne(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.findOne(id);
+  // }
 
-  @Put('migrated')
-  async migrated(@CurrentUser() user: User) {
-    return await this.usersService.migrateSuccess(user.id);
-  }
+  // @Patch('me')
+  // async updateProfile(
+  //   @CurrentUser() user: User,
+  //   @Body() updateUserDto: UpdateUserDto,
+  // ) {
+  //   return await this.usersService.update(user.id, updateUserDto);
+  // }
 
-  @Delete(':id')
-  @HttpCode(HttpStatus.OK)
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    return await this.usersService.remove(id);
-  }
+  // @Patch(':id')
+  // async update(
+  //   @Param('id', ParseIntPipe) id: number,
+  //   @Body() updateUserDto: UpdateUserDto,
+  // ) {
+  //   return await this.usersService.update(id, updateUserDto);
+  // }
 
-  @Delete(':id/hard')
-  @HttpCode(HttpStatus.OK)
-  async hardDelete(@Param('id', ParseIntPipe) id: number) {
-    return await this.usersService.hardDelete(id);
-  }
+  // @Patch(':id/deactivate')
+  // async deactivate(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.deactivate(id);
+  // }
+
+  // @Patch(':id/activate')
+  // async activate(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.activate(id);
+  // }
+
+  // @Put('migrated')
+  // async migrated(@CurrentUser() user: User) {
+  //   return await this.usersService.migrateSuccess(user.id);
+  // }
+
+  // @Delete(':id')
+  // @HttpCode(HttpStatus.OK)
+  // async remove(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.remove(id);
+  // }
+
+  // @Delete(':id/hard')
+  // @HttpCode(HttpStatus.OK)
+  // async hardDelete(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.hardDelete(id);
+  // }
 }

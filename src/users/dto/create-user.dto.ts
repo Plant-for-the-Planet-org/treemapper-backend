@@ -12,7 +12,7 @@ export enum UserType {
 export class CreateUserDto {
   @IsString()
   @MaxLength(36)
-  guid: string;
+  uid: string;
 
   @IsString()
   auth0Id: string;

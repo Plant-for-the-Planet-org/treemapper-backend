@@ -5,6 +5,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
+import { CacheService } from './cache/cache.service';
+
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { UserMigrationModule } from './migrate/migrate.module.ts';
@@ -21,11 +23,11 @@ import { UserMigrationModule } from './migrate/migrate.module.ts';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    ProjectsModule,
-    UserMigrationModule
+    // ProjectsModule,
+    // UserMigrationModule
     // ProjectInvitesModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService,CacheService],
 })
 export class AppModule { }
