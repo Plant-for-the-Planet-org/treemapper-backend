@@ -26,21 +26,32 @@ import { ProjectPermissionsGuard } from './guards/project-permissions.guard';
 import { Public } from '../auth/public.decorator';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { User } from 'src/users/entities/user.entity';
+import { Membership } from './decorators/membership.decorator';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) { }
 
-  // @Post()
-  // create(@Body() createProjectDto: CreateProjectDto, @Req() req) {
-  //   return this.projectsService.create(createProjectDto, req.user.id);
-  // }
+  @Post()
+  create(@Body() createProjectDto: CreateProjectDto, @Req() req) {
+    return this.projectsService.create(createProjectDto, req.user.id);
+  }
 
-  // @Get()
-  // findAll(@Req() req) {
-  //   return this.projectsService.findAll(req.user.id);
-  // }
+  @Get()
+  findAll(@Req() req) {
+    return this.projectsService.findAll(req.user.id);
+  }
+
+  @Get(':id/allmembers')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectMembersAndInvitations(
+    @Param('id') id: string,
+    @Membership() membership: any
+  ): Promise<ProjectMembersAndInvitesResponse> {
+    return this.projectsService.getProjectMembersAndInvitations(membership);
+  }
 
   // @Get(':id')
   // @Public()
@@ -154,13 +165,6 @@ export class ProjectsController {
   //   return this.projectsService.removeMember(id, memberId, req.user.id);
   // }
 
-  // @Get(':id/allmembers')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async getProjectMembersAndInvitations(
-  //   @Param('id') id: string,
-  // ): Promise<ProjectMembersAndInvitesResponse> {
-  //   return this.projectsService.getProjectMembersAndInvitations(id);
-  // }
+ 
 
 }

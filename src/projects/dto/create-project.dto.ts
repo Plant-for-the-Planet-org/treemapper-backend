@@ -1,12 +1,12 @@
-import { 
-  IsString, 
-  IsOptional, 
-  IsBoolean, 
-  IsInt, 
-  IsUrl, 
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsUrl,
   IsObject,
-  MaxLength, 
-  MinLength, 
+  MaxLength,
+  MinLength,
   Min,
   IsLatitude,
   IsLongitude,
@@ -17,16 +17,35 @@ import { Transform } from 'class-transformer';
 import { IsSlug, IsGeoJSON } from '../../common/decorator/validation.decorators';
 
 export class CreateProjectDto {
-  @IsOptional()
+
   @IsString()
-  @MaxLength(36)
-  guid?: string;
+  @MinLength(2)
+  @MaxLength(255)
+  projectName: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
-  discr?: string = 'base';
-  
+  projectType?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  target?: number;
+
+
+  @IsString()
+  description?: string;
+
+  @IsGeoJSON({ message: 'Invalid GeoJSON format' })
+  location?: any;
+
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(36)
+  uid?: string;
+
+
   @IsOptional()
   @IsString()
   @MinLength(3)
@@ -39,14 +58,6 @@ export class CreateProjectDto {
   @MaxLength(64)
   purpose?: string;
 
-  @IsString()
-  @MinLength(2)
-  @MaxLength(255)
-  projectName: string;
-
-  @IsOptional()
-  @IsString()
-  projectType?: string;
 
   @IsOptional()
   @IsString()
@@ -56,18 +67,12 @@ export class CreateProjectDto {
   @IsString()
   projectScale?: string;
 
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  target?: number;
 
   @IsOptional()
   @IsUrl()
   projectWebsite?: string;
 
-  @IsOptional()
-  @IsString()
-  description?: string;
+
 
   @IsOptional()
   @IsString()
@@ -88,8 +93,7 @@ export class CreateProjectDto {
   @Transform(({ value }) => value?.toUpperCase())
   country?: string;
 
-  @IsGeoJSON({ message: 'Invalid GeoJSON format' })
-  location?: any;
+
 
   @IsOptional()
   @IsString()

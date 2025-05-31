@@ -10,28 +10,25 @@ import { eq, and, desc, ne, asc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { NotificationService } from '../notification/notification.service';
 import { v4 as uuidv4 } from 'uuid';
+import { generateUid } from 'src/util/uidGenerator';
 
+interface ProjectGuardResponse { projectId: number, role: string, userId: number }
 
 export interface ProjectMemberResponse {
-  id: number;
-  userId: number;
   role: string;
   joinedAt: Date | null;
   invitedAt: Date | null;
   user: {
-    id: number;
-    guid: string;
+    uid: string;
     name: string | null;
+    authName: string | null;
     email: string;
-    displayName: string | null;
     avatar: string | null;
     isActive: boolean;
   };
 }
 
 export interface ProjectInviteResponse {
-  id: number;
-  guid: string;
   email: string;
   role: string;
   status: string;
@@ -41,10 +38,10 @@ export interface ProjectInviteResponse {
   createdAt: Date;
   token: string;
   invitedBy: {
-    id: number;
+    uid: string;
     name: string | null;
     email: string;
-    displayName: string | null;
+    authName: string | null;
   };
 }
 
@@ -86,200 +83,259 @@ export class ProjectsService {
     private notificationService: NotificationService,
   ) { }
 
-  // private getGeoJSONForPostGIS(locationInput: any): any {
-  //   if (!locationInput) {
-  //     return null;
-  //   }
+  private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
 
-  //   // If it's a Feature, extract the geometry
-  //   if (locationInput.type === 'Feature' && locationInput.geometry) {
-  //     return locationInput.geometry;
-  //   }
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
+    }
 
-  //   // If it's a FeatureCollection, extract the first geometry
-  //   if (locationInput.type === 'FeatureCollection' &&
-  //     locationInput.features &&
-  //     locationInput.features.length > 0 &&
-  //     locationInput.features[0].geometry) {
-  //     return locationInput.features[0].geometry;
-  //   }
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' &&
+      locationInput.features &&
+      locationInput.features.length > 0 &&
+      locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
 
-  //   // If it's already a geometry object, use it directly
-  //   if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
-  //     return locationInput;
-  //   }
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
 
-  //   throw new BadRequestException('Invalid GeoJSON format');
-  // }
+    throw new BadRequestException('Invalid GeoJSON format');
+  }
 
-  // private generateSlug(projectName: string): string {
-  //   return projectName
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-  //     .replace(/\s+/g, '-')         // Replace spaces with hyphens
-  //     .replace(/-+/g, '-')          // Replace multiple hyphens with single
-  //     .trim()
-  //     .substring(0, 255); // Ensure it fits in varchar(255)
-  // }
+  private generateSlug(projectName: string): string {
+    return projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+      .replace(/\s+/g, '-')         // Replace spaces with hyphens
+      .replace(/-+/g, '-')          // Replace multiple hyphens with single
+      .trim()
+      .substring(0, 255); // Ensure it fits in varchar(255)
+  }
 
-  // async create(createProjectDto: CreateProjectDto, userId: number) {
-  //   try {
-  //     let locationValue: any = null;
-  //     if (createProjectDto.location) {
-  //       try {
-  //         const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
-  //         // Use SQL raw to convert GeoJSON to PostGIS geometry
-  //         locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
-  //       } catch (error) {
-  //         return {
-  //           message: 'Invalid GeoJSON provided',
-  //           statusCode: 400,
-  //           error: "invalid_geojson",
-  //           data: null,
-  //           code: 'invalid_project_geojson',
-  //         };
-  //       }
-  //     }
+  async create(createProjectDto: CreateProjectDto, userId: number) {
+    try {
+      let locationValue: any = null;
+      if (createProjectDto.location) {
+        try {
+          const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
+          locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+        } catch (error) {
+          return {
+            message: 'Invalid GeoJSON provided',
+            statusCode: 400,
+            error: "invalid_geojson",
+            data: null,
+            code: 'invalid_project_geojson',
+          };
+        }
+      }
 
-  //     // Generate slug if not provided
-  //     const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
+      // Generate slug if not provided
+      const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
 
-  //     // Check if slug is unique
-  //     const existingProject = await this.drizzleService.db
-  //       .select({ id: projects.id })
-  //       .from(projects)
-  //       .where(eq(projects.slug, slug))
-  //       .limit(1);
+      // Check if slug is unique
+      const existingProject = await this.drizzleService.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.slug, slug))
+        .limit(1);
 
-  //     if (existingProject.length > 0) {
-  //       // Generate unique slug by appending timestamp
-  //       const uniqueSlug = `${slug}-${Date.now()}`;
-  //       createProjectDto.slug = uniqueSlug;
-  //     } else {
-  //       createProjectDto.slug = slug;
-  //     }
+      if (existingProject.length > 0) {
+        // Generate unique slug by appending timestamp
+        const uniqueSlug = `${slug}-${Date.now()}`;
+        createProjectDto.slug = uniqueSlug;
+      } else {
+        createProjectDto.slug = slug;
+      }
 
-  //     // Use transaction to ensure data consistency
-  //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  //       // Create project with updated schema fields
-  //       const [project] = await tx
-  //         .insert(projects)
-  //         .values({
-  //           // Only include fields that exist in your Drizzle schema for 'projects'
-  //           uid: createProjectDto.guid ?? uuidv4(),
-  //           allImages:[],
-  //           imageCdn:'',
-  //           discr: createProjectDto.discr ?? 'base',
-  //           createdById: userId,
-  //           slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
-  //           purpose: createProjectDto.purpose ?? '',
-  //           projectName: createProjectDto.projectName ?? '',
-  //           projectType: createProjectDto.projectType ?? '',
-  //           ecosystem: createProjectDto.ecosystem ?? '',
-  //           projectScale: createProjectDto.projectScale ?? '',
-  //           projectWebsite: createProjectDto.projectWebsite ?? '',
-  //           description: createProjectDto.description ?? '',
-  //           classification: createProjectDto.classification ?? '',
-  //           image: createProjectDto.image ?? '',
-  //           videoUrl: createProjectDto.videoUrl ?? '',
-  //           country: createProjectDto.country ?? '',
-  //           location: locationValue,
-  //           originalGeometry: createProjectDto.originalGeometry ?? null,
-  //           geoLatitude: typeof createProjectDto.geoLatitude === 'number' ? createProjectDto.geoLatitude : null,
-  //           geoLongitude: typeof createProjectDto.geoLongitude === 'number' ? createProjectDto.geoLongitude : null,
-  //           url: createProjectDto.url ?? '',
-  //           linkText: createProjectDto.linkText ?? '',
-  //           isActive: typeof createProjectDto.isActive === 'boolean' ? createProjectDto.isActive : true,
-  //           isPublic: typeof createProjectDto.isPublic === 'boolean' ? createProjectDto.isPublic : true,
-  //           intensity: createProjectDto.intensity ?? '',
-  //           revisionPeriodicityLevel: createProjectDto.revisionPeriodicityLevel ?? '',
-  //           metadata: createProjectDto.metadata ?? {},
-  //         })
-  //         .returning();
+      // Use transaction to ensure data consistency
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        // Create project with updated schema fields
+        const [project] = await tx
+          .insert(projects)
+          .values({
+            // Only include fields that exist in your Drizzle schema for 'projects'
+            uid: createProjectDto.uid ?? generateUid('prj'),
+            createdById: userId,
+            slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
+            projectName: createProjectDto.projectName ?? '',
+            projectType: createProjectDto.projectType ?? '',
+            projectWebsite: createProjectDto.projectWebsite ?? '',
+            description: createProjectDto.description ?? '',
+            location: locationValue,
+            originalGeometry: createProjectDto.location
+          })
+          .returning();
 
-  //       // Add creator as project owner
-  //       await tx
-  //         .insert(projectMembers)
-  //         .values({
-  //           projectId: project.id,
-  //           guid: uuidv4(),
-  //           userId: userId,
-  //           role: 'owner',
-  //           joinedAt: new Date(),
-  //         });
+        // Add creator as project owner
+        await tx
+          .insert(projectMembers)
+          .values({
+            projectId: project.id,
+            uid: generateUid('mem'),
+            userId: userId,
+            role: 'owner',
+            joinedAt: new Date(),
+          });
 
-  //       return project;
-  //     });
+        return project;
+      });
 
-  //     return {
-  //       message: 'Project created successfully',
-  //       statusCode: 201,
-  //       error: null,
-  //       data: result,
-  //       code: 'project_created',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error creating project:', error);
-  //     return {
-  //       message: 'Failed to create project',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'project_creation_failed',
-  //     };
-  //   }
-  // }
+      return {
+        message: 'Project created successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'project_created',
+      };
+    } catch (error) {
+      console.error('Error creating project:', error);
+      return {
+        message: 'Failed to create project',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'project_creation_failed',
+      };
+    }
+  }
 
-  // async findAll(userId: number) {
-  //   try {
-  //     const result = await this.drizzleService.db
-  //       .select({
-  //         project: {
-  //           id: projects.id,
-  //           guid: projects.guid,
-  //           slug: projects.slug,
-  //           projectName: projects.projectName,
-  //           projectType: projects.projectType,
-  //           ecosystem: projects.ecosystem,
-  //           projectScale: projects.projectScale,
-  //           target: projects.target,
-  //           description: projects.description,
-  //           image: projects.image,
-  //           country: projects.country,
-  //           isActive: projects.isActive,
-  //           isPublic: projects.isPublic,
-  //           createdAt: projects.createdAt,
-  //           updatedAt: projects.updatedAt,
-  //           // Convert PostGIS location to GeoJSON
-  //           location: sql`ST_AsGeoJSON(${projects.location})::json`.as('location')
-  //         },
-  //         role: projectMembers.role,
-  //       })
-  //       .from(projectMembers)
-  //       .innerJoin(projects, eq(projectMembers.projectId, projects.id))
-  //       .where(eq(projectMembers.userId, userId));
+  async findAll(userId: number) {
+    try {
+      const result = await this.drizzleService.db
+        .select({
+          project: {
+            uid: projects.uid,
+            slug: projects.slug,
+            projectName: projects.projectName,
+            projectType: projects.projectType,
+            target: projects.target,
+            description: projects.description,
+            createdAt: projects.createdAt,
+            updatedAt: projects.updatedAt,
+            location: sql`ST_AsGeoJSON(${projects.location})::json`.as('location')
+          },
+          role: projectMembers.role,
+        })
+        .from(projectMembers)
+        .innerJoin(projects, eq(projectMembers.projectId, projects.id))
+        .where(eq(projectMembers.userId, userId));
 
-  //     return {
-  //       message: 'User projects fetched successfully',
-  //       statusCode: 200,
-  //       error: null,
-  //       data: result.map(({ project, role }) => ({
-  //         ...project,
-  //         userRole: role,
-  //       })),
-  //       code: 'user_projects_fetched',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error fetching user projects:', error);
-  //     return {
-  //       message: 'Failed to fetch user projects',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'user_projects_fetch_failed',
-  //     };
-  //   }
-  // }
+      return {
+        message: 'User projects fetched successfully',
+        statusCode: 200,
+        error: null,
+        data: result.map(({ project, role }) => ({
+          ...project,
+          userRole: role,
+        })),
+        code: 'user_projects_fetched',
+      };
+    } catch (error) {
+      console.error('Error fetching user projects:', error);
+      return {
+        message: 'Failed to fetch user projects',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'user_projects_fetch_failed',
+      };
+    }
+  }
+
+  async getProjectMembersAndInvitations(membership: ProjectGuardResponse): Promise<ProjectMembersAndInvitesResponse> {
+    // Get all members with user details
+    const members = await this.drizzleService.db
+      .select({
+        role: projectMembers.role,
+        joinedAt: projectMembers.joinedAt,
+        invitedAt: projectMembers.invitedAt,
+        user: {
+          name: users.displayName,
+          authName: users.authName,
+          email: users.email,
+          avatar: users.avatar,
+          isActive: users.isActive,
+          uid: users.uid,
+        }
+      })
+      .from(projectMembers)
+      .innerJoin(users, eq(projectMembers.userId, membership.userId))
+      .where(eq(projectMembers.projectId, membership.projectId))
+      .orderBy(desc(projectMembers.joinedAt));
+
+    // Get all invitations with inviter details
+    const invitations = await this.drizzleService.db
+      .select({
+        email: projectInvites.email,
+        role: projectInvites.role,
+        status: projectInvites.status,
+        message: projectInvites.message,
+        expiresAt: projectInvites.expiresAt,
+        acceptedAt: projectInvites.acceptedAt,
+        createdAt: projectInvites.createdAt,
+        token: projectInvites.token,
+        invitedBy: {
+          uid: users.uid,
+          email: users.email,
+          name: users.displayName,
+          authName: users.authName,
+        }
+      })
+      .from(projectInvites)
+      .innerJoin(users, eq(projectInvites.invitedById, users.id))
+      .where(
+        and(
+          eq(projectInvites.projectId, membership.projectId),
+          eq(projectInvites.status, 'pending')
+        )
+      )
+      .orderBy(desc(projectInvites.createdAt));
+
+    // Calculate summary statistics
+    return {
+      members,
+      invitations
+    };
+  }
+
+  async getMemberRoleFromUid(projectUid: string, userId: number): Promise<ProjectGuardResponse | null> {
+    try {
+      const project = await this.drizzleService.db
+        .select()
+        .from(projects)
+        .where(eq(projects.uid, projectUid))
+        .then(results => {
+          if (results.length === 0) throw new NotFoundException('Project not found');
+          return results[0];
+        });
+      if (!project) {
+        throw new NotFoundException('Project not found');
+      }
+      const membershipQuery = await this.drizzleService.db
+        .select({ role: projectMembers.role, userId: projectMembers.userId })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, project.id),
+            eq(projectMembers.userId, userId)
+          )
+        )
+        .limit(1);
+
+      return membershipQuery.length > 0 ? { projectId: project.id, role: membershipQuery[0].role, userId: membershipQuery[0].userId } : null;
+    } catch (error) {
+      console.error('Error fetching member role:', error);
+      return null;
+    }
+  }
 
   // async findOne(projectId: number) {
   //   try {
@@ -961,34 +1017,7 @@ export class ProjectsService {
   //   }
   // }
 
-  // async getMemberRoleFromGuid(projectId: string, userId: number): Promise<{ role: string } | null> {
-  //   try {
-  //     const project = await this.drizzleService.db
-  //       .select()
-  //       .from(projects)
-  //       .where(eq(projects.guid, projectId))
-  //       .then(results => {
-  //         if (results.length === 0) throw new NotFoundException('Project not found');
-  //         return results[0];
-  //       });
 
-  //     const membershipQuery = await this.drizzleService.db
-  //       .select({ role: projectMembers.role })
-  //       .from(projectMembers)
-  //       .where(
-  //         and(
-  //           eq(projectMembers.projectId, project.id),
-  //           eq(projectMembers.userId, userId)
-  //         )
-  //       )
-  //       .limit(1);
-
-  //     return membershipQuery.length > 0 ? membershipQuery[0] : null;
-  //   } catch (error) {
-  //     console.error('Error fetching member role:', error);
-  //     return null;
-  //   }
-  // }
 
   // async acceptInvite(token: string, userId: number, email: string) {
   //   try {
@@ -1410,77 +1439,7 @@ export class ProjectsService {
   // }
 
 
-  // async getProjectMembersAndInvitations(projectId: string): Promise<ProjectMembersAndInvitesResponse> {
-  //   // Verify project exists
-  //   const project = await this.drizzleService.db
-  //     .select()
-  //     .from(projects)
-  //     .where(eq(projects.guid, projectId))
-  //     .limit(1)
-  //     .then(results => {
-  //       if (results.length === 0) throw new NotFoundException('Project not found');
-  //       return results[0];
-  //     });
 
-  //   // Get all members with user details
-  //   const members = await this.drizzleService.db
-  //     .select({
-  //       id: projectMembers.id,
-  //       userId: projectMembers.userId,
-  //       role: projectMembers.role,
-  //       joinedAt: projectMembers.joinedAt,
-  //       invitedAt: projectMembers.invitedAt,
-  //       user: {
-  //         id: users.id,
-  //         name: users.name,
-  //         email: users.email,
-  //         displayName: users.displayName,
-  //         avatar: users.avatar,
-  //         isActive: users.isActive,
-  //         guid: projectMembers.guid,
-  //       }
-  //     })
-  //     .from(projectMembers)
-  //     .innerJoin(users, eq(projectMembers.userId, users.id))
-  //     .where(eq(projectMembers.projectId, project.id))
-  //     .orderBy(desc(projectMembers.joinedAt));
-
-  //   // Get all invitations with inviter details
-  //   const invitations = await this.drizzleService.db
-  //     .select({
-  //       id: projectInvites.id,
-  //       email: projectInvites.email,
-  //       role: projectInvites.role,
-  //       status: projectInvites.status,
-  //       message: projectInvites.message,
-  //       expiresAt: projectInvites.expiresAt,
-  //       acceptedAt: projectInvites.acceptedAt,
-  //       createdAt: projectInvites.createdAt,
-  //       guid: users.guid,
-  //       token: projectInvites.token,
-  //       invitedBy: {
-  //         id: users.id,
-  //         name: users.name,
-  //         email: users.email,
-  //         displayName: users.displayName,
-  //       }
-  //     })
-  //     .from(projectInvites)
-  //     .innerJoin(users, eq(projectInvites.invitedById, users.id))
-  //     .where(
-  //       and(
-  //         eq(projectInvites.projectId, project.id),
-  //         eq(projectInvites.status, 'pending')
-  //       )
-  //     )
-  //     .orderBy(desc(projectInvites.createdAt));
-
-  //   // Calculate summary statistics
-  //   return {
-  //     members,
-  //     invitations
-  //   };
-  // }
 
   // /**
   //  * Calculate summary statistics for members and invitations
@@ -1512,7 +1471,4 @@ export class ProjectsService {
   //     roleDistribution
   //   };
   // }
-
-
-
 }

@@ -174,11 +174,10 @@ CREATE TABLE "project_members" (
 CREATE TABLE "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
-	"discr" varchar(255) NOT NULL,
 	"created_by_id" integer NOT NULL,
 	"slug" varchar(400) NOT NULL,
 	"purpose" varchar(100),
-	"name" varchar(255) NOT NULL,
+	"project_name" varchar(255) NOT NULL,
 	"project_type" varchar(100),
 	"ecosystem" varchar(100),
 	"project_scale" varchar(100),
@@ -207,7 +206,6 @@ CREATE TABLE "projects" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "projects_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "projects_discr_unique" UNIQUE("discr"),
 	CONSTRAINT "projects_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint

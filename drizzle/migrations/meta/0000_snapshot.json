@@ -1,5 +1,5 @@
 {
-  "id": "fa7eb3de-3adc-4802-960d-e2b52c44c348",
+  "id": "1f15c5bc-6b69-4544-8917-80ded28eee6a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1789,12 +1789,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "discr": {
-          "name": "discr",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
         "created_by_id": {
           "name": "created_by_id",
           "type": "integer",
@@ -1813,8 +1807,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "name": {
-          "name": "name",
+        "project_name": {
+          "name": "project_name",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
@@ -2070,13 +2064,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "uid"
-          ]
-        },
-        "projects_discr_unique": {
-          "name": "projects_discr_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "discr"
           ]
         },
         "projects_slug_unique": {

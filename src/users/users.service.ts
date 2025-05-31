@@ -154,11 +154,11 @@ export class UsersService {
   }
 
 
-  async migrateSuccess(id: number): Promise<PublicUser> {
+  async migrateSuccess(id: number): Promise<Boolean> {
     return await this.updateUseMigration(id);
   }
 
-  async updateUseMigration(id: number): Promise<PublicUser> {
+  async updateUseMigration(id: number): Promise<Boolean> {
     const result = await this.drizzleService.db
       .update(users)
       .set({
@@ -167,30 +167,14 @@ export class UsersService {
       })
       .where(eq(users.id, id))
       .returning({
-        uid: users.uid,
+        users: users.id,
         email: users.email,
-        name: users.name,
-        firstname: users.firstname,
-        lastname: users.lastname,
-        displayName: users.displayName,
-        avatar: users.avatar,
-        avatarCdn: users.avatarCdn,
-        slug: users.slug,
-        authName: users.authName,
-        type: users.type,
-        country: users.country,
-        url: users.url,
-        isPrivate: users.isPrivate,
-        bio: users.bio,
-        locale: users.locale,
-        isActive: users.isActive,
-        lastLoginAt: users.lastLoginAt,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        migratedAt: users.migratedAt,
+        authID: users.auth0Id,
       });
-
-    return result[0];
+    this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));
+    this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(result[0].authID));
+    this.cacheService.delete(CACHE_KEYS.USER.BY_EMAIL(result[0].email));
+    return true;
   }
 
 

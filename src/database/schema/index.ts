@@ -164,11 +164,10 @@ export const users = pgTable('users', {
 export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
-  discr: varchar('discr', { length: 255 }).notNull().unique(),
   createdById: integer('created_by_id').notNull().references(() => users.id),
   slug: varchar('slug', { length: 400 }).notNull().unique(),
   purpose: varchar('purpose', { length: 100 }),
-  projectName: varchar('name', { length: 255 }).notNull(),
+  projectName: varchar('project_name', { length: 255 }).notNull(),
   projectType: varchar('project_type', { length: 100 }),
   ecosystem: varchar('ecosystem', { length: 100 }),
   projectScale: varchar('project_scale', { length: 100 }),

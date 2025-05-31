@@ -22,8 +22,8 @@ import { UserMigrationModule } from './migrate/migrate.module.ts';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    UserMigrationModule
-    // ProjectsModule,
+    UserMigrationModule,
+    ProjectsModule
     // UserMigrationModule
     // ProjectInvitesModule
   ],
