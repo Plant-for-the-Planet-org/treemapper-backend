@@ -214,7 +214,7 @@ CREATE TABLE "projects" (
 	"video_url" text,
 	"country" varchar(2),
 	"location" geometry(Geometry,4326),
-	"original_geometry" jsonb NOT NULL,
+	"original_geometry" jsonb,
 	"latitude" double precision,
 	"longitude" double precision,
 	"geometry_type" varchar(50),
@@ -222,6 +222,8 @@ CREATE TABLE "projects" (
 	"link_text" varchar(100),
 	"is_active" boolean DEFAULT true NOT NULL,
 	"is_public" boolean DEFAULT true NOT NULL,
+	"is_primary" boolean DEFAULT false NOT NULL,
+	"is_personal" boolean DEFAULT false NOT NULL,
 	"intensity" varchar(100),
 	"revision_periodicity_level" varchar(100),
 	"metadata" jsonb,
@@ -495,6 +497,7 @@ CREATE INDEX "projects_location_gist_idx" ON "projects" USING gist ("location");
 CREATE INDEX "projects_slug_idx" ON "projects" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "project_uid_idx" ON "projects" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "projects_created_by_idx" ON "projects" USING btree ("created_by_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "projects_unique_primary_per_user_idx" ON "projects" USING btree ("created_by_id") WHERE "projects"."is_primary" = true;--> statement-breakpoint
 CREATE INDEX "scientific_species_name_idx" ON "scientific_species" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "scientific_species_common_name_idx" ON "scientific_species" USING btree ("common_name");--> statement-breakpoint
 CREATE INDEX "site_images_site_id_idx" ON "site_images" USING btree ("site_id");--> statement-breakpoint

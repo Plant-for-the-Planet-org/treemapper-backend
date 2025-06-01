@@ -36,6 +36,7 @@ export class CreateProjectDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
   @IsGeoJSON({ message: 'Invalid GeoJSON format' })
   location?: any;
 
@@ -92,7 +93,6 @@ export class CreateProjectDto {
   @Length(2, 2)
   @Transform(({ value }) => value?.toUpperCase())
   country?: string;
-
 
 
   @IsOptional()

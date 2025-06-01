@@ -184,7 +184,7 @@ export const projects = pgTable('projects', {
   videoUrl: text('video_url'),
   country: varchar('country', { length: 2 }),
   location: geometry(4326)('location'),
-  originalGeometry: jsonb('original_geometry').notNull(),
+  originalGeometry: jsonb('original_geometry'),
   latitude: doublePrecision('latitude'),
   longitude: doublePrecision('longitude'),
   geometryType: varchar('geometry_type', { length: 50 }),
@@ -192,6 +192,8 @@ export const projects = pgTable('projects', {
   linkText: varchar('link_text', { length: 100 }),
   isActive: boolean('is_active').notNull().default(true),
   isPublic: boolean('is_public').default(true).notNull(),
+  isPrimary: boolean('is_primary').default(false).notNull(),
+  isPeronal: boolean('is_personal').default(false).notNull(),
   intensity: varchar('intensity', { length: 100 }),
   revisionPeriodicityLevel: varchar('revision_periodicity_level', { length: 100 }),
   metadata: jsonb('metadata'),
@@ -202,7 +204,10 @@ export const projects = pgTable('projects', {
   locationIdx: index('projects_location_gist_idx').using('gist', table.location),
   slugIdx: index('projects_slug_idx').on(table.slug),
   uidIdx: index('project_uid_idx').on(table.uid),
-  createdByIdx: index('projects_created_by_idx').on(table.createdById)
+  createdByIdx: index('projects_created_by_idx').on(table.createdById),
+  uniquePrimaryPerUser: uniqueIndex('projects_unique_primary_per_user_idx')
+    .on(table.createdById)
+    .where(sql`${table.isPrimary} = true`)
 }));
 
 // ============================================================================

@@ -1,5 +1,5 @@
 {
-  "id": "6891f267-0129-4a29-9ff8-3899b55f9ae7",
+  "id": "4df1db78-0d5d-478e-95f5-b03276ccf1de",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2164,7 +2164,7 @@
           "name": "original_geometry",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "latitude": {
           "name": "latitude",
@@ -2209,6 +2209,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_personal": {
+          "name": "is_personal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "intensity": {
           "name": "intensity",
@@ -2306,6 +2320,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "projects_unique_primary_per_user_idx": {
+          "name": "projects_unique_primary_per_user_idx",
+          "columns": [
+            {
+              "expression": "created_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"projects\".\"is_primary\" = true",
           "concurrently": false,
           "method": "btree",
           "with": {}

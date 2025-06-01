@@ -171,7 +171,77 @@ export class ProjectsService {
             projectWebsite: createProjectDto.projectWebsite ?? '',
             description: createProjectDto.description ?? '',
             location: locationValue,
+            isPrimary: false,
+            isPeronal: false,
             originalGeometry: createProjectDto.location
+          })
+          .returning();
+
+        // Add creator as project owner
+        await tx
+          .insert(projectMembers)
+          .values({
+            projectId: project.id,
+            uid: generateUid('mem'),
+            userId: userId,
+            role: 'owner',
+            joinedAt: new Date(),
+          });
+
+        return project;
+      });
+
+      return {
+        message: 'Project created successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'project_created',
+      };
+    } catch (error) {
+      console.error('Error creating project:', error);
+      return {
+        message: 'Failed to create project',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'project_creation_failed',
+      };
+    }
+  }
+
+  async createPersonalProject(createProjectDto: CreateProjectDto, userId: number) {
+    try {
+      const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
+      const existingProject = await this.drizzleService.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.slug, slug))
+        .limit(1);
+
+      if (existingProject.length > 0) {
+        // Generate unique slug by appending timestamp
+        const uniqueSlug = `${slug}-${Date.now()}`;
+        createProjectDto.slug = uniqueSlug;
+      } else {
+        createProjectDto.slug = slug;
+      }
+
+      // Use transaction to ensure data consistency
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        // Create project with updated schema fields
+        const [project] = await tx
+          .insert(projects)
+          .values({
+            // Only include fields that exist in your Drizzle schema for 'projects'
+            uid: createProjectDto.uid ?? generateUid('prj'),
+            createdById: userId,
+            slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
+            projectName: createProjectDto.projectName ?? '',
+            projectType: createProjectDto.projectType ?? '',
+            description: createProjectDto.description ?? '',
+            isPrimary: true,
+            isPeronal: true,
           })
           .returning();
 
@@ -1307,9 +1377,9 @@ export class ProjectsService {
   //   }
   // }
 
-  
 
-  
+
+
 
 
 
@@ -1335,11 +1405,11 @@ export class ProjectsService {
 
 
 
-  
 
-  
 
-  
+
+
+
 
   // // Get project invites (pending invitations)
   // async getProjectInvites(projectId: number, currentUserId: number) {

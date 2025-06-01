@@ -1,13 +1,13 @@
+// src/modules/trees/trees.module.ts
 import { Module } from '@nestjs/common';
-import { TreeService } from './trees.service';
-import { TreeController } from './trees.controller';
-import { DatabaseModule } from '../database/database.module';
-
+import { TreesService } from './trees.service';
+import { TreesController } from './trees.controller';
+import { DatabaseModule } from '../database/database.module'; // Adjust import path
 
 @Module({
-  imports: [DatabaseModule],  // This should be present
-  controllers: [TreeController],
-  providers: [TreeService],
-  exports: [TreeService],
+  imports: [DatabaseModule],
+  controllers: [TreesController],
+  providers: [TreesService],
+  exports: [TreesService],
 })
-export class TreeModule { }
+export class TreesModule {}

@@ -38,6 +38,12 @@ export class ProjectsController {
     return this.projectsService.create(createProjectDto, req.user.id);
   }
 
+  @Post('/personal')
+  createPersonal(@Body() createProjectDto: CreateProjectDto, @Req() req) {
+    return this.projectsService.createPersonalProject(createProjectDto, req.user.id);
+  }
+
+
   @Get()
   findAll(@Req() req) {
     return this.projectsService.findAll(req.user.id);
@@ -112,7 +118,7 @@ export class ProjectsController {
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   updateMemberRole(
-    @Param('id') id: string, 
+    @Param('id') id: string,
     @Param('memberId') memberId: string,
     @Membership() membership: any,
     @Body() updateRoleDto: UpdateProjectRoleDto,
