@@ -1,14 +1,36 @@
 import { Module } from '@nestjs/common';
-import { SpeciesController } from './species.controller';
-import { SpeciesService } from './species.service';
-import { UserSpeciesController } from './user-species.controller';
-import { UserSpeciesService } from './user-species.service';
+
+// Services
+// import { SpeciesRequestService } from './species-request.service';
+import { ScientificSpeciesService } from './services/scientific-species.service';
+import { ProjectSpeciesService } from './services/project-species.service';
 import { DatabaseModule } from '../database/database.module';
+import { ProjectsModule } from '../projects/projects.module'; // Add this import
+
+// Controllers
+// import { SpeciesRequestController } from './species-request.controller';
+import { ScientificSpeciesController } from './controller/scientific-species.controller';
+import { ProjectSpeciesController } from './controller/project-species.controller';
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [SpeciesController, UserSpeciesController],
-  providers: [SpeciesService, UserSpeciesService],
-  exports: [SpeciesService, UserSpeciesService],
+  imports: [
+    DatabaseModule,
+    ProjectsModule
+  ],
+  controllers: [
+    // SpeciesRequestController,
+    ScientificSpeciesController,
+    ProjectSpeciesController,
+  ],
+  providers: [
+    // SpeciesRequestService,
+    ScientificSpeciesService,
+    ProjectSpeciesService,
+  ],
+  exports: [
+    // SpeciesRequestService,
+    ScientificSpeciesService,
+    ProjectSpeciesService,
+  ],
 })
-export class SpeciesModule { }
+export class SpeciesModule {}

@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateUid } from 'src/util/uidGenerator';
 import { User } from 'src/users/entities/user.entity';
 
-interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
+export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
 
 export interface ProjectMemberResponse {
   role: string;

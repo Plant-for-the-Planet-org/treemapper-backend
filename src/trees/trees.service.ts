@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { trees, treeRecords, sites, userSpecies, users, projectMembers } from '../database/schema';
+import { trees, treeRecords, sites, users, projectMembers } from '../database/schema';
 import { CreateTreeDto, UpdateTreeDto, BulkCreateTreeDto, TreeQueryDto } from './dto';
 import { CreateTreeRecordDto, UpdateTreeRecordDto } from './dto/tree-record.dto';
 import { TreeResponseDto, TreeRecordResponseDto, PaginatedTreeResponseDto } from './dto/tree-response.dto';
