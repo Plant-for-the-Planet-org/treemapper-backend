@@ -2,188 +2,182 @@ import {
   Controller,
   Get,
   Post,
-  Body,
+  Put,
   Patch,
-  Param,
   Delete,
+  Body,
+  Param,
   Query,
   UseGuards,
-  Request,
+  Req,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
-import { SitesService } from './sites.service';
-import { CreateSiteDto } from './dto/create-site.dto';
-import { UpdateSiteDto } from './dto/update-site.dto';
-import { SiteQueryDto } from './dto/site-query.dto';
-import { Site } from './entities/site.entity';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ProjectRoles } from './decorators/project-roles.decorator';
+import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { SiteService } from './sites.service';
+import { CreateSiteDto, QuerySitesDto, UpdateSiteDto, UpdateSiteImagesDto } from './dto/site.dto';
+import { Membership } from 'src/projects/decorators/membership.decorator';
+import { ProjectGuardResponse } from 'src/projects/projects.service';
 
-@ApiTags('Sites')
-@ApiBearerAuth()
+
+
+@Controller('projects/:id/sites')
 @UseGuards(JwtAuthGuard)
-@Controller('sites')
-export class SitesController {
-  constructor(private readonly sitesService: SitesService) {}
+export class SiteController {
+  constructor(private readonly siteService: SiteService) { }
 
-  // @Post('projects/:projectId')
-  // @ApiOperation({ summary: 'Create a new site in a project' })
-  // @ApiParam({ name: 'projectId', description: 'Project ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.CREATED,
-  //   description: 'Site created successfully',
-  //   type: Site,
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.BAD_REQUEST,
-  //   description: 'Invalid input data',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Access denied to project',
-  // })
-  // async create(
-  //   @Param('projectId') projectId: string,
-  //   @Body() createSiteDto: CreateSiteDto,
-  //   @Request() req: any,
-  // ): Promise<Site> {
-  //   return this.sitesService.create(createSiteDto, projectId, req.user.id);
-  // }
+  @Post()
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async createSite(
+    @Membership() membership: ProjectGuardResponse,
+    @Body() createSiteDto: CreateSiteDto,
+  ) {
 
-  // @Get()
-  // @ApiOperation({ summary: 'Get all sites with filtering and pagination' })
-  // @ApiQuery({ name: 'projectId', required: false, description: 'Filter by project ID' })
-  // @ApiQuery({ name: 'search', required: false, description: 'Search by site name' })
-  // @ApiQuery({ name: 'page', required: false, description: 'Page number' })
-  // @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Sites retrieved successfully',
-  // })
-  // async findAll(
-  //   @Query() query: SiteQueryDto,
-  //   @Request() req: any,
-  // ): Promise<{ sites: Site[]; total: number; page: number; limit: number }> {
-  //   return this.sitesService.findAll(query, req.user.id);
-  // }
+    const site = await this.siteService.createSite(
+      membership,
+      createSiteDto
+    );
 
-  // @Get('projects/:projectId')
-  // @ApiOperation({ summary: 'Get all sites in a specific project' })
-  // @ApiParam({ name: 'projectId', description: 'Project ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Project sites retrieved successfully',
-  //   type: [Site],
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Access denied to project',
-  // })
-  // async findByProject(
-  //   @Param('projectId') projectId: string,
-  //   @Request() req: any,
-  // ): Promise<Site[]> {
-  //   return this.sitesService.findByProject(projectId, req.user.sub);
-  // }
+    return site
+  }
 
-  // @Get(':id')
-  // @ApiOperation({ summary: 'Get a site by ID' })
-  // @ApiParam({ name: 'id', description: 'Site ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Site retrieved successfully',
-  //   type: Site,
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.NOT_FOUND,
-  //   description: 'Site not found',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Access denied to site',
-  // })
-  // async findOne(@Param('id') id: string, @Request() req: any): Promise<Site> {
-  //   return this.sitesService.findOne(id, req.user.sub);
-  // }
+  @Get()
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getAllSites(
+    @Membership() membership: ProjectGuardResponse,
+    @Query() queryDto: QuerySitesDto,
+  ) {
+    // All project members can view sites
+    const result = await this.siteService.getAllSitesByProject(
+      membership,
+      queryDto
+    );
 
-  // @Get(':id/stats')
-  // @ApiOperation({ summary: 'Get site statistics' })
-  // @ApiParam({ name: 'id', description: 'Site ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Site statistics retrieved successfully',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.NOT_FOUND,
-  //   description: 'Site not found',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Access denied to site',
-  // })
+    return {
+      status: 'success',
+      message: 'Sites retrieved successfully',
+      ...result,
+    };
+  }
+
+  // @Get('stats')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
   // async getSiteStats(
-  //   @Param('id') id: string,
-  //   @Request() req: any,
-  // ): Promise<{
-  //   treeCount: number;
-  //   speciesCount: number;
-  //   aliveTreesCount: number;
-  //   deadTreesCount: number;
-  // }> {
-  //   return this.sitesService.getSiteStats(id, req.user.sub);
+  //   @Param('projectId') projectId: string,
+  //   @Req() req: any
+  // ) {
+  //   const stats = await this.siteService.getSiteStats(parseInt(projectId));
+
+  //   return {
+  //     status: 'success',
+  //     message: 'Site statistics retrieved successfully',
+  //     data: stats,
+  //   };
   // }
 
-  // @Patch(':id')
-  // @ApiOperation({ summary: 'Update a site' })
-  // @ApiParam({ name: 'id', description: 'Site ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Site updated successfully',
-  //   type: Site,
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.NOT_FOUND,
-  //   description: 'Site not found',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Insufficient permissions',
-  // })
-  // async update(
-  //   @Param('id') id: string,
+  // @Get(':siteUid')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async getSite(
+  //   @Param('projectId') projectId: string,
+  //   @Param('siteUid') siteUid: string,
+  //   @Req() req: any
+  // ) {
+  //   const site = await this.siteService.getSiteByUid(
+  //     parseInt(projectId),
+  //     siteUid
+  //   );
+
+  //   return {
+  //     status: 'success',
+  //     message: 'Site retrieved successfully',
+  //     data: site,
+  //   };
+  // }
+
+  // @Put(':siteUid')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async updateSite(
+  //   @Param('projectId') projectId: string,
+  //   @Param('siteUid') siteUid: string,
   //   @Body() updateSiteDto: UpdateSiteDto,
-  //   @Request() req: any,
-  // ): Promise<Site> {
-  //   return this.sitesService.update(id, updateSiteDto, req.user.sub);
+  //   @Req() req: any
+  // ) {
+  //   // Check permissions - only allow contributors and above
+  //   const allowedRoles = ['owner', 'admin', 'manager', 'contributor'];
+  //   if (!allowedRoles.includes(req.userRole)) {
+  //     throw new ForbiddenException('Insufficient permissions to update sites');
+  //   }
+
+  //   const site = await this.siteService.updateSite(
+  //     parseInt(projectId),
+  //     siteUid,
+  //     updateSiteDto
+  //   );
+
+  //   return {
+  //     status: 'success',
+  //     message: 'Site updated successfully',
+  //     data: site,
+  //   };
   // }
 
-  // @Delete(':id')
-  // @ApiOperation({ summary: 'Delete a site' })
-  // @ApiParam({ name: 'id', description: 'Site ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.NO_CONTENT,
-  //   description: 'Site deleted successfully',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.NOT_FOUND,
-  //   description: 'Site not found',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.FORBIDDEN,
-  //   description: 'Insufficient permissions',
-  // })
-  // @ApiResponse({
-  //   status: HttpStatus.BAD_REQUEST,
-  //   description: 'Cannot delete site with trees',
-  // })
-  // async remove(@Param('id') id: string, @Request() req: any): Promise<void> {
-  //   return this.sitesService.remove(id, req.user.sub);
+  // @Patch(':siteUid/images')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async updateSiteImages(
+  //   @Param('projectId') projectId: string,
+  //   @Param('siteUid') siteUid: string,
+  //   @Body() updateImagesDto: UpdateSiteImagesDto,
+  //   @Req() req: any
+  // ) {
+  //   // Check permissions - only allow contributors and above
+  //   const allowedRoles = ['owner', 'admin', 'manager', 'contributor'];
+  //   if (!allowedRoles.includes(req.userRole)) {
+  //     throw new ForbiddenException('Insufficient permissions to update site images');
+  //   }
+
+  //   const site = await this.siteService.updateSiteImages(
+  //     parseInt(projectId),
+  //     siteUid,
+  //     updateImagesDto
+  //   );
+
+  //   return {
+  //     status: 'success',
+  //     message: 'Site images updated successfully',
+  //     data: site,
+  //   };
+  // }
+
+  // @Delete(':siteUid')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async deleteSite(
+  //   @Param('projectId') projectId: string,
+  //   @Param('siteUid') siteUid: string,
+  //   @Req() req: any
+  // ) {
+  //   // Check permissions - only allow managers and above
+  //   const allowedRoles = ['owner', 'admin', 'manager'];
+  //   if (!allowedRoles.includes(req.userRole)) {
+  //     throw new ForbiddenException('Insufficient permissions to delete sites');
+  //   }
+
+  //   const result = await this.siteService.deleteSite(
+  //     parseInt(projectId),
+  //     siteUid
+  //   );
+
+  //   return {
+  //     status: 'success',
+  //     ...result,
+  //   };
   // }
 }

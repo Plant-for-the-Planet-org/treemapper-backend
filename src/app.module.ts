@@ -10,7 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { UserMigrationModule } from './migrate/migrate.module.ts';
 import { SpeciesModule } from './species/species.module';
-
+import { SitesModule } from './sites/sites.module';
 
 @Module({
   imports: [
@@ -22,7 +22,8 @@ import { SpeciesModule } from './species/species.module';
     UsersModule,
     UserMigrationModule,
     ProjectsModule,
-    SpeciesModule
+    SpeciesModule,
+    SitesModule
   ],
   controllers: [AppController],
   providers: [AppService, CacheService],

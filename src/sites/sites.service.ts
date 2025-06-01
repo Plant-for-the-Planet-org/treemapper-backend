@@ -1,329 +1,352 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { sites, projects, users } from '../database/schema'; // Adjust import path as needed
+import { CreateSiteDto, QuerySitesDto, UpdateSiteDto, UpdateSiteImagesDto } from './dto/site.dto';
+import { generateUid } from 'src/util/uidGenerator';
 import { DrizzleService } from '../database/drizzle.service';
-import { CreateSiteDto } from './dto/create-site.dto';
-import { UpdateSiteDto } from './dto/update-site.dto';
-import { SiteQueryDto } from './dto/site-query.dto';
-import { sites, projects, projectMembers, users, trees } from '../database/schema';
-import { eq, and, like, or, desc, asc, count } from 'drizzle-orm';
-import { Site } from './entities/site.entity';
+import { ProjectGuardResponse } from 'src/projects/projects.service';
+
 
 @Injectable()
-export class SitesService {
-  constructor(private readonly drizzle: DrizzleService) {}
+export class SiteService {
+  constructor(
+    private drizzleService: DrizzleService,
+  ) { }
 
-//   async create(createSiteDto: CreateSiteDto, projectId: string, userId: string): Promise<Site> {
-//     const db = this.drizzle.db;
+  private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
 
-//     // Verify project exists and user has access
-//     await this.verifyProjectAccess(projectId, userId);
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
+    }
 
-//     try {
-//       const [newSite] = await db
-//         .insert(sites)
-//         .values({
-//           ...createSiteDto,
-//           projectId,
-//           createdById: userId,
-//         })
-//         .returning();
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' &&
+      locationInput.features &&
+      locationInput.features.length > 0 &&
+      locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
 
-//       return this.findOne(newSite.id, userId);
-//     } catch (error) {
-//       if (error.code === '23505') { // Unique constraint violation
-//         throw new BadRequestException('Site with this name already exists in the project');
-//       }
-//       throw error;
-//     }
-//   }
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
 
-// async findAll(query: SiteQueryDto, userId: string): Promise<{ sites: Site[]; total: number; page: number; limit: number }> {
-//     const db = this.drizzle.db;
-//     const { projectId, search, page = 1, limit = 10 } = query;
-//     const offset = (page - 1) * limit;
+    throw new BadRequestException('Invalid GeoJSON format');
+  }
 
-//     // Build where conditions
-//     let whereConditions: any[] = [];
 
-//     if (projectId) {
-//       // Verify user has access to the project
-//       await this.verifyProjectAccess(projectId, userId);
-//       whereConditions.push(eq(sites.projectId, projectId));
-//     } else {
-//       // If no specific project, get sites from all projects user has access to
-//       const userProjectIds = await this.getUserProjectIds(userId);
-//       if (userProjectIds.length === 0) {
-//         return { sites: [], total: 0, page, limit };
-//       }
-      
-//       if (userProjectIds.length === 1) {
-//         whereConditions.push(eq(sites.projectId, userProjectIds[0]));
-//       } else {
-//         whereConditions.push(or(...userProjectIds.map(id => eq(sites.projectId, id))));
-//       }
-//     }
 
-//     if (search) {
-//       const searchConditions = [
-//         like(sites.name, `%${search}%`),
-//         ...(sites.description ? [like(sites.description, `%${search}%`)] : []),
-//         ...(sites.location ? [like(sites.location, `%${search}%`)] : []),
-//       ];
-      
-//       if (searchConditions.length === 1) {
-//         whereConditions.push(searchConditions[0]);
-//       } else if (searchConditions.length > 1) {
-//         whereConditions.push(or(...searchConditions));
-//       }
-//     }
+  async createSite(
+    membership: ProjectGuardResponse,
+    createSiteDto: CreateSiteDto
+  ) {
+    let locationValue: any = null;
+    if (createSiteDto.location) {
+      try {
+        const geometry = this.getGeoJSONForPostGIS(createSiteDto.location);
+        locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+      } catch (error) {
+        return {
+          message: 'Invalid GeoJSON provided',
+          statusCode: 400,
+          error: "invalid_geojson",
+          data: null,
+          code: 'invalid_project_geojson',
+        };
+      }
+    }
+    const [newSite] = await this.drizzleService.db
+      .insert(sites)
+      .values({
+        uid: generateUid('ste'),
+        projectId: membership.projectId,
+        createdById: membership.userId,
+        name: createSiteDto.name,
+        description: createSiteDto.description,
+        location: locationValue,
+        originalGeometry: createSiteDto.location,
+        status: createSiteDto.status || 'barren',
+        metadata: createSiteDto.metadata,
+      })
+      .returning();
 
-//     const whereClause = whereConditions.length === 1 
-//       ? whereConditions[0] 
-//       : whereConditions.length > 1 
-//         ? and(...whereConditions) 
-//         : undefined;
+    return this.getSiteById(newSite.id);
+  }
 
-//     // Get total count
-//     const [{ count: total }] = await db
-//       .select({ count: count() })
-//       .from(sites)
-//       .where(whereClause);
+  async getAllSitesByProject(
+    membership: ProjectGuardResponse,
+    queryDto: QuerySitesDto
+  ) {
+    const { page = 1, limit = 10, status } = queryDto;
+    const offset = (page - 1) * limit;
 
-//     // Get sites with relations
-//     const sitesList = await db
-//       .select({
-//         site: sites,
-//         project: {
-//           id: projects.id,
-//           projectName: projects.projectName,
-//           projectType: projects.projectType,
-//         },
-//         createdBy: {
-//           id: users.id,
-//           name: users.name,
-//           email: users.email,
-//         },
-//       })
-//       .from(sites)
-//       .leftJoin(projects, eq(sites.projectId, projects.id))
-//       .leftJoin(users, eq(sites.createdById, users.id))
-//       .where(whereClause)
-//       .orderBy(desc(sites.createdAt))
-//       .limit(limit)
-//       .offset(offset);
+    // Build where conditions
+    const whereConditions = [eq(sites.projectId, membership.projectId)];
 
-//     const sitesWithRelations = sitesList.map(row => ({
-//       ...row.site,
-//       description: row.site.description ?? undefined,
-//       location: row.site.location ?? undefined,
-//       boundary: row.site.boundary ?? undefined,
-//       coordinates: row.site.coordinates ?? undefined,
-//       metadata: row.site.metadata ?? undefined,
-//       project: row.project,
-//       createdBy: row.createdBy,
-//     }));
+    // Get sites with pagination
+    const sitesData = await this.drizzleService.db
+      .select({
+        uid: sites.uid,
+        name: sites.name,
+        description: sites.description,
+        status: sites.status,
+        originalGeometry: sites.originalGeometry,
+        metadata: sites.metadata,
+        createdAt: sites.createdAt,
+        updatedAt: sites.updatedAt,
+        project: {
+          uid: projects.uid,
+          projectName: projects.projectName,
+          slug: projects.slug,
+        },
+        createdBy: {
+          uid: users.uid,
+          name: users.name,
+          displayName: users.displayName,
+          email: users.email,
+        }
+      })
+      .from(sites)
+      .leftJoin(projects, eq(sites.projectId, projects.id))
+      .leftJoin(users, eq(sites.createdById, users.id))
+      .where(and(...whereConditions))
+      .orderBy(desc(sites.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-//     return {
-//       sites: sitesWithRelations,
-//       total,
-//       page,
-//       limit,
-//     };
-//   }
-//   async findOne(id: string, userId: string): Promise<Site> {
-//     const db = this.drizzle.db;
+    // Get total count
+    const [totalCount] = await this.drizzleService.db
+      .select({ count: count() })
+      .from(sites)
+      .where(and(...whereConditions));
 
-//     const [siteWithRelations] = await db
-//       .select({
-//         site: sites,
-//         project: {
-//           id: projects.id,
-//           projectName: projects.projectName,
-//           projectType: projects.projectType,
-//         },
-//         createdBy: {
-//           id: users.id,
-//           name: users.name,
-//           email: users.email,
-//         },
-//       })
-//       .from(sites)
-//       .leftJoin(projects, eq(sites.projectId, projects.id))
-//       .leftJoin(users, eq(sites.createdById, users.id))
-//       .where(eq(sites.id, id));
+    return {
+      data: sitesData,
+      pagination: {
+        page,
+        limit,
+        total: totalCount.count,
+        totalPages: Math.ceil(totalCount.count / limit),
+      }
+    };
+  }
 
-//     if (!siteWithRelations) {
-//       throw new NotFoundException('Site not found');
-//     }
+  async getSiteByUid(projectId: number, siteUid: string) {
+    const siteData = await this.drizzleService.db
+      .select({
+        uid: sites.uid,
+        name: sites.name,
+        description: sites.description,
+        status: sites.status,
+        originalGeometry: sites.originalGeometry,
+        metadata: sites.metadata,
+        createdAt: sites.createdAt,
+        updatedAt: sites.updatedAt,
+        project: {
+          uid: projects.uid,
+          projectName: projects.projectName,
+          slug: projects.slug,
+        },
+        createdBy: {
+          uid: users.uid,
+          name: users.name,
+          displayName: users.displayName,
+          email: users.email,
+        }
+      })
+      .from(sites)
+      .leftJoin(projects, eq(sites.projectId, projects.id))
+      .leftJoin(users, eq(sites.createdById, users.id))
+      .where(
+        and(
+          eq(sites.uid, siteUid),
+          eq(sites.projectId, projectId)
+        )
+      )
+      .limit(1);
 
-//     // Verify user has access to the project
-//     await this.verifyProjectAccess(siteWithRelations.site.projectId, userId);
+    if (!siteData.length) {
+      throw new NotFoundException('Site not found');
+    }
 
-//     return {
-//       ...siteWithRelations.site,
-//       description: siteWithRelations.site.description ?? undefined,
-//       location: siteWithRelations.site.location ?? undefined,
-//       boundary: siteWithRelations.site.boundary ?? undefined,
-//       coordinates: siteWithRelations.site.coordinates ?? undefined,
-//       metadata: siteWithRelations.site.metadata ?? undefined,
-//       project: siteWithRelations.project,
-//       createdBy: siteWithRelations.createdBy,
-//     };
-//   }
+    return siteData[0];
+  }
 
-//   async findByProject(projectId: string, userId: string): Promise<Site[]> {
-//     // Verify project access
-//     await this.verifyProjectAccess(projectId, userId);
+  private async getSiteById(siteId: number) {
+    const siteData = await this.drizzleService.db
+      .select({
+        uid: sites.uid,
+        name: sites.name,
+        description: sites.description,
+        status: sites.status,
+        originalGeometry: sites.originalGeometry,
+        metadata: sites.metadata,
+        createdAt: sites.createdAt,
+        updatedAt: sites.updatedAt,
+        project: {
+          uid: projects.uid,
+          projectName: projects.projectName,
+          slug: projects.slug,
+        },
+        createdBy: {
+          uid: users.uid,
+          name: users.name,
+          displayName: users.displayName,
+          email: users.email,
+        }
+      })
+      .from(sites)
+      .leftJoin(projects, eq(sites.projectId, projects.id))
+      .leftJoin(users, eq(sites.createdById, users.id))
+      .where(eq(sites.id, siteId))
+      .limit(1);
 
-//     const db = this.drizzle.db;
+    if (!siteData.length) {
+      throw new NotFoundException('Site not found');
+    }
 
-//     const sitesList = await db
-//       .select({
-//         site: sites,
-//         createdBy: {
-//           id: users.id,
-//           name: users.name,
-//           email: users.email,
-//         },
-//       })
-//       .from(sites)
-//       .leftJoin(users, eq(sites.createdById, users.id))
-//       .where(eq(sites.projectId, projectId))
-//       .orderBy(asc(sites.name));
+    return siteData[0];
+  }
 
-//     return sitesList.map(row => ({
-//       ...row.site,
-//       description: row.site.description ?? undefined,
-//       location: row.site.location ?? undefined,
-//       boundary: row.site.boundary ?? undefined,
-//       coordinates: row.site.coordinates ?? undefined,
-//       metadata: row.site.metadata ?? undefined,
-//       createdBy: row.createdBy,
-//     }));
-//   }
+  async updateSite(
+    projectId: number,
+    siteUid: string,
+    updateSiteDto: UpdateSiteDto
+  ) {
+    // First verify site exists and belongs to project
+    const existingSite = await this.drizzleService.db
+      .select({ id: sites.id })
+      .from(sites)
+      .where(
+        and(
+          eq(sites.uid, siteUid),
+          eq(sites.projectId, projectId)
+        )
+      )
+      .limit(1);
 
-//   async update(id: string, updateSiteDto: UpdateSiteDto, userId: string): Promise<Site> {
-//     const db = this.drizzle.db;
+    if (!existingSite.length) {
+      throw new NotFoundException('Site not found');
+    }
 
-//     // Verify site exists and user has access
-//     const existingSite = await this.findOne(id, userId);
-//     await this.verifyProjectAccess(existingSite.projectId, userId, ['owner', 'admin', 'contributor']);
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
 
-//     try {
-//       const [updatedSite] = await db
-//         .update(sites)
-//         .set({
-//           ...updateSiteDto,
-//           updatedAt: new Date(),
-//         })
-//         .where(eq(sites.id, id))
-//         .returning();
+    if (updateSiteDto.name !== undefined) updateData.name = updateSiteDto.name;
+    if (updateSiteDto.description !== undefined) updateData.description = updateSiteDto.description;
+    if (updateSiteDto.originalGeometry !== undefined) updateData.originalGeometry = updateSiteDto.originalGeometry;
+    if (updateSiteDto.status !== undefined) updateData.status = updateSiteDto.status;
+    if (updateSiteDto.metadata !== undefined) updateData.metadata = updateSiteDto.metadata;
 
-//       return this.findOne(updatedSite.id, userId);
-//     } catch (error) {
-//       if (error.code === '23505') {
-//         throw new BadRequestException('Site with this name already exists in the project');
-//       }
-//       throw error;
-//     }
-//   }
+    await this.drizzleService.db
+      .update(sites)
+      .set(updateData)
+      .where(eq(sites.id, existingSite[0].id));
 
-//   async remove(id: string, userId: string): Promise<void> {
-//     const db = this.drizzle.db;
+    return this.getSiteById(existingSite[0].id);
+  }
 
-//     // Verify site exists and user has access
-//     const existingSite = await this.findOne(id, userId);
-//     await this.verifyProjectAccess(existingSite.projectId, userId, ['owner', 'admin']);
+  async updateSiteImages(
+    projectId: number,
+    siteUid: string,
+    updateImagesDto: UpdateSiteImagesDto
+  ) {
+    // First verify site exists and belongs to project
+    const existingSite = await this.drizzleService.db
+      .select({ id: sites.id })
+      .from(sites)
+      .where(
+        and(
+          eq(sites.uid, siteUid),
+          eq(sites.projectId, projectId)
+        )
+      )
+      .limit(1);
 
-//     // Check if site has trees
-//     const [treeCount] = await db
-//       .select({ count: count() })
-//       .from(trees)
-//       .where(eq(trees.siteId, id));
+    if (!existingSite.length) {
+      throw new NotFoundException('Site not found');
+    }
 
-//     if (treeCount.count > 0) {
-//       throw new BadRequestException('Cannot delete site that contains trees');
-//     }
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
 
-//     await db.delete(sites).where(eq(sites.id, id));
-//   }
+    if (updateImagesDto.image !== undefined) updateData.image = updateImagesDto.image;
+    if (updateImagesDto.imageCdn !== undefined) updateData.imageCdn = updateImagesDto.imageCdn;
+    if (updateImagesDto.allImages !== undefined) updateData.allImages = updateImagesDto.allImages;
 
-//   async getSiteStats(id: string, userId: string): Promise<{
-//     treeCount: number;
-//     speciesCount: number;
-//     aliveTreesCount: number;
-//     deadTreesCount: number;
-//   }> {
-//     const db = this.drizzle.db;
+    await this.drizzleService.db
+      .update(sites)
+      .set(updateData)
+      .where(eq(sites.id, existingSite[0].id));
 
-//     // Verify site exists and user has access
-//     await this.findOne(id, userId);
+    return this.getSiteById(existingSite[0].id);
+  }
 
-//     // Get tree statistics
-//     const treeStats = await db
-//       .select({
-//         total: count(),
-//         alive: count(eq(trees.status, 'alive')),
-//         dead: count(eq(trees.status, 'dead')),
-//       })
-//       .from(trees)
-//       .where(eq(trees.siteId, id));
+  async deleteSite(projectId: number, siteUid: string) {
+    // First verify site exists and belongs to project
+    const existingSite = await this.drizzleService.db
+      .select({
+        id: sites.id,
+        name: sites.name
+      })
+      .from(sites)
+      .where(
+        and(
+          eq(sites.uid, siteUid),
+          eq(sites.projectId, projectId)
+        )
+      )
+      .limit(1);
 
-//     // Get unique species count
-//     // const speciesStats = await db
-//     //   .select({
-//     //     count: count(),
-//     //   })
-//     //   .from(trees)
-//     //   .where(and(eq(trees.siteId, id), eq(trees.speciesId, trees.speciesId)))
-//     //   .groupBy(trees.speciesId);
+    if (!existingSite.length) {
+      throw new NotFoundException('Site not found');
+    }
 
-//     return {
-//       treeCount: treeStats[0]?.total || 0,
-//       speciesCount: 100,
-//       aliveTreesCount: treeStats[0]?.alive || 0,
-//       deadTreesCount: treeStats[0]?.dead || 0,
-//     };
-//   }
+    // Soft delete by setting deletedAt
+    await this.drizzleService.db
+      .update(sites)
+      .set({
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(sites.id, existingSite[0].id));
 
-//   // Helper methods
-//   private async verifyProjectAccess(
-//     projectId: string, 
-//     userId: string, 
-//     allowedRoles: string[] = ['owner', 'admin', 'contributor', 'viewer']
-//   ): Promise<void> {
-//     const db = this.drizzle.db;
+    return {
+      message: `Site "${existingSite[0].name}" has been successfully deleted`,
+      siteUid,
+    };
+  }
 
-//     const [membership] = await db
-//       .select({
-//         role: projectMembers.role,
-//       })
-//       .from(projectMembers)
-//       .where(
-//         and(
-//           eq(projectMembers.projectId, projectId),
-//           eq(projectMembers.userId, userId)
-//         )
-//       );
+  async getSiteStats(projectId: number) {
+    const stats = await this.drizzleService.db
+      .select({
+        status: sites.status,
+        count: count(),
+      })
+      .from(sites)
+      .where(
+        and(
+          eq(sites.projectId, projectId),
+          // Exclude soft-deleted sites
+        )
+      )
+      .groupBy(sites.status);
 
-//     if (!membership) {
-//       throw new ForbiddenException('Access denied to this project');
-//     }
+    const totalSites = stats.reduce((sum, stat) => sum + stat.count, 0);
 
-//     if (!allowedRoles.includes(membership.role)) {
-//       throw new ForbiddenException('Insufficient permissions for this action');
-//     }
-//   }
-
-//   private async getUserProjectIds(userId: string): Promise<string[]> {
-//     const db = this.drizzle.db;
-
-//     const userProjects = await db
-//       .select({
-//         projectId: projectMembers.projectId,
-//       })
-//       .from(projectMembers)
-//       .where(eq(projectMembers.userId, userId));
-
-//     return userProjects.map(p => p.projectId);
-//   }
+    return {
+      total: totalSites,
+      byStatus: stats.reduce((acc, stat) => {
+        acc[stat.status || 'unknown'] = stat.count;
+        return acc;
+      }, {} as Record<string, number>),
+    };
+  }
 }
