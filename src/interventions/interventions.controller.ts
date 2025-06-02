@@ -48,7 +48,7 @@ import { Membership } from 'src/projects/decorators/membership.decorator';
 export class InterventionsController {
   constructor(private readonly interventionsService: InterventionsService) { }
 
-  @Post()
+  @Post('/projects/:id')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   async create(

@@ -1,17 +1,18 @@
-CREATE TYPE "public"."allocation_priority" AS ENUM('manual', 'automatic', 'high', 'medium', 'low');--> statement-breakpoint
 CREATE TYPE "public"."capture_mode" AS ENUM('on_site', 'off_site');--> statement-breakpoint
-CREATE TYPE "public"."capture_method" AS ENUM('device', 'map', 'survey');--> statement-breakpoint
+CREATE TYPE "public"."capture_method" AS ENUM('app', 'map', 'survey');--> statement-breakpoint
 CREATE TYPE "public"."capture_status" AS ENUM('complete', 'partial', 'incomplete');--> statement-breakpoint
 CREATE TYPE "public"."coordinate_type" AS ENUM('gps', 'manual', 'estimated');--> statement-breakpoint
-CREATE TYPE "public"."image_type" AS ENUM('before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground');--> statement-breakpoint
-CREATE TYPE "public"."intervention_discriminator" AS ENUM('base', 'generic', 'plot', 'sample', 'intervention');--> statement-breakpoint
-CREATE TYPE "public"."intervention_status" AS ENUM('active', 'completed', 'cancelled', 'pending', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."image_type" AS ENUM('before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record');--> statement-breakpoint
+CREATE TYPE "public"."intervention_discriminator" AS ENUM('plot', 'intervention');--> statement-breakpoint
+CREATE TYPE "public"."intervention_status" AS ENUM('planned', 'active', 'completed', 'failed', 'on_hold', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."intervention_type" AS ENUM('assisting-seed-rain', 'control-livestock', 'direct-seeding', 'enrichment-planting', 'fencing', 'fire-patrol', 'fire-suppression', 'firebreaks', 'generic-tree-registration', 'grass-suppression', 'liberating-regenerant', 'maintenance', 'marking-regenerant', 'multi-tree-registration', 'other-intervention', 'plot-plant-registration', 'removal-invasive-species', 'sample-tree-registration', 'single-tree-registration', 'soil-improvement', 'stop-tree-harvesting');--> statement-breakpoint
 CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'declined', 'expired', 'discarded');--> statement-breakpoint
 CREATE TYPE "public"."project_role" AS ENUM('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher');--> statement-breakpoint
+CREATE TYPE "public"."record_type" AS ENUM('planting', 'measurement', 'status_change', 'inspection', 'maintenance', 'death', 'removal', 'health_assessment', 'growth_monitoring');--> statement-breakpoint
 CREATE TYPE "public"."site_status" AS ENUM('planted', 'planting', 'barren', 'reforestation');--> statement-breakpoint
 CREATE TYPE "public"."species_request_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TYPE "public"."tree_status" AS ENUM('alive', 'dead', 'unknown', 'removed');--> statement-breakpoint
+CREATE TYPE "public"."tree_enum" AS ENUM('single', 'sample');--> statement-breakpoint
 CREATE TYPE "public"."user_type" AS ENUM('individual', 'education', 'tpo', 'organization', 'student');--> statement-breakpoint
 CREATE TABLE "intervention_configurations" (
 	"id" serial PRIMARY KEY NOT NULL,
@@ -40,7 +41,7 @@ CREATE TABLE "intervention_images" (
 	"width" integer,
 	"height" integer,
 	"image" text,
-	"image_cdn" text,
+	"image_type" "image_type" DEFAULT 'detail' NOT NULL,
 	"is_primary" boolean DEFAULT false,
 	"caption" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -53,9 +54,10 @@ CREATE TABLE "intervention_species" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"intervention_id" integer NOT NULL,
-	"scientific_species_id" integer NOT NULL,
+	"scientific_species_id" integer,
+	"is_unknown" boolean DEFAULT false NOT NULL,
+	"custom_species_name" varchar(255),
 	"planted_count" bigint DEFAULT 0,
-	"target_count" bigint,
 	"survival_rate" numeric(5, 2),
 	"notes" text,
 	"metadata" jsonb,
@@ -63,52 +65,43 @@ CREATE TABLE "intervention_species" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "intervention_species_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "intervention_species_planted_count_check" CHECK (planted_count >= 0),
-	CONSTRAINT "intervention_species_target_count_check" CHECK (target_count IS NULL OR target_count > 0),
-	CONSTRAINT "intervention_species_survival_rate_check" CHECK (survival_rate IS NULL OR (survival_rate >= 0 AND survival_rate <= 100))
+	CONSTRAINT "intervention_species_planted_count_check" CHECK (planted_count >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "interventions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"hid" varchar(16) NOT NULL,
-	"discr" "intervention_discriminator" DEFAULT 'base' NOT NULL,
+	"discr" "intervention_discriminator" DEFAULT 'intervention' NOT NULL,
+	"user_id" integer NOT NULL,
 	"project_id" integer,
 	"project_site_id" integer,
-	"user_id" integer NOT NULL,
 	"parent_intervention_id" integer,
 	"type" "intervention_type" NOT NULL,
 	"idempotency_key" varchar(64) NOT NULL,
-	"status_reason" varchar(64),
-	"registration_date" date,
-	"intervention_start_date" timestamp with time zone NOT NULL,
-	"intervention_end_date" timestamp with time zone NOT NULL,
 	"capture_mode" "capture_mode" NOT NULL,
 	"capture_status" "capture_status" DEFAULT 'complete' NOT NULL,
+	"registration_date" timestamp with time zone NOT NULL,
+	"intervention_start_date" timestamp with time zone NOT NULL,
+	"intervention_end_date" timestamp with time zone NOT NULL,
 	"location" geometry(Geometry,4326) NOT NULL,
 	"original_geometry" jsonb NOT NULL,
-	"latitude" double precision,
-	"longitude" double precision,
 	"geometry_type" varchar(50),
 	"device_location" jsonb,
-	"images" jsonb,
+	"trees_planted" bigint,
+	"sample_tree_count" bigint DEFAULT 0,
+	"status" "intervention_status" DEFAULT 'active',
+	"description" varchar(2048),
 	"image" text,
 	"image_cdn" text,
-	"trees_planted" bigint DEFAULT 0 NOT NULL,
-	"sample_tree_count" bigint DEFAULT 0,
-	"allocation_priority" "allocation_priority" DEFAULT 'manual' NOT NULL,
-	"metadata" jsonb,
-	"tag" varchar(255),
-	"description" varchar(2048),
-	"status" "intervention_status" DEFAULT 'active',
 	"is_private" boolean DEFAULT false NOT NULL,
+	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "interventions_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "interventions_hid_unique" UNIQUE("hid"),
 	CONSTRAINT "interventions_idempotency_key_unique" UNIQUE("idempotency_key"),
-	CONSTRAINT "interventions_trees_planted_check" CHECK (trees_planted >= 0),
 	CONSTRAINT "interventions_sample_tree_count_check" CHECK (sample_tree_count IS NULL OR sample_tree_count >= 0),
 	CONSTRAINT "interventions_date_range_check" CHECK (intervention_end_date >= intervention_start_date)
 );
@@ -176,7 +169,7 @@ CREATE TABLE "project_species" (
 	"uid" varchar(50) NOT NULL,
 	"scientific_species_id" integer NOT NULL,
 	"is_native_species" boolean DEFAULT false,
-	"is_disbaled" boolean DEFAULT false,
+	"is_disabled" boolean DEFAULT false,
 	"project_id" integer NOT NULL,
 	"added_by_id" integer NOT NULL,
 	"aliases" varchar(255),
@@ -266,6 +259,7 @@ CREATE TABLE "site_images" (
 	"image_cdn" text,
 	"is_primary" boolean DEFAULT false,
 	"caption" text,
+	"hide" boolean DEFAULT false,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
@@ -302,6 +296,7 @@ CREATE TABLE "species_images" (
 	"image_cdn" text,
 	"images" jsonb,
 	"is_primary" boolean DEFAULT false,
+	"hide" boolean DEFAULT false,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "species_images_size_check" CHECK (size IS NULL OR size > 0)
@@ -327,66 +322,103 @@ CREATE TABLE "species_requests" (
 	CONSTRAINT "species_requests_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
+CREATE TABLE "tree_images" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"tree_id" integer NOT NULL,
+	"tree_record_id" integer,
+	"filename" varchar(255) NOT NULL,
+	"original_name" varchar(255),
+	"mime_type" varchar(50),
+	"size" bigint,
+	"width" integer,
+	"height" integer,
+	"image" varchar(300),
+	"image_type" "image_type" DEFAULT 'detail' NOT NULL,
+	"is_primary" boolean DEFAULT false,
+	"caption" text,
+	"shooting_angle" varchar(50),
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "tree_images_uid_unique" UNIQUE("uid")
+);
+--> statement-breakpoint
 CREATE TABLE "tree_records" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"tree_id" integer NOT NULL,
 	"recorded_by_id" integer NOT NULL,
+	"record_type" "record_type" NOT NULL,
+	"recorded_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"height" double precision,
-	"diameter" double precision,
-	"crown_diameter" double precision,
+	"width" double precision,
 	"health_score" integer,
+	"vitality_score" integer,
+	"structural_integrity" varchar(50),
 	"previous_status" "tree_status",
 	"new_status" "tree_status",
-	"status_reason" varchar(64),
+	"status_reason" varchar(100),
+	"findings" text,
+	"findings_severity" varchar(50),
+	"findings_comments" text,
 	"notes" text,
-	"measurements" jsonb,
-	"images" jsonb,
-	"image" text,
-	"image_cdn" text,
+	"weather_conditions" jsonb,
+	"soil_conditions" jsonb,
+	"surrounding_vegetation" text,
+	"pests_observed" jsonb,
+	"diseases_observed" jsonb,
+	"damage_observed" jsonb,
+	"growth_rate" numeric(6, 3),
+	"leaf_density" varchar(50),
+	"fruiting_status" varchar(50),
+	"recommended_actions" jsonb,
+	"priority_level" varchar(20),
 	"is_public" boolean DEFAULT true NOT NULL,
-	"record_type" varchar(50) DEFAULT 'measurement',
+	"device_location" jsonb,
+	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	"metadata" jsonb,
 	CONSTRAINT "tree_records_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "tree_records_health_score_check" CHECK (health_score IS NULL OR (health_score >= 1 AND health_score <= 10)),
-	CONSTRAINT "tree_records_height_check" CHECK (height IS NULL OR height > 0),
-	CONSTRAINT "tree_records_diameter_check" CHECK (diameter IS NULL OR diameter > 0),
-	CONSTRAINT "tree_records_crown_diameter_check" CHECK (crown_diameter IS NULL OR crown_diameter > 0)
+	CONSTRAINT "tree_records_health_score_check" CHECK (health_score IS NULL OR (health_score >= 0 AND health_score <= 100)),
+	CONSTRAINT "tree_records_vitality_score_check" CHECK (vitality_score IS NULL OR (vitality_score >= 0 AND vitality_score <= 100)),
+	CONSTRAINT "tree_records_status_change_check" CHECK ((record_type = 'status_change' AND previous_status IS NOT NULL AND new_status IS NOT NULL) OR 
+        (record_type != 'status_change'))
 );
 --> statement-breakpoint
 CREATE TABLE "trees" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
+	"hid" varchar(50) NOT NULL,
 	"intervention_id" integer,
-	"scientific_species_id" integer,
 	"intervention_species_id" integer,
-	"created_by_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
 	"tag" varchar(100),
-	"type" varchar(100),
+	"tree_type" "tree_enum" NOT NULL,
 	"latitude" double precision NOT NULL,
 	"longitude" double precision NOT NULL,
 	"altitude" numeric(8, 2),
 	"accuracy" numeric(6, 2),
-	"current_height" double precision,
-	"current_diameter" double precision,
+	"planting_date" date NOT NULL,
+	"height" double precision,
+	"width" double precision,
+	"capture_mode" "capture_mode" NOT NULL,
+	"capture_status" "capture_status" DEFAULT 'complete' NOT NULL,
 	"status" "tree_status" DEFAULT 'alive' NOT NULL,
-	"planting_date" date,
+	"status_reason" varchar(100),
+	"status_changed_at" timestamp with time zone,
 	"last_measurement_date" timestamp with time zone,
-	"images" jsonb,
+	"next_measurement_date" timestamp with time zone,
+	"measurement_frequency_days" integer,
 	"image" text,
-	"image_cdn" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"metadata" jsonb,
 	CONSTRAINT "trees_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "trees_coordinates_check" CHECK (latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180),
-	CONSTRAINT "trees_height_check" CHECK (current_height IS NULL OR current_height > 0),
-	CONSTRAINT "trees_diameter_check" CHECK (current_diameter IS NULL OR current_diameter > 0),
-	CONSTRAINT "trees_accuracy_check" CHECK (accuracy IS NULL OR accuracy >= 0)
+	CONSTRAINT "trees_hid_unique" UNIQUE("hid"),
+	CONSTRAINT "trees_measurement_frequency_check" CHECK (measurement_frequency_days IS NULL OR measurement_frequency_days > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -423,9 +455,9 @@ CREATE TABLE "users" (
 ALTER TABLE "intervention_images" ADD CONSTRAINT "intervention_images_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_parent_intervention_id_interventions_id_fk" FOREIGN KEY ("parent_intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -443,32 +475,38 @@ ALTER TABLE "species_images" ADD CONSTRAINT "species_images_species_id_project_s
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_requested_by_id_users_id_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tree_images" ADD CONSTRAINT "tree_images_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tree_images" ADD CONSTRAINT "tree_images_tree_record_id_tree_records_id_fk" FOREIGN KEY ("tree_record_id") REFERENCES "public"."tree_records"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_recorded_by_id_users_id_fk" FOREIGN KEY ("recorded_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trees" ADD CONSTRAINT "trees_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_species_id_intervention_species_id_fk" FOREIGN KEY ("intervention_species_id") REFERENCES "public"."intervention_species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trees" ADD CONSTRAINT "trees_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "intervention_config_type_idx" ON "intervention_configurations" USING btree ("intervention_type");--> statement-breakpoint
 CREATE INDEX "intervention_images_intervention_id_idx" ON "intervention_images" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_images_primary_idx" ON "intervention_images" USING btree ("intervention_id","is_primary");--> statement-breakpoint
+CREATE INDEX "intervention_images_type_idx" ON "intervention_images" USING btree ("image_type");--> statement-breakpoint
 CREATE INDEX "intervention_species_intervention_idx" ON "intervention_species" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_species_species_idx" ON "intervention_species" USING btree ("scientific_species_id");--> statement-breakpoint
 CREATE INDEX "intervention_species_planted_count_idx" ON "intervention_species" USING btree ("planted_count");--> statement-breakpoint
+CREATE INDEX "intervention_species_uid_idx" ON "intervention_species" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "interventions_discr_idx" ON "interventions" USING btree ("discr");--> statement-breakpoint
 CREATE INDEX "interventions_project_idx" ON "interventions" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "interventions_project_site_idx" ON "interventions" USING btree ("project_site_id");--> statement-breakpoint
 CREATE INDEX "interventions_user_idx" ON "interventions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "interventions_type_idx" ON "interventions" USING btree ("type");--> statement-breakpoint
+CREATE INDEX "interventions_idempotencyKey_idx" ON "interventions" USING btree ("idempotency_key");--> statement-breakpoint
 CREATE INDEX "interventions_capture_mode_idx" ON "interventions" USING btree ("capture_mode");--> statement-breakpoint
 CREATE INDEX "interventions_capture_status_idx" ON "interventions" USING btree ("capture_status");--> statement-breakpoint
-CREATE INDEX "interventions_status_idx" ON "interventions" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "interventions_private_idx" ON "interventions" USING btree ("is_private");--> statement-breakpoint
 CREATE INDEX "interventions_parent_idx" ON "interventions" USING btree ("parent_intervention_id");--> statement-breakpoint
+CREATE INDEX "interventions_uid_idx" ON "interventions" USING btree ("uid");--> statement-breakpoint
+CREATE INDEX "interventions_hid_idx" ON "interventions" USING btree ("hid");--> statement-breakpoint
+CREATE INDEX "interventions_start_date_idx" ON "interventions" USING btree ("intervention_start_date");--> statement-breakpoint
+CREATE INDEX "interventions_end_date_idx" ON "interventions" USING btree ("intervention_end_date");--> statement-breakpoint
+CREATE INDEX "interventions_date_range_idx" ON "interventions" USING btree ("intervention_start_date","intervention_end_date");--> statement-breakpoint
+CREATE INDEX "interventions_trees_planted_idx" ON "interventions" USING btree ("trees_planted");--> statement-breakpoint
 CREATE INDEX "interventions_user_type_idx" ON "interventions" USING btree ("user_id","type");--> statement-breakpoint
-CREATE INDEX "interventions_site_status_idx" ON "interventions" USING btree ("project_site_id","status");--> statement-breakpoint
-CREATE INDEX "interventions_type_status_idx" ON "interventions" USING btree ("type","status");--> statement-breakpoint
-CREATE INDEX "interventions_active_idx" ON "interventions" USING btree ("project_id") WHERE status = 'active';--> statement-breakpoint
 CREATE INDEX "interventions_with_trees_idx" ON "interventions" USING btree ("type") WHERE type IN ('multi-tree-registration', 'sample-tree-registration', 'single-tree-registration', 'enrichment-planting');--> statement-breakpoint
 CREATE INDEX "notifications_user_id_idx" ON "notifications" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "notifications_type_idx" ON "notifications" USING btree ("type");--> statement-breakpoint
@@ -500,10 +538,12 @@ CREATE INDEX "projects_created_by_idx" ON "projects" USING btree ("created_by_id
 CREATE UNIQUE INDEX "projects_unique_primary_per_user_idx" ON "projects" USING btree ("created_by_id") WHERE "projects"."is_primary" = true;--> statement-breakpoint
 CREATE INDEX "scientific_species_name_idx" ON "scientific_species" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "scientific_species_common_name_idx" ON "scientific_species" USING btree ("common_name");--> statement-breakpoint
+CREATE INDEX "scientific_species_uid_idx" ON "scientific_species" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "site_images_site_id_idx" ON "site_images" USING btree ("site_id");--> statement-breakpoint
 CREATE INDEX "site_images_primary_idx" ON "site_images" USING btree ("site_id","is_primary");--> statement-breakpoint
 CREATE INDEX "sites_project_id_idx" ON "sites" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "sites_location_gist_idx" ON "sites" USING gist ("location");--> statement-breakpoint
+CREATE INDEX "sites_uid_idx" ON "sites" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "species_images_species_id_idx" ON "species_images" USING btree ("species_id");--> statement-breakpoint
 CREATE INDEX "species_images_primary_idx" ON "species_images" USING btree ("species_id","is_primary");--> statement-breakpoint
 CREATE INDEX "species_requests_requested_by_idx" ON "species_requests" USING btree ("requested_by_id");--> statement-breakpoint
@@ -511,28 +551,37 @@ CREATE INDEX "species_requests_status_idx" ON "species_requests" USING btree ("s
 CREATE INDEX "species_requests_scientific_name_idx" ON "species_requests" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "species_requests_reviewed_by_idx" ON "species_requests" USING btree ("reviewed_by_id");--> statement-breakpoint
 CREATE INDEX "species_requests_project_idx" ON "species_requests" USING btree ("project_id");--> statement-breakpoint
+CREATE INDEX "tree_images_tree_id_idx" ON "tree_images" USING btree ("tree_id");--> statement-breakpoint
+CREATE INDEX "tree_images_tree_record_idx" ON "tree_images" USING btree ("tree_record_id");--> statement-breakpoint
+CREATE INDEX "tree_images_primary_idx" ON "tree_images" USING btree ("tree_id","is_primary");--> statement-breakpoint
+CREATE INDEX "tree_images_type_idx" ON "tree_images" USING btree ("image_type");--> statement-breakpoint
 CREATE INDEX "tree_records_tree_id_idx" ON "tree_records" USING btree ("tree_id");--> statement-breakpoint
 CREATE INDEX "tree_records_recorded_by_idx" ON "tree_records" USING btree ("recorded_by_id");--> statement-breakpoint
-CREATE INDEX "tree_records_uid_idx" ON "tree_records" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "tree_records_type_idx" ON "tree_records" USING btree ("record_type");--> statement-breakpoint
-CREATE INDEX "tree_records_created_at_idx" ON "tree_records" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "tree_records_status_change_idx" ON "tree_records" USING btree ("tree_id","new_status");--> statement-breakpoint
+CREATE INDEX "tree_records_recorded_at_idx" ON "tree_records" USING btree ("recorded_at");--> statement-breakpoint
+CREATE INDEX "tree_records_uid_idx" ON "tree_records" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "tree_records_tree_type_idx" ON "tree_records" USING btree ("tree_id","record_type");--> statement-breakpoint
-CREATE INDEX "tree_records_tree_created_idx" ON "tree_records" USING btree ("tree_id","created_at");--> statement-breakpoint
-CREATE INDEX "tree_records_latest_idx" ON "tree_records" USING btree ("tree_id","created_at") WHERE deleted_at IS NULL;--> statement-breakpoint
-CREATE INDEX "tree_records_measurements_idx" ON "tree_records" USING btree ("tree_id") WHERE record_type = 'measurement';--> statement-breakpoint
+CREATE INDEX "tree_records_tree_recorded_at_idx" ON "tree_records" USING btree ("tree_id","recorded_at");--> statement-breakpoint
+CREATE INDEX "tree_records_status_change_idx" ON "tree_records" USING btree ("tree_id","new_status");--> statement-breakpoint
+CREATE INDEX "tree_records_health_score_idx" ON "tree_records" USING btree ("health_score");--> statement-breakpoint
+CREATE INDEX "tree_records_priority_idx" ON "tree_records" USING btree ("priority_level");--> statement-breakpoint
+CREATE INDEX "tree_records_latest_idx" ON "tree_records" USING btree ("tree_id","recorded_at") WHERE deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "tree_records_measurements_idx" ON "tree_records" USING btree ("tree_id","recorded_at") WHERE record_type = 'measurement' AND deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "tree_records_health_idx" ON "tree_records" USING btree ("tree_id","health_score") WHERE health_score IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "tree_records_planting_idx" ON "tree_records" USING btree ("tree_id") WHERE record_type = 'planting';--> statement-breakpoint
 CREATE INDEX "trees_intervention_idx" ON "trees" USING btree ("intervention_id");--> statement-breakpoint
-CREATE INDEX "trees_species_idx" ON "trees" USING btree ("scientific_species_id");--> statement-breakpoint
+CREATE INDEX "trees_uid_idx" ON "trees" USING btree ("uid");--> statement-breakpoint
+CREATE INDEX "trees_hid_idx" ON "trees" USING btree ("hid");--> statement-breakpoint
 CREATE INDEX "trees_intervention_species_idx" ON "trees" USING btree ("intervention_species_id");--> statement-breakpoint
-CREATE INDEX "trees_created_by_idx" ON "trees" USING btree ("created_by_id");--> statement-breakpoint
+CREATE INDEX "trees_user_id_idx" ON "trees" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "trees_status_idx" ON "trees" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "trees_type_idx" ON "trees" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "trees_planting_date_idx" ON "trees" USING btree ("planting_date");--> statement-breakpoint
 CREATE INDEX "trees_last_measurement_idx" ON "trees" USING btree ("last_measurement_date");--> statement-breakpoint
+CREATE INDEX "trees_next_measurement_idx" ON "trees" USING btree ("next_measurement_date");--> statement-breakpoint
 CREATE INDEX "trees_coords_idx" ON "trees" USING btree ("latitude","longitude");--> statement-breakpoint
-CREATE INDEX "trees_location_gist_idx" ON "trees" USING gist (ST_Point(longitude, latitude));--> statement-breakpoint
+CREATE INDEX "trees_status_date_idx" ON "trees" USING btree ("status","status_changed_at");--> statement-breakpoint
 CREATE INDEX "trees_intervention_status_idx" ON "trees" USING btree ("intervention_id","status");--> statement-breakpoint
-CREATE INDEX "trees_species_status_idx" ON "trees" USING btree ("scientific_species_id","status");--> statement-breakpoint
-CREATE INDEX "trees_type_status_idx" ON "trees" USING btree ("type","status");--> statement-breakpoint
+CREATE INDEX "trees_location_gist_idx" ON "trees" USING gist (ST_Point(longitude, latitude));--> statement-breakpoint
 CREATE INDEX "users_email_idx" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "users_auth0_id_idx" ON "users" USING btree ("auth0_id");
+CREATE INDEX "users_auth0_id_idx" ON "users" USING btree ("auth0_id");--> statement-breakpoint
+CREATE INDEX "users_uid_idx" ON "users" USING btree ("uid");

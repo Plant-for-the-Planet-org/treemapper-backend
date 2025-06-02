@@ -21,6 +21,18 @@ import {
 } from './dto/interventions.dto';
 import * as XLSX from 'xlsx';
 import { generateUid } from 'src/util/uidGenerator';
+import { generateParentHID } from 'src/util/hidGenerator';
+import { ProjectGuardResponse } from 'src/projects/projects.service';
+import { uuid } from 'drizzle-orm/pg-core';
+import { generateIdempotencyKey } from 'src/util/idempotencyKeyGenerator';
+import { interventionConfigurationSeedData } from 'src/database/schema/interventionConfig';
+import { int } from 'drizzle-orm/mysql-core';
+
+export enum CaptureStatus {
+  COMPLETE = 'complete',
+  PARTIAL = 'partial',
+  INCOMPLETE = 'incomplete',
+}
 
 @Injectable()
 export class InterventionsService {
@@ -28,210 +40,225 @@ export class InterventionsService {
     private drizzleService: DrizzleService,
   ) { }
 
-  async create(createInterventionDto: CreateInterventionDto, userId: number): Promise<InterventionResponseDto> {
+  async create(createInterventionDto: CreateInterventionDto, membership: ProjectGuardResponse): Promise<InterventionResponseDto> {
+    try {
+      let newHID = generateParentHID();
+      let projectSiteNumId = 0;
 
-
-    // const existingHid = await this.drizzleService.db
-    //   .select()
-    //   .from(interventions)
-    //   .where(eq(interventions.hid, createInterventionDto.hid))
-    //   .limit(1);
-
-    // if (existingHid.length > 0) {
-    //   throw new ConflictException('Intervention with this HID already exists');
-    // }
-
-    // Get intervention configuration to validate capabilities
-    const config = await this.drizzleService.db
-      .select()
-      .from(interventionConfigurations)
-      .where(eq(interventionConfigurations.interventionType, createInterventionDto.type))
-      .limit(1);
-
-    if (config.length === 0) {
-      throw new BadRequestException('Invalid intervention type');
-    }
-
-    const interventionConfig = config[0];
-
-    // Validate species requirements
-    if (interventionConfig.requiresSpecies && (!createInterventionDto.species || createInterventionDto.species.length === 0)) {
-      throw new BadRequestException('This intervention type requires at least one species');
-    }
-
-    if (!interventionConfig.allowsSpecies && createInterventionDto.species && createInterventionDto.species.length > 0) {
-      throw new BadRequestException('This intervention type does not allow species');
-    }
-
-    if (!interventionConfig.allowsMultipleSpecies && createInterventionDto.species && createInterventionDto.species.length > 1) {
-      throw new BadRequestException('This intervention type allows only single species');
-    }
-
-    // Validate project and site existence if provided
-    if (createInterventionDto.projectId) {
-      const project = await this.drizzleService.db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, createInterventionDto.projectId))
-        .limit(1);
-
-      if (project.length === 0) {
-        throw new NotFoundException('Project not found');
-      }
-    }
-
-    if (createInterventionDto.projectSiteId) {
-      const site = await this.drizzleService.db
-        .select()
-        .from(sites)
-        .where(eq(sites.id, createInterventionDto.projectSiteId))
-        .limit(1);
-
-      if (site.length === 0) {
-        throw new NotFoundException('Site not found');
-      }
-    }
-
-    // Validate parent intervention if provided
-    if (createInterventionDto.parentInterventionId) {
-      const parentIntervention = await this.drizzleService.db
+      const existingHid = await this.drizzleService.db
         .select()
         .from(interventions)
-        .where(eq(interventions.id, createInterventionDto.parentInterventionId))
+        .where(eq(interventions.hid, newHID))
         .limit(1);
 
-      if (parentIntervention.length === 0) {
-        throw new NotFoundException('Parent intervention not found');
-      }
-    }
-
-    // Start transaction for intervention creation
-    return await this.drizzleService.db.transaction(async (tx) => {
-      // Generate UID
-      const uid = generateUid('inv');
-
-      // Prepare intervention data matching your schema exactly
-      const interventionData = {
-        uid: "",
-        hid: createInterventionDto.hid,
-        discr: 'base' as const,
-        userId,
-        type: createInterventionDto.type,
-        idempotencyKey: createInterventionDto.idempotencyKey,
-        interventionStartDate: new Date(createInterventionDto.interventionStartDate),
-        interventionEndDate: new Date(createInterventionDto.interventionEndDate),
-        captureMode: createInterventionDto.captureMode,
-        captureStatus: createInterventionDto.captureStatus, // required in DTO even if has default
-        location: sql`ST_GeomFromGeoJSON(${JSON.stringify(createInterventionDto.location)})`,
-        originalGeometry: createInterventionDto.originalGeometry,
-        latitude: createInterventionDto.latitude,
-        longitude: createInterventionDto.longitude,
-        geometryType: createInterventionDto.geometryType,
-        treesPlanted: Number(createInterventionDto.treesPlanted ?? 0), // required in DB (notNull), DTO optional
-        allocationPriority: createInterventionDto.allocationPriority,
-        isPrivate: createInterventionDto.isPrivate,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      // Create intervention
-      const result = await tx
-        .insert(interventions)
-        .values(interventionData)
-        .returning();
-
-      const newIntervention = Array.isArray(result) ? result[0] : undefined;
-      if (!newIntervention) {
-        throw new Error('Failed to create intervention');
-      }
-
-      // Create intervention species if provided
-      if (createInterventionDto.species && createInterventionDto.species.length > 0) {
-        // Validate that all species exist
-        const speciesIds = createInterventionDto.species.map(s => s.scientificSpeciesId);
-        const existingSpecies = await tx
+      if (existingHid.length > 0) {
+        newHID = generateParentHID();
+        const existingHid = await this.drizzleService.db
           .select()
-          .from(scientificSpecies)
-          .where(inArray(scientificSpecies.id, speciesIds));
+          .from(interventions)
+          .where(eq(interventions.hid, newHID))
+          .limit(1);
+        if (existingHid.length > 0) {
+          throw new ConflictException('Intervention with this HID already exists');
+        }
+      }
 
-        if (existingSpecies.length !== speciesIds.length) {
-          throw new BadRequestException('One or more species not found');
+      const interventionConfig = interventionConfigurationSeedData.find(el => el.interventionType === createInterventionDto.type);
+      if (!interventionConfig) {
+        throw new BadRequestException('Invalid intervention type');
+      }
+
+      // Early validation for species configuration
+      if (interventionConfig.allowsMultipleSpecies) {
+        // For multi-species: only plantedSpecies should be present
+        if (createInterventionDto.scientificSpecies || createInterventionDto.otherSpecies) {
+          throw new BadRequestException('For multi-species interventions, only plantedSpecies should be provided');
+        }
+        if (interventionConfig.requiresSpecies && (!createInterventionDto.plantedSpecies || createInterventionDto.plantedSpecies.length === 0)) {
+          throw new BadRequestException('This intervention type requires at least one species in plantedSpecies');
+        }
+      } else if (interventionConfig.allowsSpecies) {
+        // For single-species: either scientificSpecies OR otherSpecies, not plantedSpecies
+        if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+          throw new BadRequestException('For single-species interventions, use scientificSpecies or otherSpecies instead of plantedSpecies');
+        }
+        if (createInterventionDto.scientificSpecies && createInterventionDto.otherSpecies) {
+          throw new BadRequestException('For single-species interventions, provide either scientificSpecies OR otherSpecies, not both');
+        }
+        if (interventionConfig.requiresSpecies && !createInterventionDto.scientificSpecies && !createInterventionDto.otherSpecies) {
+          throw new BadRequestException('This intervention type requires either scientificSpecies or otherSpecies');
+        }
+      } else {
+        // No species allowed
+        if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+        if (createInterventionDto.scientificSpecies) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+        if (createInterventionDto.otherSpecies) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+      }
+
+      // Project site validation
+      if (createInterventionDto.plantProjectSite && !createInterventionDto.plantProject) {
+        throw new BadRequestException('Project site ID provided without project ID');
+      }
+
+      if (createInterventionDto.plantProject && createInterventionDto.plantProjectSite) {
+        const site = await this.drizzleService.db
+          .select()
+          .from(sites)
+          .where(eq(sites.uid, createInterventionDto.plantProjectSite))
+          .limit(1);
+        if (site.length === 0) {
+          throw new NotFoundException('Site not found');
+        }
+        projectSiteNumId = site[0].id;
+      }
+
+      // Use allowed literal values for captureStatus
+      const captureStatus: CaptureStatus = interventionConfig.allowsSampleTrees ? CaptureStatus.INCOMPLETE : CaptureStatus.COMPLETE;
+      const sampleTreeCount = createInterventionDto.sampleTreeCount || 0;
+      const geometryType = createInterventionDto.geometry.type || 'Point';
+
+      // Start transaction for intervention creation
+      return await this.drizzleService.db.transaction(async (tx) => {
+        // Generate UID
+        const uid = generateUid('inv');
+
+        // Prepare intervention data matching your schema exactly
+        const interventionData = {
+          uid: uid,
+          hid: newHID,
+          discr: 'intervention' as const,
+          userId: membership.userId,
+          idempotencyKey: generateUid('inv'),
+          type: createInterventionDto.type,
+          interventionStartDate: new Date(createInterventionDto.interventionStartDate),
+          interventionEndDate: new Date(createInterventionDto.interventionEndDate),
+          captureMode: 'on_site' as const,
+          captureStatus: captureStatus,
+          location: sql`ST_GeomFromGeoJSON(${JSON.stringify(createInterventionDto.geometry)})`,
+          originalGeometry: createInterventionDto.geometry,
+          sampleTreeCount: sampleTreeCount,
+          projectId: membership.projectId,
+          deviceLocation: createInterventionDto.deviceLocation,
+          metaData: createInterventionDto.metadata || {},
+          projectSiteId: projectSiteNumId,
+          geometryType: geometryType,
+          registrationDate: new Date(createInterventionDto.registrationDate),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        // Create intervention
+        const result = await tx
+          .insert(interventions)
+          .values(interventionData)
+          .returning();
+
+        const newIntervention = Array.isArray(result) ? result[0] : undefined;
+        if (!newIntervention) {
+          throw new Error('Failed to create intervention');
         }
 
-        // Insert intervention species
-        const speciesData = createInterventionDto.species.map(species => ({
-          uid: generateUid('spi'),
-          interventionId: newIntervention.id,
-          scientificSpeciesId: species.scientificSpeciesId,
-          plantedCount: typeof species.plantedCount === 'bigint'
-            ? Number(species.plantedCount)
-            : Number(species.plantedCount || 0),
-          targetCount: species.targetCount !== undefined && species.targetCount !== null
-            ? Number(species.targetCount)
-            : null,
-          survivalRate: species.survivalRate ? species.survivalRate.toString() : null,
-          notes: species.notes || null,
-          metadata: species.metadata || null,
-        }));
+        console.log('New intervention created:', newIntervention);
 
-        await tx.insert(interventionSpecies).values(speciesData);
-      }
+        // Handle species creation based on intervention configuration
+        if (interventionConfig.allowsSpecies) {
+          if (interventionConfig.allowsMultipleSpecies) {
+            // Multi-species handling
+            if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+              // Validate that all scientific species exist
+              const checkIfSciExists = createInterventionDto.plantedSpecies.filter(s => s.scientificSpeciesId);
+              const speciesIds = checkIfSciExists.map(s => s.scientificSpeciesId);
 
-      return this.findOne(newIntervention.id);
-    });
+              if (speciesIds.length > 0) {
+                const existingSpecies = await tx
+                  .select()
+                  .from(scientificSpecies)
+                  .where(inArray(scientificSpecies.id, speciesIds));
+
+                if (existingSpecies.length !== speciesIds.length) {
+                  throw new BadRequestException('One or more species not found');
+                }
+              }
+
+              // Insert intervention species
+              const speciesData = createInterventionDto.plantedSpecies.map(species => {
+                const payload = {
+                  uid: generateUid('invspc'),
+                  interventionId: newIntervention.id,
+                  plantedCount: species.treeCount
+                }
+                if (species.scientificSpeciesId) {
+                  payload['scientificSpeciesId'] = species.scientificSpeciesId;
+                }
+                if (species.otherSpecies) {
+                  payload['isUnknown'] = true;
+                  payload['customSpeciesName'] = 'Unknown'
+                }
+                return payload
+              });
+
+              console.log('Intervention data:', "Here is the species data", speciesData);
+              await tx.insert(interventionSpecies).values(speciesData);
+            }
+          } else {
+            // Single-species handling
+            if (createInterventionDto.otherSpecies) {
+              const speciesData = {
+                uid: generateUid('invspc'),
+                interventionId: newIntervention.id,
+                isUnknown: true,
+                customSpeciesName: 'Unknown',
+                plantedCount: 1
+              };
+              await tx.insert(interventionSpecies).values(speciesData);
+            }
+
+            if (createInterventionDto.scientificSpecies) {
+              const existingSpecies = await tx
+                .select()
+                .from(scientificSpecies)
+                .where(eq(scientificSpecies.id, createInterventionDto.scientificSpecies))
+                .limit(1);
+
+              if (existingSpecies.length === 0) {
+                throw new BadRequestException('Scientific species not found');
+              }
+
+              const speciesData = {
+                uid: generateUid('invspc'),
+                interventionId: newIntervention.id,
+                scientificSpeciesId: createInterventionDto.scientificSpecies,
+                plantedCount: 1
+              };
+              await tx.insert(interventionSpecies).values(speciesData);
+            }
+          }
+        }
+
+        return { uid: newIntervention.uid, hid: newIntervention.hid } as InterventionResponseDto;
+      });
+    } catch (error) {
+      throw new BadRequestException(`Failed to create intervention: ${error.message}`);
+    }
   }
 
   async findOne(id: number): Promise<InterventionResponseDto> {
     const data = await this.drizzleService.db
       .select({
         id: interventions.id,
-        uid: interventions.uid,
-        hid: interventions.hid,
-        type: interventions.type,
-        projectId: interventions.projectId,
-        projectSiteId: interventions.projectSiteId,
-        userId: interventions.userId,
-        parentInterventionId: interventions.parentInterventionId,
-        registrationDate: interventions.registrationDate,
-        interventionStartDate: interventions.interventionStartDate,
-        interventionEndDate: interventions.interventionEndDate,
-        captureMode: interventions.captureMode,
-        captureStatus: interventions.captureStatus,
-        location: interventions.location,
-        originalGeometry: interventions.originalGeometry,
-        latitude: interventions.latitude,
-        longitude: interventions.longitude,
-        geometryType: interventions.geometryType,
-        deviceLocation: interventions.deviceLocation,
-        treesPlanted: interventions.treesPlanted,
-        sampleTreeCount: interventions.sampleTreeCount,
-        allocationPriority: interventions.allocationPriority,
-        description: interventions.description,
-        tag: interventions.tag,
-        status: interventions.status,
-        statusReason: interventions.statusReason,
-        isPrivate: interventions.isPrivate,
-        metadata: interventions.metadata,
-        allImages: interventions.allImages,
-        image: interventions.image,
-        imageCdn: interventions.imageCdn,
-        createdAt: interventions.createdAt,
-        updatedAt: interventions.updatedAt,
-        // Related data
-        projectName: projects.projectName,
-        siteName: sites.name,
-        userName: users.name,
       })
       .from(interventions)
-      .leftJoin(projects, eq(interventions.projectId, projects.id))
-      .leftJoin(sites, eq(interventions.projectSiteId, sites.id))
-      .leftJoin(users, eq(interventions.userId, users.id))
       .where(and(
-        eq(interventions.id, id),
-        sql`${interventions.deletedAt} IS NULL`
+        eq(interventions.id, id)
       ))
       .limit(1);
-
+    console.log('Intervention data:', data);
     if (data.length === 0) {
       throw new NotFoundException('Intervention not found');
     }
@@ -253,12 +280,10 @@ export class InterventionsService {
     const speciesData = await this.drizzleService.db
       .select({
         interventionId: interventionSpecies.interventionId,
-        id: interventionSpecies.id,
         scientificSpeciesId: interventionSpecies.scientificSpeciesId,
         scientificName: scientificSpecies.scientificName,
         commonName: scientificSpecies.commonName,
         plantedCount: interventionSpecies.plantedCount,
-        targetCount: interventionSpecies.targetCount,
         survivalRate: interventionSpecies.survivalRate,
         notes: interventionSpecies.notes,
       })
@@ -276,7 +301,6 @@ export class InterventionsService {
       }
       grouped[species.interventionId].push(species);
     }
-
     return grouped;
   }
 

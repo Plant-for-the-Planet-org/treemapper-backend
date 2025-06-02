@@ -1,7 +1,8 @@
 // src/modules/interventions/dto/create-intervention.dto.ts
-import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean, IsArray, ValidateNested, IsObject, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean, IsArray, ValidateNested, IsObject, Min, Max, IsJSON } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsGeoJSON } from 'src/common/decorator/validation.decorators';
 
 export enum InterventionType {
   ASSISTING_SEED_RAIN = 'assisting-seed-rain',
@@ -91,72 +92,45 @@ export class DeviceLocationDto {
 }
 
 export class InterventionSpeciesDto {
-  @ApiProperty({ example: 1 })
   @IsNumber()
   scientificSpeciesId: number;
 
-  @ApiPropertyOptional({ example: 100 })
-  @IsOptional()
   @IsNumber()
   @Min(0)
   plantedCount?: number;
-
-  @ApiPropertyOptional({ example: 150 })
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  targetCount?: number;
-
-  @ApiPropertyOptional({ example: 85.5 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  survivalRate?: number;
-
-  @ApiPropertyOptional({ example: 'Good growth observed' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsObject()
-  metadata?: any;
 }
 
 export class CreateInterventionDto {
-  @ApiProperty({ example: 'INT-2024-001' })
-  @IsString()
-  hid: string;
 
-  @ApiProperty({ enum: InterventionType })
   @IsEnum(InterventionType)
   type: InterventionType;
 
-  @ApiProperty({ example: 'unique-key-123' })
+  @IsOptional()
   @IsString()
-  idempotencyKey: string;
+  captureMode?: string;
 
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @IsNumber()
-  projectId?: number;
 
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @IsNumber()
-  projectSiteId?: number;
+  @IsObject() //TODO : fixed schema
+  deviceLocation?: any;
 
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @IsNumber()
-  parentInterventionId?: number;
 
-  @ApiProperty({ example: '2024-01-15' })
   @IsOptional()
+  @IsGeoJSON({ message: 'Invalid GeoJSON format' })
+  geometry?: any;
+
   @IsDateString()
-  registrationDate?: string;
+  registrationDate: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: any;
+
+  @IsString()
+  plantProject?: string;
+
+  @IsOptional()
+  @IsString()
+  plantProjectSite?: string;
 
   @ApiProperty({ example: '2024-01-15T09:00:00Z' })
   @IsDateString()
@@ -166,100 +140,42 @@ export class CreateInterventionDto {
   @IsDateString()
   interventionEndDate: string;
 
-  @ApiProperty({ enum: CaptureMode })
-  @IsEnum(CaptureMode)
-  captureMode: CaptureMode;
+  @IsOptional()
+  @IsArray()
+  plantedSpecies: any[]
 
-  @ApiProperty({ enum: CaptureStatus, default: CaptureStatus.COMPLETE })
-  @IsEnum(CaptureStatus)
-  captureStatus: CaptureStatus = CaptureStatus.COMPLETE;
 
-  @ApiProperty({ type: GeometryDto })
-  @ValidateNested()
-  @Type(() => GeometryDto)
-  location: GeometryDto;
-
-  @ApiProperty({ type: GeometryDto })
-  @ValidateNested()
-  @Type(() => GeometryDto)
-  originalGeometry: GeometryDto;
-
-  @ApiProperty({ example: 19.0760 })
+  @IsOptional()
   @IsNumber()
-  @Min(-90)
-  @Max(90)
+  scientificSpecies: number;
+
+  @IsOptional()
+  @IsString()
+  otherSpecies: string;
+
+
+  @IsOptional()
   latitude: number;
 
-  @ApiProperty({ example: 72.8777 })
-  @IsNumber()
-  @Min(-180)
-  @Max(180)
+  @IsOptional()
   longitude: number;
 
-  @ApiProperty({ example: 'Point' })
-  @IsString()
-  geometryType: string;
 
-  @ApiPropertyOptional({ type: DeviceLocationDto })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => DeviceLocationDto)
-  deviceLocation?: DeviceLocationDto;
-
-  @ApiPropertyOptional({ example: 100 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  treesPlanted?: number;
-
-  @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   sampleTreeCount?: number;
 
-  @ApiProperty({ enum: AllocationPriority, default: AllocationPriority.MANUAL })
-  @IsEnum(AllocationPriority)
-  allocationPriority: AllocationPriority = AllocationPriority.MANUAL;
-
-  @ApiPropertyOptional({ example: 'Forest restoration project' })
-  @IsOptional()
-  @IsString()
-  description?: string;
 
   @ApiPropertyOptional({ example: 'restoration-2024' })
   @IsOptional()
   @IsString()
   tag?: string;
-
-  @ApiProperty({ enum: InterventionStatus, default: InterventionStatus.ACTIVE })
-  @IsEnum(InterventionStatus)
-  status: InterventionStatus = InterventionStatus.ACTIVE;
-
-  @ApiPropertyOptional({ example: 'Initial setup complete' })
-  @IsOptional()
-  @IsString()
-  statusReason?: string;
-
-  @ApiProperty({ default: false })
-  @IsBoolean()
-  isPrivate: boolean = false;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsObject()
-  metadata?: any;
-
-  @ApiPropertyOptional({ type: [InterventionSpeciesDto] })
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => InterventionSpeciesDto)
-  species?: InterventionSpeciesDto[];
 }
 
 // src/modules/interventions/dto/update-intervention.dto.ts
 import { PartialType } from '@nestjs/swagger';
+import { is } from 'drizzle-orm';
 
 export class UpdateInterventionDto extends PartialType(CreateInterventionDto) {
   @ApiPropertyOptional({ example: ['image1.jpg', 'image2.jpg'] })

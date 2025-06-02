@@ -55,8 +55,19 @@ export const userTypeEnum = pgEnum('user_type', ['individual', 'education', 'tpo
 // Site and tree enums
 export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'barren', 'reforestation']);
 export const treeStatusEnum = pgEnum('tree_status', ['alive', 'dead', 'unknown', 'removed']);
+export const recordTypeEnum = pgEnum('record_type', [
+  'planting',
+  'measurement',
+  'status_change',
+  'inspection',
+  'maintenance',
+  'death',
+  'removal',
+  'health_assessment',
+  'growth_monitoring'
+]);
 
-//intervention enums
+// Intervention enums
 export const interventionTypeEnum = pgEnum('intervention_type', [
   'assisting-seed-rain',
   'control-livestock',
@@ -82,20 +93,20 @@ export const interventionTypeEnum = pgEnum('intervention_type', [
 ]);
 
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
-
-
 export const captureModeEnum = pgEnum('capture_mode', ['on_site', 'off_site']);
 export const captureStatusEnum = pgEnum('capture_status', ['complete', 'partial', 'incomplete']);
-export const allocationPriorityEnum = pgEnum('allocation_priority', ['manual', 'automatic', 'high', 'medium', 'low']);
-export const interventionDiscriminatorEnum = pgEnum('intervention_discriminator', ['base', 'generic', 'plot', 'sample', 'intervention']);
-export const interventionStatusEnum = pgEnum('intervention_status', ['active', 'completed', 'cancelled', 'pending', 'failed']);
+export const interventionDiscriminatorEnum = pgEnum('intervention_discriminator', ['plot', 'intervention']);
+export const treeTypeEnum = pgEnum('tree_enum', ['single', 'sample']);
 
 // Coordinate and measurement enums
 export const coordinateTypeEnum = pgEnum('coordinate_type', ['gps', 'manual', 'estimated']);
-export const captureModeMethodEnum = pgEnum('capture_method', ['device', 'map', 'survey']);
+export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'survey']);
 
 // Image and media enums
-export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground']);
+export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record']);
+
+// Status enums
+export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 'active', 'completed', 'failed', 'on_hold', 'cancelled']);
 
 // ============================================================================
 // INTERVENTION CONFIGURATION TABLE
@@ -157,7 +168,8 @@ export const users = pgTable('users', {
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
 }, (table) => ({
   emailIdx: index('users_email_idx').on(table.email),
-  auth0IdIdx: index('users_auth0_id_idx').on(table.auth0Id)
+  auth0IdIdx: index('users_auth0_id_idx').on(table.auth0Id),
+  uidIdx: index('users_uid_idx').on(table.uid),
 }));
 
 // ============================================================================
@@ -193,7 +205,7 @@ export const projects = pgTable('projects', {
   isActive: boolean('is_active').notNull().default(true),
   isPublic: boolean('is_public').default(true).notNull(),
   isPrimary: boolean('is_primary').default(false).notNull(),
-  isPeronal: boolean('is_personal').default(false).notNull(),
+  isPersonal: boolean('is_personal').default(false).notNull(),
   intensity: varchar('intensity', { length: 100 }),
   revisionPeriodicityLevel: varchar('revision_periodicity_level', { length: 100 }),
   metadata: jsonb('metadata'),
@@ -277,6 +289,7 @@ export const scientificSpecies = pgTable('scientific_species', {
 }, (table) => ({
   scientificNameIdx: index('scientific_species_name_idx').on(table.scientificName),
   commonNameIdx: index('scientific_species_common_name_idx').on(table.commonName),
+  uidIdx: index('scientific_species_uid_idx').on(table.uid),
 }));
 
 // ============================================================================
@@ -288,7 +301,7 @@ export const projectSpecies = pgTable('project_species', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
   isNativeSpecies: boolean('is_native_species').default(false),
-  isDisbaled: boolean('is_disbaled').default(false),
+  isDisabled: boolean('is_disabled').default(false),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   addedById: integer('added_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }), // User who added this species to the project
   aliases: varchar('aliases', { length: 255 }),
@@ -313,7 +326,7 @@ export const projectSpecies = pgTable('project_species', {
 }));
 
 // ============================================================================
-// SPECIES IMAGES TABLE (UPDATED TO REFERENCE PROJECT SPECIES)
+// SPECIES IMAGES TABLE
 // ============================================================================
 
 export const speciesImages = pgTable('species_images', {
@@ -329,6 +342,7 @@ export const speciesImages = pgTable('species_images', {
   imageCdn: text('image_cdn'),
   allImages: jsonb('images'),
   isPrimary: boolean('is_primary').default(false),
+  hide: boolean('hide').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
@@ -336,6 +350,10 @@ export const speciesImages = pgTable('species_images', {
   primaryImageIdx: index('species_images_primary_idx').on(table.speciesId, table.isPrimary),
   sizeCheck: check('species_images_size_check', sql`size IS NULL OR size > 0`)
 }));
+
+// ============================================================================
+// SPECIES REQUESTS TABLE
+// ============================================================================
 
 export const speciesRequests = pgTable('species_requests', {
   id: serial('id').primaryKey(),
@@ -388,6 +406,7 @@ export const sites = pgTable('sites', {
 }, (table) => ({
   projectIdIdx: index('sites_project_id_idx').on(table.projectId),
   locationIdx: index('sites_location_gist_idx').using('gist', table.location),
+  uidIdx: index('sites_uid_idx').on(table.uid),
 }));
 
 // ============================================================================
@@ -408,6 +427,7 @@ export const siteImages = pgTable('site_images', {
   imageCdn: text('image_cdn'),
   isPrimary: boolean('is_primary').default(false),
   caption: text('caption'),
+  hide: boolean('hide').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -417,55 +437,59 @@ export const siteImages = pgTable('site_images', {
 }));
 
 // ============================================================================
-//  INTERVENTIONS TABLE
+// ENHANCED INTERVENTIONS TABLE
 // ============================================================================
 
 export const interventions = pgTable('interventions', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   hid: varchar('hid', { length: 16 }).notNull().unique(),
-  discr: interventionDiscriminatorEnum('discr').notNull().default('base'),
+  discr: interventionDiscriminatorEnum('discr').notNull().default('intervention'),
+
+  // Core relationships
+  userId: integer('user_id').notNull().references(() => users.id),
   projectId: integer('project_id').references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
-  userId: integer('user_id').notNull().references(() => users.id),
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
-  type: interventionTypeEnum('type').notNull(),
-  idempotencyKey: varchar('idempotency_key', { length: 64 }).notNull().unique(),
-  statusReason: varchar('status_reason', { length: 64 }),
 
-  // Date fields
-  registrationDate: date('registration_date'),
-  interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),
-  interventionEndDate: timestamp('intervention_end_date', { withTimezone: true }).notNull(),
+  // Intervention details
+  type: interventionTypeEnum('type').notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 64 }).unique().notNull(),
 
   // Capture information
   captureMode: captureModeEnum('capture_mode').notNull(),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
 
-  // Geospatial data
+  // Temporal data
+  registrationDate: timestamp('registration_date', { withTimezone: true }).notNull(),
+  interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),
+  interventionEndDate: timestamp('intervention_end_date', { withTimezone: true }).notNull(),
+
+  // Spatial data
   location: geometry(4326)('location').notNull(),
   originalGeometry: jsonb('original_geometry').notNull(),
-  latitude: doublePrecision('latitude'),
-  longitude: doublePrecision('longitude'),
   geometryType: varchar('geometry_type', { length: 50 }),
   deviceLocation: jsonb('device_location'),
 
-  // Media
-  allImages: jsonb('images'),
+  // Intervention metrics
+  treesPlanted: bigint('trees_planted', { mode: 'number' }),
+  sampleTreeCount: bigint('sample_tree_count', { mode: 'number' }).default(0),
+
+
+  // Status and quality
+  interventionStatus: interventionStatusEnum('status').default('active'),
+
+  // Content
+  description: varchar('description', { length: 2048 }),
+
+  // Images
   image: text('image'),
   imageCdn: text('image_cdn'),
 
-  // Tree counts (computed fields updated by triggers)
-  treesPlanted: bigint('trees_planted', { mode: 'number' }).notNull().default(0),
-  sampleTreeCount: bigint('sample_tree_count', { mode: 'number' }).default(0),
-
-  // Configuration
-  allocationPriority: allocationPriorityEnum('allocation_priority').notNull().default('manual'),
-  metadata: jsonb('metadata'),
-  tag: varchar('tag', { length: 255 }),
-  description: varchar('description', { length: 2048 }),
-  status: interventionStatusEnum('status').default('active'),
+  // Privacy and metadata
   isPrivate: boolean('is_private').default(false).notNull(),
+  metadata: jsonb('metadata'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -476,82 +500,81 @@ export const interventions = pgTable('interventions', {
   projectSiteIdx: index('interventions_project_site_idx').on(table.projectSiteId),
   userIdx: index('interventions_user_idx').on(table.userId),
   typeIdx: index('interventions_type_idx').on(table.type),
+  idempotencyKeyIdx: index('interventions_idempotencyKey_idx').on(table.idempotencyKey),
   captureModeIdx: index('interventions_capture_mode_idx').on(table.captureMode),
   captureStatusIdx: index('interventions_capture_status_idx').on(table.captureStatus),
-  statusIdx: index('interventions_status_idx').on(table.status),
   privateIdx: index('interventions_private_idx').on(table.isPrivate),
   parentIdx: index('interventions_parent_idx').on(table.parentInterventionId),
+  uidIdx: index('interventions_uid_idx').on(table.uid),
+  hidIdx: index('interventions_hid_idx').on(table.hid),
 
-  // Composite indexes for common queries
+  // Temporal indexes
+  startDateIdx: index('interventions_start_date_idx').on(table.interventionStartDate),
+  endDateIdx: index('interventions_end_date_idx').on(table.interventionEndDate),
+  dateRangeIdx: index('interventions_date_range_idx').on(table.interventionStartDate, table.interventionEndDate),
+
+  // Metric indexes
+  treesPlantedIdx: index('interventions_trees_planted_idx').on(table.treesPlanted),
+
+
+  // Composite indexes
   userTypeIdx: index('interventions_user_type_idx').on(table.userId, table.type),
-  siteStatusIdx: index('interventions_site_status_idx').on(table.projectSiteId, table.status),
-  typeStatusIdx: index('interventions_type_status_idx').on(table.type, table.status),
 
-  // Partial indexes for performance
-  activeInterventionsIdx: index('interventions_active_idx').on(table.projectId).where(sql`status = 'active'`),
-  treeInterventionsIdx: index('interventions_with_trees_idx').on(table.type).where(
-    sql`type IN ('multi-tree-registration', 'sample-tree-registration', 'single-tree-registration', 'enrichment-planting')`
-  ),
+  // Performance indexes
+  treeInterventionsIdx: index('interventions_with_trees_idx')
+    .on(table.type)
+    .where(sql`type IN ('multi-tree-registration', 'sample-tree-registration', 'single-tree-registration', 'enrichment-planting')`),
 
-  // Check constraints
-  treesPlantedCheck: check('interventions_trees_planted_check', sql`trees_planted >= 0`),
+  // Constraints
   sampleTreeCountCheck: check('interventions_sample_tree_count_check', sql`sample_tree_count IS NULL OR sample_tree_count >= 0`),
   dateRangeCheck: check('interventions_date_range_check', sql`intervention_end_date >= intervention_start_date`),
 }));
 
 // ============================================================================
-// NEW: INTERVENTION-SPECIES JUNCTION TABLE (UPDATED TO USE PROJECT SPECIES)
+// FIXED INTERVENTION-SPECIES TABLE
 // ============================================================================
 
 export const interventionSpecies = pgTable('intervention_species', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').notNull().references(() => interventions.id, { onDelete: 'cascade' }),
-  scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
 
-  // Species-specific data for this intervention
+  scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
+  isUnknown: boolean('is_unknown').default(false).notNull(),
+  customSpeciesName: varchar('custom_species_name', { length: 255 }),
+
   plantedCount: bigint('planted_count', { mode: 'number' }).default(0),
-  targetCount: bigint('target_count', { mode: 'number' }),
   survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }), // Percentage
   notes: text('notes'),
-
-  // Metadata for species-specific information
-  metadata: jsonb('metadata'), // Can store species-specific planting details
-
+  metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  // Unique constraint to prevent duplicate species per intervention
-
-  // Indexes for performance
   interventionIdx: index('intervention_species_intervention_idx').on(table.interventionId),
   speciesIdx: index('intervention_species_species_idx').on(table.scientificSpeciesId),
   plantedCountIdx: index('intervention_species_planted_count_idx').on(table.plantedCount),
-
-  // Check constraints
-  plantedCountCheck: check('intervention_species_planted_count_check', sql`planted_count >= 0`),
-  targetCountCheck: check('intervention_species_target_count_check', sql`target_count IS NULL OR target_count > 0`),
-  survivalRateCheck: check('intervention_species_survival_rate_check', sql`survival_rate IS NULL OR (survival_rate >= 0 AND survival_rate <= 100)`),
+  uidIdx: index('intervention_species_uid_idx').on(table.uid),
+  plantedCountCheck: check('intervention_species_planted_count_check', sql`planted_count >= 0`)
 }));
 
 // ============================================================================
-// ENHANCED TREES TABLE (UPDATED TO REFERENCE PROJECT SPECIES)
+// ENHANCED TREES TABLE
 // ============================================================================
 
 export const trees = pgTable('trees', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
+  hid: varchar('hid', { length: 50 }).notNull().unique(),
 
-  // Relationships
+  // Core relationships
   interventionId: integer('intervention_id').references(() => interventions.id, { onDelete: 'set null' }),
-  scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id, { onDelete: 'set null' }),
   interventionSpeciesId: integer('intervention_species_id').references(() => interventionSpecies.id, { onDelete: 'set null' }),
-  createdById: integer('created_by_id').notNull().references(() => users.id),
+  userId: integer('user_id').notNull().references(() => users.id),
 
   // Tree identification
   tag: varchar('tag', { length: 100 }),
-  type: varchar('type', { length: 100 }), // sample, regular, etc.
+  treeType: treeTypeEnum('tree_type').notNull(),
 
   // Location data
   latitude: doublePrecision('latitude').notNull(),
@@ -559,53 +582,58 @@ export const trees = pgTable('trees', {
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
 
-  // Current measurements (updated from latest tree record)
-  currentHeight: doublePrecision('current_height'),
-  currentDiameter: doublePrecision('current_diameter'),
+  // Core tree data
+  plantingDate: date('planting_date').notNull(),
+
+  // Current measurements
+  height: doublePrecision('height'),
+  width: doublePrecision('width'), // DBH
+
+  // Capture metadata
+  captureMode: captureModeEnum('capture_mode').notNull(),
+  captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
+
+  // Status tracking
   status: treeStatusEnum('status').default('alive').notNull(),
+  statusReason: varchar('status_reason', { length: 100 }),
+  statusChangedAt: timestamp('status_changed_at', { withTimezone: true }),
 
-  // Important dates
-  plantingDate: date('planting_date'),
+
+  // Measurement tracking
   lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
+  nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
+  measurementFrequency: integer('measurement_frequency_days'),
 
-  // Media
-  allImages: jsonb('images'),
+  // Images
   image: text('image'),
-  imageCdn: text('image_cdn'),
 
-  // Audit trail
+  // Metadata
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   metadata: jsonb('metadata'),
 }, (table) => ({
-  // Basic indexes
+  // Core indexes for common queries
   interventionIdx: index('trees_intervention_idx').on(table.interventionId),
-  speciesIdx: index('trees_species_idx').on(table.scientificSpeciesId),
+  treeUidIdx: index('trees_uid_idx').on(table.uid),
+  treeHidIdx: index('trees_hid_idx').on(table.hid),
   interventionSpeciesIdx: index('trees_intervention_species_idx').on(table.interventionSpeciesId),
-  createdByIdx: index('trees_created_by_idx').on(table.createdById),
+  userIdIdx: index('trees_user_id_idx').on(table.userId),
   statusIdx: index('trees_status_idx').on(table.status),
-  typeIdx: index('trees_type_idx').on(table.type),
-
-  // Date indexes
   plantingDateIdx: index('trees_planting_date_idx').on(table.plantingDate),
   lastMeasurementIdx: index('trees_last_measurement_idx').on(table.lastMeasurementDate),
-
-  // Geospatial indexes
+  nextMeasurementIdx: index('trees_next_measurement_idx').on(table.nextMeasurementDate),
   coordsIdx: index('trees_coords_idx').on(table.latitude, table.longitude),
-  locationIdx: index('trees_location_gist_idx').using('gist', sql`ST_Point(longitude, latitude)`),
 
   // Composite indexes for common queries
+  statusDateIdx: index('trees_status_date_idx').on(table.status, table.statusChangedAt),
   interventionStatusIdx: index('trees_intervention_status_idx').on(table.interventionId, table.status),
-  speciesStatusIdx: index('trees_species_status_idx').on(table.scientificSpeciesId, table.status),
-  typeStatusIdx: index('trees_type_status_idx').on(table.type, table.status),
 
-  // Check constraints
-  coordinatesCheck: check('trees_coordinates_check',
-    sql`latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180`),
-  heightCheck: check('trees_height_check', sql`current_height IS NULL OR current_height > 0`),
-  diameterCheck: check('trees_diameter_check', sql`current_diameter IS NULL OR current_diameter > 0`),
-  accuracyCheck: check('trees_accuracy_check', sql`accuracy IS NULL OR accuracy >= 0`),
+  // Spatial index
+  locationIdx: index('trees_location_gist_idx').using('gist', sql`ST_Point(longitude, latitude)`),
+
+  // Constraints
+  measurementFrequencyCheck: check('trees_measurement_frequency_check', sql`measurement_frequency_days IS NULL OR measurement_frequency_days > 0`),
 }));
 
 // ============================================================================
@@ -615,66 +643,95 @@ export const trees = pgTable('trees', {
 export const treeRecords = pgTable('tree_records', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
-
-  // Relationships
   treeId: integer('tree_id').notNull().references(() => trees.id, { onDelete: 'cascade' }),
   recordedById: integer('recorded_by_id').notNull().references(() => users.id),
 
-  // Measurement data
+  // Record metadata
+  recordType: recordTypeEnum('record_type').notNull(),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+
+  // Measurements
   height: doublePrecision('height'),
-  diameter: doublePrecision('diameter'),
-  crownDiameter: doublePrecision('crown_diameter'),
-  healthScore: integer('health_score'), // 1-10 scale
+  width: doublePrecision('width'), // DBH
+
+  // Health assessment
+  healthScore: integer('health_score'), // 0-100 scale
+  vitalityScore: integer('vitality_score'), // 0-100 scale
+  structuralIntegrity: varchar('structural_integrity', { length: 50 }), // Stable, At Risk, Critical
 
   // Status changes
   previousStatus: treeStatusEnum('previous_status'),
   newStatus: treeStatusEnum('new_status'),
-  statusReason: varchar('status_reason', { length: 64 }),
+  statusReason: varchar('status_reason', { length: 100 }),
 
-  // Additional measurements
+  // Observations
+  findings: text('findings'),
+  findingsSeverity: varchar('findings_severity', { length: 50 }), // Low, Medium, High, Critical
+  findingsComments: text('findings_comments'), // Fixed typo from original
   notes: text('notes'),
-  measurements: jsonb('measurements'), // Additional custom measurements
 
-  // Media
-  allImages: jsonb('images'),
-  image: text('image'),
-  imageCdn: text('image_cdn'),
+  // Environmental conditions
+  weatherConditions: jsonb('weather_conditions'),
+  soilConditions: jsonb('soil_conditions'),
+  surroundingVegetation: text('surrounding_vegetation'),
 
-  // Record metadata
+  // Threats and issues
+  pestsObserved: jsonb('pests_observed'), // Array of pest types
+  diseasesObserved: jsonb('diseases_observed'), // Array of disease types
+  damageObserved: jsonb('damage_observed'), // Physical damage, human impact, etc.
+
+  // Growth metrics
+  growthRate: decimal('growth_rate', { precision: 6, scale: 3 }), // cm/month or similar
+  leafDensity: varchar('leaf_density', { length: 50 }), // Dense, Moderate, Sparse
+  fruitingStatus: varchar('fruiting_status', { length: 50 }), // None, Flowering, Fruiting
+
+  // Intervention recommendations
+  recommendedActions: jsonb('recommended_actions'),
+  priorityLevel: varchar('priority_level', { length: 20 }), // Low, Medium, High, Urgent
+
+  // Privacy and metadata
   isPublic: boolean('is_public').default(true).notNull(),
-  recordType: varchar('record_type', { length: 50 }).default('measurement'), // measurement, status_change, inspection
+  deviceLocation: jsonb('device_location'),
+  metadata: jsonb('metadata'),
 
-  // Audit trail
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  metadata: jsonb('metadata'),
 }, (table) => ({
-  // Basic indexes
+  // Core relationship indexes
   treeIdIdx: index('tree_records_tree_id_idx').on(table.treeId),
   recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById),
-  uidIdx: index('tree_records_uid_idx').on(table.uid),
   recordTypeIdx: index('tree_records_type_idx').on(table.recordType),
-
-  // Date indexes for chronological queries
-  createdAtIdx: index('tree_records_created_at_idx').on(table.createdAt),
-
-  // Status change tracking
-  statusChangeIdx: index('tree_records_status_change_idx').on(table.treeId, table.newStatus),
+  recordedAtIdx: index('tree_records_recorded_at_idx').on(table.recordedAt),
+  uidIdx: index('tree_records_uid_idx').on(table.uid),
 
   // Composite indexes for common queries
   treeRecordTypeIdx: index('tree_records_tree_type_idx').on(table.treeId, table.recordType),
-  treeCreatedIdx: index('tree_records_tree_created_idx').on(table.treeId, table.createdAt),
+  treeRecordedAtIdx: index('tree_records_tree_recorded_at_idx').on(table.treeId, table.recordedAt),
+  statusChangeIdx: index('tree_records_status_change_idx').on(table.treeId, table.newStatus),
+  healthScoreIdx: index('tree_records_health_score_idx').on(table.healthScore),
+  priorityLevelIdx: index('tree_records_priority_idx').on(table.priorityLevel),
 
-  // Partial indexes for performance
-  latestRecordsIdx: index('tree_records_latest_idx').on(table.treeId, table.createdAt).where(sql`deleted_at IS NULL`),
-  measurementRecordsIdx: index('tree_records_measurements_idx').on(table.treeId).where(sql`record_type = 'measurement'`),
+  // Performance indexes
+  latestRecordsIdx: index('tree_records_latest_idx')
+    .on(table.treeId, table.recordedAt)
+    .where(sql`deleted_at IS NULL`),
+  measurementRecordsIdx: index('tree_records_measurements_idx')
+    .on(table.treeId, table.recordedAt)
+    .where(sql`record_type = 'measurement' AND deleted_at IS NULL`),
+  healthRecordsIdx: index('tree_records_health_idx')
+    .on(table.treeId, table.healthScore)
+    .where(sql`health_score IS NOT NULL`),
+  plantingRecordsIdx: index('tree_records_planting_idx')
+    .on(table.treeId)
+    .where(sql`record_type = 'planting'`),
 
-  // Check constraints
-  healthScoreCheck: check('tree_records_health_score_check', sql`health_score IS NULL OR (health_score >= 1 AND health_score <= 10)`),
-  heightCheck: check('tree_records_height_check', sql`height IS NULL OR height > 0`),
-  diameterCheck: check('tree_records_diameter_check', sql`diameter IS NULL OR diameter > 0`),
-  crownDiameterCheck: check('tree_records_crown_diameter_check', sql`crown_diameter IS NULL OR crown_diameter > 0`),
+  // Constraints
+  healthScoreCheck: check('tree_records_health_score_check', sql`health_score IS NULL OR (health_score >= 0 AND health_score <= 100)`),
+  vitalityScoreCheck: check('tree_records_vitality_score_check', sql`vitality_score IS NULL OR (vitality_score >= 0 AND vitality_score <= 100)`),
+  statusChangeConsistency: check('tree_records_status_change_check',
+    sql`(record_type = 'status_change' AND previous_status IS NOT NULL AND new_status IS NOT NULL) OR 
+        (record_type != 'status_change')`),
 }));
 
 // ============================================================================
@@ -692,7 +749,7 @@ export const interventionImages = pgTable('intervention_images', {
   width: integer('width'),
   height: integer('height'),
   image: text('image'),
-  imageCdn: text('image_cdn'),
+  imageType: imageTypeEnum('image_type').notNull().default('detail'),
   isPrimary: boolean('is_primary').default(false),
   caption: text('caption'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -700,7 +757,45 @@ export const interventionImages = pgTable('intervention_images', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   interventionIdx: index('intervention_images_intervention_id_idx').on(table.interventionId),
-  primaryImageIdx: index('intervention_images_primary_idx').on(table.interventionId, table.isPrimary)
+  primaryImageIdx: index('intervention_images_primary_idx').on(table.interventionId, table.isPrimary),
+  imageTypeIdx: index('intervention_images_type_idx').on(table.imageType),
+}));
+
+// ============================================================================
+// FIXED TREE IMAGES TABLE
+// ============================================================================
+
+export const treeImages = pgTable('tree_images', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  treeId: integer('tree_id').notNull().references(() => trees.id, { onDelete: 'cascade' }),
+  treeRecordId: integer('tree_record_id').references(() => treeRecords.id, { onDelete: 'cascade' }),
+
+  filename: varchar('filename', { length: 255 }).notNull(),
+  originalName: varchar('original_name', { length: 255 }),
+  mimeType: varchar('mime_type', { length: 50 }),
+  size: bigint('size', { mode: 'number' }),
+  width: integer('width'),
+  height: integer('height'),
+
+  // Image storage
+  image: varchar('image', { length: 300 }), // Removed unique constraint - trees can share images
+
+  // Image metadata
+  imageType: imageTypeEnum('image_type').notNull().default('detail'),
+  isPrimary: boolean('is_primary').default(false),
+  caption: text('caption'),
+  shootingAngle: varchar('shooting_angle', { length: 50 }), // Front, Side, Top, etc.
+
+  // Timestamps
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  treeIdIdx: index('tree_images_tree_id_idx').on(table.treeId),
+  treeRecordIdx: index('tree_images_tree_record_idx').on(table.treeRecordId),
+  primaryImageIdx: index('tree_images_primary_idx').on(table.treeId, table.isPrimary),
+  imageTypeIdx: index('tree_images_type_idx').on(table.imageType),
 }));
 
 // ============================================================================
@@ -760,13 +855,13 @@ export const notifications = pgTable('notifications', {
 }));
 
 // ============================================================================
-// ENHANCED RELATIONS - UPDATED FOR PROJECT SPECIES SCHEMA
+// ENHANCED RELATIONS
 // ============================================================================
 
 export const userRelations = relations(users, ({ many }) => ({
   projectMemberships: many(projectMembers),
   createdProjects: many(projects, { relationName: 'createdBy' }),
-  addedProjectSpecies: many(projectSpecies, { relationName: 'addedBy' }), // Updated relation name
+  addedProjectSpecies: many(projectSpecies, { relationName: 'addedBy' }),
   createdSites: many(sites, { relationName: 'createdBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
   recordedTreeRecords: many(treeRecords, { relationName: 'recordedBy' }),
@@ -787,8 +882,8 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   invites: many(projectInvites),
   sites: many(sites),
   interventions: many(interventions),
-  projectSpecies: many(projectSpecies), // Updated relation name
-  speciesRequests: many(speciesRequests), // New relation for project-specific species requests
+  projectSpecies: many(projectSpecies),
+  speciesRequests: many(speciesRequests),
 }));
 
 export const projectMemberRelations = relations(projectMembers, ({ one }) => ({
@@ -815,7 +910,7 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
 }));
 
 export const scientificSpeciesRelations = relations(scientificSpecies, ({ many }) => ({
-  projectSpecies: many(projectSpecies), // Updated relation name
+  projectSpecies: many(projectSpecies),
   interventionSpecies: many(interventionSpecies),
 }));
 
@@ -824,7 +919,7 @@ export const projectSpeciesRelations = relations(projectSpecies, ({ one, many })
     fields: [projectSpecies.projectId],
     references: [projects.id],
   }),
-  addedBy: one(users, { // Updated relation name
+  addedBy: one(users, {
     fields: [projectSpecies.addedById],
     references: [users.id],
     relationName: 'addedBy',
@@ -837,7 +932,7 @@ export const projectSpeciesRelations = relations(projectSpecies, ({ one, many })
 }));
 
 export const speciesImagesRelations = relations(speciesImages, ({ one }) => ({
-  species: one(projectSpecies, { // Updated to reference projectSpecies
+  species: one(projectSpecies, {
     fields: [speciesImages.speciesId],
     references: [projectSpecies.id],
   }),
@@ -864,12 +959,10 @@ export const siteImagesRelations = relations(siteImages, ({ one }) => ({
   }),
 }));
 
-// Intervention Configuration Relations
 export const interventionConfigurationRelations = relations(interventionConfigurations, ({ many }) => ({
   // No direct relations needed, but could be extended later
 }));
 
-// Enhanced Intervention Relations
 export const interventionsRelations = relations(interventions, ({ one, many }) => ({
   project: one(projects, {
     fields: [interventions.projectId],
@@ -895,7 +988,6 @@ export const interventionsRelations = relations(interventions, ({ one, many }) =
   interventionSpecies: many(interventionSpecies),
 }));
 
-// Intervention-Species Relations (Updated for Project Species)
 export const interventionSpeciesRelations = relations(interventionSpecies, ({ one, many }) => ({
   intervention: one(interventions, {
     fields: [interventionSpecies.interventionId],
@@ -908,30 +1000,25 @@ export const interventionSpeciesRelations = relations(interventionSpecies, ({ on
   trees: many(trees),
 }));
 
-// Enhanced Tree Relations (Updated for Project Species)
 export const treeRelations = relations(trees, ({ one, many }) => ({
   intervention: one(interventions, {
     fields: [trees.interventionId],
     references: [interventions.id],
-  }),
-  projectSpecies: one(projectSpecies, { // Updated to reference projectSpecies
-    fields: [trees.scientificSpeciesId],
-    references: [projectSpecies.id],
   }),
   interventionSpecies: one(interventionSpecies, {
     fields: [trees.interventionSpeciesId],
     references: [interventionSpecies.id],
   }),
   createdBy: one(users, {
-    fields: [trees.createdById],
+    fields: [trees.userId],
     references: [users.id],
     relationName: 'createdBy',
   }),
   records: many(treeRecords),
+  images: many(treeImages),
 }));
 
-// Enhanced Tree Record Relations
-export const treeRecordRelations = relations(treeRecords, ({ one }) => ({
+export const treeRecordRelations = relations(treeRecords, ({ one, many }) => ({
   tree: one(trees, {
     fields: [treeRecords.treeId],
     references: [trees.id],
@@ -941,12 +1028,24 @@ export const treeRecordRelations = relations(treeRecords, ({ one }) => ({
     references: [users.id],
     relationName: 'recordedBy',
   }),
+  images: many(treeImages),
 }));
 
 export const interventionImagesRelations = relations(interventionImages, ({ one }) => ({
   intervention: one(interventions, {
     fields: [interventionImages.interventionId],
     references: [interventions.id],
+  })
+}));
+
+export const treeImagesRelations = relations(treeImages, ({ one }) => ({
+  tree: one(trees, {
+    fields: [treeImages.treeId],
+    references: [trees.id],
+  }),
+  treeRecord: one(treeRecords, {
+    fields: [treeImages.treeRecordId],
+    references: [treeRecords.id],
   })
 }));
 
@@ -968,225 +1067,8 @@ export const speciesRequestRelations = relations(speciesRequests, ({ one }) => (
     references: [users.id],
     relationName: 'reviewedBy',
   }),
-  project: one(projects, { // New relation for project-specific species requests
+  project: one(projects, {
     fields: [speciesRequests.projectId],
     references: [projects.id],
   }),
 }));
-
-// ============================================================================
-// INTERVENTION CONFIGURATION SEED DATA
-// ============================================================================
-
-export const interventionConfigurationSeedData = [
-  {
-    interventionType: 'direct-seeding' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: true,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Direct seeding intervention allows multiple species but no tree registration'
-  },
-  {
-    interventionType: 'enrichment-planting' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: true,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: true,
-    allowsSampleTrees: true,
-    description: 'Enrichment planting allows multiple species and requires tree registration'
-  },
-  {
-    interventionType: 'removal-invasive-species' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Removal of invasive species can track multiple species being removed'
-  },
-  {
-    interventionType: 'multi-tree-registration' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: false,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: true,
-    allowsSampleTrees: true,
-    description: 'Multi-tree registration allows multiple species and requires tree registration'
-  },
-  {
-    interventionType: 'sample-tree-registration' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: false,
-    requiresSpecies: true,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: true,
-    allowsSampleTrees: true,
-    description: 'Sample tree registration allows single species and requires tree registration'
-  },
-  {
-    interventionType: 'single-tree-registration' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: false,
-    requiresSpecies: true,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: true,
-    allowsSampleTrees: false,
-    description: 'Single tree registration allows single species and requires tree registration'
-  },
-  {
-    interventionType: 'fencing' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Fencing intervention for site protection'
-  },
-  {
-    interventionType: 'fire-patrol' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Fire patrol and prevention activities'
-  },
-  {
-    interventionType: 'fire-suppression' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Fire suppression activities'
-  },
-  {
-    interventionType: 'firebreaks' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Creating firebreaks for fire prevention'
-  },
-  {
-    interventionType: 'generic-tree-registration' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: false,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: true,
-    allowsSampleTrees: false,
-    description: 'Generic tree registration for existing trees'
-  },
-  {
-    interventionType: 'grass-suppression' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Grass suppression activities'
-  },
-  {
-    interventionType: 'liberating-regenerant' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Liberating natural regenerants'
-  },
-  {
-    interventionType: 'maintenance' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'General maintenance activities'
-  },
-  {
-    interventionType: 'marking-regenerant' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Marking natural regenerants'
-  },
-  {
-    interventionType: 'other-intervention' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Other types of interventions'
-  },
-  {
-    interventionType: 'plot-plant-registration' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: false,
-    allowsTreeRegistration: true,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Plot-based plant registration'
-  },
-  {
-    interventionType: 'soil-improvement' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Soil improvement activities'
-  },
-  {
-    interventionType: 'stop-tree-harvesting' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Stopping tree harvesting activities'
-  },
-  {
-    interventionType: 'assisting-seed-rain' as const,
-    allowsSpecies: true,
-    allowsMultipleSpecies: true,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Assisting natural seed rain processes'
-  },
-  {
-    interventionType: 'control-livestock' as const,
-    allowsSpecies: false,
-    allowsMultipleSpecies: false,
-    requiresSpecies: false,
-    allowsTreeRegistration: false,
-    requiresTreeRegistration: false,
-    allowsSampleTrees: false,
-    description: 'Livestock control measures'
-  }
-] as const;

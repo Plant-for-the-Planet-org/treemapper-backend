@@ -172,7 +172,7 @@ export class ProjectsService {
             description: createProjectDto.description ?? '',
             location: locationValue,
             isPrimary: false,
-            isPeronal: false,
+            isPersonal: false,
             originalGeometry: createProjectDto.location
           })
           .returning();
@@ -233,7 +233,6 @@ export class ProjectsService {
         const [project] = await tx
           .insert(projects)
           .values({
-            // Only include fields that exist in your Drizzle schema for 'projects'
             uid: createProjectDto.uid ?? generateUid('prj'),
             createdById: userId,
             slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
@@ -241,7 +240,7 @@ export class ProjectsService {
             projectType: createProjectDto.projectType ?? '',
             description: createProjectDto.description ?? '',
             isPrimary: true,
-            isPeronal: true,
+            isPersonal: true,
           })
           .returning();
 
