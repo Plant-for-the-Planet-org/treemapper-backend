@@ -6,14 +6,16 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { json, urlencoded } from 'express'; // Add this import
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   
+  // CRITICAL: Add body parser limits FIRST, before any other middleware
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
-   app.useGlobalPipes(new ValidationPipe());
-  
   // Global interceptors for response formatting
   app.useGlobalInterceptors(new ResponseInterceptor());
   
@@ -29,7 +31,7 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api');
   
-  // Validation pipe
+  // Validation pipe (you had this twice, removed duplicate)
   app.useGlobalPipes(new ValidationPipe());
   
   // Global JWT guard (with public route exclusions)

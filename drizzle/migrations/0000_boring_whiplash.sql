@@ -14,6 +14,20 @@ CREATE TYPE "public"."species_request_status" AS ENUM('pending', 'approved', 're
 CREATE TYPE "public"."tree_status" AS ENUM('alive', 'dead', 'unknown', 'removed');--> statement-breakpoint
 CREATE TYPE "public"."tree_enum" AS ENUM('single', 'sample');--> statement-breakpoint
 CREATE TYPE "public"."user_type" AS ENUM('individual', 'education', 'tpo', 'organization', 'student');--> statement-breakpoint
+CREATE TABLE "data_conflicts" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_migration_id" integer,
+	"entity" varchar(50) NOT NULL,
+	"entity_id" varchar(255) NOT NULL,
+	"field" varchar(100) NOT NULL,
+	"old_value" jsonb,
+	"new_value" jsonb,
+	"resolution" varchar(50),
+	"resolved_at" timestamp,
+	"resolved_by" varchar(255),
+	"created_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
 CREATE TABLE "intervention_configurations" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"intervention_type" "intervention_type" NOT NULL,
@@ -104,6 +118,19 @@ CREATE TABLE "interventions" (
 	CONSTRAINT "interventions_idempotency_key_unique" UNIQUE("idempotency_key"),
 	CONSTRAINT "interventions_sample_tree_count_check" CHECK (sample_tree_count IS NULL OR sample_tree_count >= 0),
 	CONSTRAINT "interventions_date_range_check" CHECK (intervention_end_date >= intervention_start_date)
+);
+--> statement-breakpoint
+CREATE TABLE "migration_logs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_migration_id" integer,
+	"uid" varchar(50) NOT NULL,
+	"level" varchar(20) NOT NULL,
+	"message" text NOT NULL,
+	"entity" varchar(50),
+	"entity_id" varchar(255),
+	"context" jsonb,
+	"stack_trace" text,
+	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "notifications" (
@@ -273,7 +300,7 @@ CREATE TABLE "sites" (
 	"name" varchar(255) NOT NULL,
 	"description" text,
 	"location" geometry(Geometry,4326),
-	"original_geometry" jsonb NOT NULL,
+	"original_geometry" jsonb,
 	"status" "site_status" DEFAULT 'barren',
 	"created_by_id" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -421,6 +448,27 @@ CREATE TABLE "trees" (
 	CONSTRAINT "trees_measurement_frequency_check" CHECK (measurement_frequency_days IS NULL OR measurement_frequency_days > 0)
 );
 --> statement-breakpoint
+CREATE TABLE "user_migrations" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"user_id" integer NOT NULL,
+	"planet_id" varchar(50) NOT NULL,
+	"status" varchar(50) DEFAULT 'in_progress' NOT NULL,
+	"migrated_entities" jsonb DEFAULT '{"user":false,"projects":false,"sites":false,"interventions":false,"images":false}'::jsonb,
+	"migration_started_at" timestamp,
+	"migration_completed_at" timestamp,
+	"last_updated_at" timestamp,
+	"email" varchar(320) NOT NULL,
+	"error_message" text,
+	"retry_count" integer DEFAULT 0,
+	"migration_version" varchar(50) DEFAULT '1.0',
+	"additional_metadata" jsonb,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now(),
+	CONSTRAINT "user_migrations_uid_unique" UNIQUE("uid"),
+	CONSTRAINT "user_migrations_planet_id_unique" UNIQUE("planet_id")
+);
+--> statement-breakpoint
 CREATE TABLE "users" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
@@ -452,6 +500,7 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
+ALTER TABLE "data_conflicts" ADD CONSTRAINT "data_conflicts_user_migration_id_user_migrations_id_fk" FOREIGN KEY ("user_migration_id") REFERENCES "public"."user_migrations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_images" ADD CONSTRAINT "intervention_images_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -459,6 +508,7 @@ ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" F
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_parent_intervention_id_interventions_id_fk" FOREIGN KEY ("parent_intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "migration_logs" ADD CONSTRAINT "migration_logs_user_migration_id_user_migrations_id_fk" FOREIGN KEY ("user_migration_id") REFERENCES "public"."user_migrations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -482,6 +532,7 @@ ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_recorded_by_id_users_id_
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_species_id_intervention_species_id_fk" FOREIGN KEY ("intervention_species_id") REFERENCES "public"."intervention_species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_migrations" ADD CONSTRAINT "user_migrations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "intervention_config_type_idx" ON "intervention_configurations" USING btree ("intervention_type");--> statement-breakpoint
 CREATE INDEX "intervention_images_intervention_id_idx" ON "intervention_images" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_images_primary_idx" ON "intervention_images" USING btree ("intervention_id","is_primary");--> statement-breakpoint
@@ -582,6 +633,8 @@ CREATE INDEX "trees_coords_idx" ON "trees" USING btree ("latitude","longitude");
 CREATE INDEX "trees_status_date_idx" ON "trees" USING btree ("status","status_changed_at");--> statement-breakpoint
 CREATE INDEX "trees_intervention_status_idx" ON "trees" USING btree ("intervention_id","status");--> statement-breakpoint
 CREATE INDEX "trees_location_gist_idx" ON "trees" USING gist (ST_Point(longitude, latitude));--> statement-breakpoint
+CREATE INDEX "user_id_idx" ON "user_migrations" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "status_idx" ON "user_migrations" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "users_email_idx" ON "users" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "users_auth0_id_idx" ON "users" USING btree ("auth0_id");--> statement-breakpoint
 CREATE INDEX "users_uid_idx" ON "users" USING btree ("uid");

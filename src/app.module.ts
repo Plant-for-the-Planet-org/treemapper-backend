@@ -8,7 +8,7 @@ import { UsersModule } from './users/users.module';
 import { CacheService } from './cache/cache.service';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
-import { UserMigrationModule } from './migrate/migrate.module.ts';
+import { MigrationModule } from './migrate/migrate.module.ts';
 import { SpeciesModule } from './species/species.module';
 import { SitesModule } from './sites/sites.module';
 import { InterventionsModule } from './interventions/interventions.module';
@@ -21,7 +21,7 @@ import { TreesModule } from './trees/trees.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    UserMigrationModule,
+    MigrationModule,
     ProjectsModule,
     SpeciesModule,
     SitesModule,

@@ -4,24 +4,11 @@ import { Type } from 'class-transformer';
 import { PaginationDto } from './common.dto';
 
 export class ScientificSpeciesDto {
-  @IsNotEmpty()
   @IsString()
-  @MaxLength(255)
-  scientificName: string;
+  scientific_name: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(400)
-  commonName?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  gbifId?: string;
+  guid: string;
 }
 
 export class BulkUploadScientificSpeciesDto {

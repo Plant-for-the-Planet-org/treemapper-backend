@@ -137,6 +137,88 @@ export const interventionConfigurations = pgTable('intervention_configurations',
 }));
 
 // ============================================================================
+// User Migrations Table
+// ============================================================================
+
+export const userMigrations = pgTable('user_migrations', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  user: integer('user_id').notNull().references(() => users.id),
+  planetId: varchar('planet_id', { length: 50 }).notNull().unique(),
+  status: varchar('status', { length: 50 }).notNull().default('in_progress'), // completed, stoped
+  migratedEntities: jsonb('migrated_entities').$type<{
+    user: boolean;
+    projects: boolean;
+    sites: boolean;
+    interventions: boolean;
+    images: boolean;
+  }>().default({
+    "user": false,
+    "projects": false,
+    "sites": false,
+    "interventions": false,
+    "images": false,
+  }),
+  // Timestamps for tracking
+  migrationStartedAt: timestamp('migration_started_at'),
+  migrationCompletedAt: timestamp('migration_completed_at'),
+  lastUpdatedAt: timestamp('last_updated_at'),
+  email: varchar('email', { length: 320 }).notNull(),
+  errorMessage: text('error_message'),
+  retryCount: integer('retry_count').default(0),
+  // Metadata
+  migrationVersion: varchar('migration_version', { length: 50 }).default('1.0'),
+  additionalMetadata: jsonb('additional_metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdx: index('user_id_idx').on(table.user),
+  statusIdx: index('status_idx').on(table.status),
+}));
+
+// ============================================================================
+// migration_log
+// ============================================================================
+
+export const migrationLogs = pgTable('migration_logs', {
+  id: serial('id').primaryKey(),
+  userMigrationId: integer('user_migration_id').references(() => userMigrations.id),
+  uid: varchar('uid', { length: 50 }).notNull(),
+  level: varchar('level', { length: 20 }).notNull(), // info, warning, error
+  message: text('message').notNull(),
+  entity: varchar('entity', { length: 50 }), // project sites
+  entityId: varchar('entity_id', { length: 255 }),
+  context: jsonb('context'),
+  stackTrace: text('stack_trace'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ============================================================================
+// Data Conflicts
+// ============================================================================
+
+export const dataConflicts = pgTable('data_conflicts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userMigrationId: integer('user_migration_id').references(() => userMigrations.id),
+
+  entity: varchar('entity', { length: 50 }).notNull(),
+  entityId: varchar('entity_id', { length: 255 }).notNull(),
+  field: varchar('field', { length: 100 }).notNull(),
+
+  oldValue: jsonb('old_value'),
+  newValue: jsonb('new_value'),
+
+  resolution: varchar('resolution', { length: 50 }), // keep_old, keep_new, merge, manual
+  resolvedAt: timestamp('resolved_at'),
+  resolvedBy: varchar('resolved_by', { length: 255 }), // system or user ID
+
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+
+
+
+// ============================================================================
 // USERS TABLE
 // ============================================================================
 
@@ -396,7 +478,7 @@ export const sites = pgTable('sites', {
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   location: geometry(4326)('location'),
-  originalGeometry: jsonb('original_geometry').notNull(),
+  originalGeometry: jsonb('original_geometry'),
   status: siteStatusEnum('status').default('barren'),
   createdById: integer('created_by_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -1070,5 +1152,17 @@ export const speciesRequestRelations = relations(speciesRequests, ({ one }) => (
   project: one(projects, {
     fields: [speciesRequests.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const userMigrationsRelations = relations(userMigrations, ({ many }) => ({
+  logs: many(migrationLogs),
+  conflicts: many(dataConflicts),
+}));
+
+export const migrationLogsRelations = relations(migrationLogs, ({ one }) => ({
+  userMigration: one(userMigrations, {
+    fields: [migrationLogs.userMigrationId],
+    references: [userMigrations.id],
   }),
 }));
