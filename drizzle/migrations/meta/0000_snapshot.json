@@ -1,5 +1,5 @@
 {
-  "id": "e72eb1f4-8289-467f-8224-a27fbd92051b",
+  "id": "b37e86a4-b699-40ea-9e5c-675ee05436e5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -4754,7 +4754,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,
-          "default": "'{\"user\":false,\"projects\":false,\"sites\":false,\"interventions\":false,\"images\":false}'::jsonb"
+          "default": "'{\"user\":false,\"projects\":false,\"sites\":false,\"species\":false,\"interventions\":false,\"images\":false}'::jsonb"
         },
         "migration_started_at": {
           "name": "migration_started_at",

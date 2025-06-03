@@ -150,12 +150,14 @@ export const userMigrations = pgTable('user_migrations', {
     user: boolean;
     projects: boolean;
     sites: boolean;
+    species: boolean;
     interventions: boolean;
     images: boolean;
   }>().default({
     "user": false,
     "projects": false,
     "sites": false,
+    "species":false,
     "interventions": false,
     "images": false,
   }),

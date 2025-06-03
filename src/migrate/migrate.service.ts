@@ -28,6 +28,7 @@ export interface MigrationProgress {
     user: boolean;
     projects: boolean;
     sites: boolean;
+    species: boolean;
     interventions: boolean;
     images: boolean;
   };
@@ -156,6 +157,12 @@ export class MigrationService {
       console.log('Sites  migrated');
 
 
+      // Step 4: Migrate User Species
+      if (!userMigrationRecord.migratedEntities.species) {
+        console.log('Migrating user species');
+        // stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id);
+      }
+
 
       // // Step 4: Migrate Interventions
       // await this.migrateUserInterventions(uid, authToken, userMigrationRecord.id);
@@ -199,6 +206,7 @@ export class MigrationService {
           projects: false,
           sites: false,
           interventions: false,
+          species: false,
           images: false,
         }
       })
@@ -332,11 +340,69 @@ export class MigrationService {
     }
   }
 
-  // private async migrateUserInterventions(uid: string, authToken: string, migrationId: string): Promise<void> {
+  // private async migrateUserSpecies(uid: number, authToken: string, migrationId: number): Promise<boolean> {
   //   try {
-  //     await this.logMigration(uid, 'info', 'Starting interventions migration', 'interventions');
+  //     await this.logMigration(uid, 'info', 'Starting User Species migration', 'interventions');
+  //     const speciesResponse = await this.makeApiCall(`/treemapper/species`, authToken);
+  //     if (!speciesResponse || speciesResponse === null) {
+  //       await this.updateMigrationProgress(migrationId, 'species', false, true);
+  //       await this.logMigration(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
+  //       return true;
+  //     }
+  //     const userSpecies = speciesResponse.data;
+  //     const batchSize = 50;
+  //     for (let i = 0; i < oldInterventions.length; i += batchSize) {
+  //       const batch = oldInterventions.slice(i, i + batchSize);
 
-  //     const interventionsResponse = await this.makeApiCall(`/user/interventions`, authToken);
+  //       for (const oldIntervention of batch) {
+  //         try {
+  //           const transformedIntervention = this.transformInterventionData(oldIntervention, uid);
+
+  //           const existingIntervention = await this.dataSource
+  //             .select()
+  //             .from(interventions)
+  //             .where(eq(interventions.uid, oldIntervention.id))
+  //             .limit(1);
+
+  //           if (existingIntervention.length > 0) {
+  //             await this.handleDataConflict(migrationId, 'intervention', oldIntervention.id, 'intervention_exists', {
+  //               existing: existingIntervention[0],
+  //               new: transformedIntervention
+  //             });
+  //           } else {
+  //             await this.dataSource.insert(interventions).values(transformedIntervention);
+  //             migratedCount++;
+  //           }
+
+  //         } catch (error) {
+  //           failedCount++;
+  //           await this.logMigration(uid, 'error', `Intervention migration failed for intervention ${oldIntervention.id}: ${error.message}`, 'intervention', oldIntervention.id);
+  //         }
+  //       }
+
+  //       // Log batch progress
+  //       await this.logMigration(uid, 'info', `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(oldInterventions.length / batchSize)}`, 'interventions');
+  //     }
+
+  //     await this.updateMigrationProgress(migrationId, 'interventions', true);
+  //     await this.logMigration(uid, 'info', `Interventions migration completed: ${migratedCount} succeeded, ${failedCount} failed`, 'interventions');
+
+  //   } catch (error) {
+  //     await this.logMigration(uid, 'error', `Interventions migration failed: ${error.message}`, 'interventions', null, error.stack);
+  //     throw error;
+  //   }
+  // }
+
+
+  // private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
+  //   try {
+  //     await this.logMigration(uid, 'info', 'Starting User Species migration', 'interventions');
+  //     const species = await this.makeApiCall(`/treemapper/species`, authToken);
+  //     if (!interventionsResponse || interventionsResponse === null) {
+  //       await this.updateMigrationProgress(migrationId, 'species', false, false);
+  //       await this.logMigration(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
+  //       return true;
+  //     }
   //     const oldInterventions = interventionsResponse.data;
 
   //     let migratedCount = 0;
@@ -496,6 +562,7 @@ export class MigrationService {
             'sites': updatedEntities.sites || false,
             'interventions': updatedEntities.interventions || false,
             'images': updatedEntities.images || false,
+            "species": updatedEntities.species || false,
           },
           status: stop ? 'stoped' : 'in_progress',
           lastUpdatedAt: new Date()
@@ -607,7 +674,7 @@ export class MigrationService {
       uid: projectData.id,
       createdById: userId,
       slug: projectData.slug,
-      projectName: projectData.name,
+      projectName: projectData.name, 
       purpose: projectData.classification || 'Unknown',
       projectType: getProjectScale(projectData.classification),
       ecosystem: projectData.metadata?.ecosystem || 'Unknown',

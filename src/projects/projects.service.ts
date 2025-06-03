@@ -239,7 +239,6 @@ export class ProjectsService {
             projectName: createProjectDto.projectName ?? '',
             projectType: createProjectDto.projectType ?? '',
             description: createProjectDto.description ?? '',
-            isPrimary: true,
             isPersonal: true,
           })
           .returning();

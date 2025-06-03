@@ -454,7 +454,7 @@ CREATE TABLE "user_migrations" (
 	"user_id" integer NOT NULL,
 	"planet_id" varchar(50) NOT NULL,
 	"status" varchar(50) DEFAULT 'in_progress' NOT NULL,
-	"migrated_entities" jsonb DEFAULT '{"user":false,"projects":false,"sites":false,"interventions":false,"images":false}'::jsonb,
+	"migrated_entities" jsonb DEFAULT '{"user":false,"projects":false,"sites":false,"species":false,"interventions":false,"images":false}'::jsonb,
 	"migration_started_at" timestamp,
 	"migration_completed_at" timestamp,
 	"last_updated_at" timestamp,
