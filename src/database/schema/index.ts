@@ -26,47 +26,19 @@ import { customType } from 'drizzle-orm/pg-core';
 // ============================================================================
 // CUSTOM TYPES
 // ============================================================================
-
-export interface GeoJSONGeometry {
-  type: 'Point' | 'LineString' | 'Polygon' | 'MultiPoint' | 'MultiLineString' | 'MultiPolygon';
-  coordinates: number[] | number[][] | number[][][] | number[][][][];
-}
-
-export interface GeoJSONFeature {
-  type: 'Feature';
-  geometry: GeoJSONGeometry;
-  properties?: Record<string, any>;
-}
-
-export interface GeoJSONFeatureCollection {
-  type: 'FeatureCollection';
-  features: GeoJSONFeature[];
-}
-
-export type GeoJSONInput = GeoJSONGeometry | GeoJSONFeature | GeoJSONFeatureCollection;
-
-// Improved custom type
-export const geometry = (srid: number = 4326) =>
+const geometry = (srid?: number) =>
   customType<{
-    data: GeoJSONGeometry;
-    driverData: string; // PostGIS returns WKT/WKB as string
+    data: any; // GeoJSON object
+    driverData: any; // raw string or binary from PostGIS
   }>({
     dataType() {
-      return `geometry(Geometry,${srid})`;
+      return srid ? `geometry(Geometry,${srid})` : 'geometry';
     },
-
-    toDriver(value: GeoJSONGeometry): string {
-      // Convert GeoJSON to PostGIS format
-      return `ST_GeomFromGeoJSON('${JSON.stringify(value)}')`;
+    toDriver(value: any): any {
+      return value;
     },
-
-    fromDriver(value: string): GeoJSONGeometry {
-      // PostGIS should return GeoJSON when you use ST_AsGeoJSON
-      try {
-        return JSON.parse(value) as GeoJSONGeometry;
-      } catch (error) {
-        throw new Error(`Failed to parse geometry from database: ${error}`);
-      }
+    fromDriver(value: any): any {
+      return value;
     },
   });
 

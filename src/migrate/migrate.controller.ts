@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Req, HttpException, HttpStatus, Headers} from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Req, HttpException, HttpStatus, Headers } from '@nestjs/common';
 import { MigrationCheckResult, MigrationService } from './migrate.service';
 import { AuthGuard } from '@nestjs/passport'; // Adjust based on your auth setup
 
@@ -27,13 +27,20 @@ export class MigrationController {
     });
 
     return {
-      message: 'Migration started',
+      currentStep: "in_progress",
+      updatedAt: Date.now(),
+      userMigrated: false,
+      projectMigrated: false,
+      speciesMigrated: false,
+      sitesMigrated: false,
+      interventionMigrated: false,
+      imagesMigrated: false
     };
   }
 
   @Get('check')
   async checkMigrationStatus(
-    @Headers('authorization') authorization: string
+    @Headers('authorization') authorization: string,
   ): Promise<MigrationCheckResult> {
     if (!authorization) {
       throw new HttpException(
@@ -41,26 +48,13 @@ export class MigrationController {
         HttpStatus.UNAUTHORIZED
       );
     }
-
     return await this.migrationService.checkUserInttc(authorization);
   }
 
-  // @Get('status/:uid')
-  // async getMigrationStatus(@Param('uid') uid: string) {
-  //   const status = await this.migrationService.getMigrationStatus(uid);
-
-  //   if (!status) {
-  //     return {
-  //       exists: false,
-  //       message: 'No migration found for this user'
-  //     };
-  //   }
-
-  //   return {
-  //     exists: true,
-  //     ...status
-  //   };
-  // }
+  @Get('status')
+  async getMigrationStatus(@Req() req) {
+    return await this.migrationService.getMigrationStatus(req.user.id);
+  }
 
   // @Get('logs/:uid')
   // async getMigrationLogs(@Param('uid') uid: string) {

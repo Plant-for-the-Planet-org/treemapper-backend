@@ -37,6 +37,7 @@ export interface MigrationProgress {
 }
 export interface MigrationCheckResult {
   migrationNeeded: boolean;
+  planetId: string
 }
 
 @Injectable()
@@ -68,11 +69,12 @@ export class MigrationService {
 
       // If status is 303, return migrate: false
       if (response.status === 303) {
-        return { migrationNeeded: false };
+        return { migrationNeeded: false, planetId: '' };
       }
 
+
       // If status is 200, return migrate: true
-      return { migrationNeeded: true };
+      return { migrationNeeded: true, planetId: response.data.id };
 
     } catch (error) {
       // Handle network errors or other HTTP errors (not 200/303)
@@ -118,6 +120,13 @@ export class MigrationService {
         return;
       }
 
+      if (userMigrationRecord.status === 'stopped') {
+        await this.continueMigration(userMigrationRecord.id)
+        await this.logMigration(userMigrationRecord.id, 'info', 'Migration resumed', 'migration');
+      }
+
+
+
       let stop = false;
       // // Step 1: Migrate user
       if (!userMigrationRecord.migratedEntities.user) {
@@ -131,6 +140,7 @@ export class MigrationService {
       }
       console.log('Migrating done for "user"');
 
+
       // // Step 2: Migrate Projects
       if (!userMigrationRecord.migratedEntities.projects) {
         console.log('Migrating projects');
@@ -143,7 +153,6 @@ export class MigrationService {
         return
       }
       console.log('User project migrated');
-
 
       // // Step 3: Migrate sites
       if (!userMigrationRecord.migratedEntities.sites) {
@@ -180,7 +189,8 @@ export class MigrationService {
 
       // // Step 5: Handle Images (placeholder for S3 copy)
       // await this.handleImageMigration(uid, userMigrationRecord.id);
-
+      await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
+      await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
       // Mark migration as complete
       await this.completeMigration(userMigrationRecord.id);
 
@@ -225,8 +235,6 @@ export class MigrationService {
     await this.logMigration(migrationRecord[0].id, 'info', 'Migration started', 'migration');
     return migrationRecord[0];
   }
-
-
 
   private async migrateUserData(userId: number, authToken: string, migrationId: number): Promise<boolean> {
     try {
@@ -298,6 +306,7 @@ export class MigrationService {
           }
           await this.logMigration(migrationId, 'info', `Project with id:${transformedProject.uid} migrated.Moving to next project`, 'projects');
         } catch (error) {
+          console.log("ASDC", error)
           await this.logMigration(migrationId, 'error', `Project migration failed for project at catch block`, 'project', JSON.stringify(oldProject));
           stop = true;
         }
@@ -575,12 +584,22 @@ export class MigrationService {
       .where(eq(userMigrations.id, migrationId));
   }
 
+  private async continueMigration(migrationId: number): Promise<void> {
+    await this.drizzleService.db
+      .update(userMigrations)
+      .set({
+        status: 'in_progress',
+        migrationCompletedAt: new Date()
+      })
+      .where(eq(userMigrations.id, migrationId));
+  }
+
   private async handleMigrationError(userId: number, migrationId: number, error: any): Promise<void> {
     if (migrationId) {
       await this.drizzleService.db
         .update(userMigrations)
         .set({
-          status: 'failed',
+          status: 'stoped',
           errorMessage: error.message
         })
         .where(eq(userMigrations.id, migrationId));
@@ -621,18 +640,9 @@ export class MigrationService {
     const projectData = oldProjectData.properties
     const geometry = oldProjectData.geometry;
 
-    // Extract coordinates from geometry
-    let latitude = null;
-    let longitude = null;
     let geometryType = null;
 
-    if (geometry && geometry.coordinates) {
-      geometryType = geometry.type?.toLowerCase();
-      if (geometry.type === 'Point' && Array.isArray(geometry.coordinates)) {
-        longitude = geometry.coordinates[0];
-        latitude = geometry.coordinates[1];
-      }
-    }
+
 
     // Handle image URL transformation
 
@@ -815,35 +825,30 @@ export class MigrationService {
   }
 
 
-  // private transformInterventionData(oldInterventionData: any, uid: string): any {
-  //   // TODO: Implement intervention data transformation
-  //   return {
-  //     uid: oldInterventionData.id,
-  //     // ... other fields
-  //   };
-  // }
 
-  // // Public method to get migration status
-  // async getMigrationStatus(uid: string): Promise<MigrationProgress | null> {
-  //   const migrationRecord = await this.dataSource
-  //     .select()
-  //     .from(userMigrations)
-  //     .where(eq(userMigrations.uid, uid))
-  //     .limit(1);
+  async getMigrationStatus(uid: number): Promise<any> {
+    const migrationRecord = await this.drizzleService.db
+      .select()
+      .from(userMigrations)
+      .where(eq(userMigrations.user, uid))
+      .limit(1);
+    if (migrationRecord.length === 0) {
+      return null;
+    }
 
-  //   if (migrationRecord.length === 0) {
-  //     return null;
-  //   }
-
-  //   const record = migrationRecord[0];
-  //   return {
-  //     userId: record.planetId,
-  //     currentStep: record.status,
-  //     completed: record.status === 'completed',
-  //     error: record.errorMessage,
-  //     progress: record.migratedEntities
-  //   };
-  // }
+    const record = migrationRecord[0];
+    return {
+      currentStep: record.status,
+      updatedAt: record.lastUpdatedAt,
+      migratedEntities: record.errorMessage,
+      userMigrated: record.migratedEntities?.user,
+      projectMigrated: record.migratedEntities?.projects,
+      speciesMigrated: record.migratedEntities?.sites,
+      sitesMigrated: record.migratedEntities?.sites,
+      interventionMigrated: record.migratedEntities?.interventions,
+      imagesMigrated: record.migratedEntities?.images,
+    };
+  }
 
   // // Method to get migration logs for a user
   // async getMigrationLogs(uid: string, limit = 100): Promise<any[]> {
