@@ -7,7 +7,6 @@ import { async, firstValueFrom, generate } from 'rxjs';
 import {
   userMigrations,
   migrationLogs,
-  dataConflicts,
   projects,
   sites,
   interventions,
@@ -289,10 +288,7 @@ export class MigrationService {
             .limit(1);
 
           if (existingProject.length > 0) {
-            await this.handleDataConflict(migrationId, 'project', existingProject[0].uid, 'Already migrated', {
-              existing: existingProject[0],
-              new: transformedProject
-            });
+            await this.logMigration(migrationId, 'warning', `Project already exist`, 'projects', JSON.stringify(transformedProject));
           } else {
             await this.drizzleService.db.insert(projects).values(transformedProject).catch(async () => {
               await this.updateMigrationProgress(migrationId, 'projects', false, true);
@@ -535,28 +531,6 @@ export class MigrationService {
       });
     } catch (error) {
       this.logger.error(`Failed to log migration: ${error.message}`);
-    }
-  }
-
-  private async handleDataConflict(
-    migrationId: number,
-    entity: string,
-    entityId: string,
-    field: string,
-    conflictData: any
-  ): Promise<void> {
-    try {
-      await this.drizzleService.db.insert(dataConflicts).values({
-        userMigrationId: migrationId,
-        entity,
-        entityId,
-        field,
-        oldValue: conflictData.existing,
-        newValue: conflictData.new,
-        resolution: null // To be resolved manually
-      });
-    } catch (error) {
-      this.logger.error(`Failed to log data conflict: ${error.message}`);
     }
   }
 
@@ -814,7 +788,7 @@ export class MigrationService {
     if (!projectId || !addedById) {
       throw new Error('projectId and addedById are required in options');
     }
-    
+
     return inputData.map(species => {
       return {
         uid: generateUid('psp'),

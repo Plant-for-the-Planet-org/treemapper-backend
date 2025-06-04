@@ -24,7 +24,7 @@ export interface ProjectMemberResponse {
     name: string | null;
     authName: string | null;
     email: string;
-    avatar: string | null;
+    image: string | null;
     isActive: boolean;
   };
 }
@@ -68,7 +68,7 @@ export interface ProjectInviteStatusResponse {
     name: string | null;
     email: string;
     displayName: string | null;
-    avatar: string | null;
+    image: string | null;
   };
 }
 
@@ -330,7 +330,7 @@ export class ProjectsService {
           name: users.displayName,
           authName: users.authName,
           email: users.email,
-          avatar: users.avatar,
+          image: users.image,
           isActive: users.isActive,
           uid: users.uid,
         }
@@ -535,7 +535,7 @@ export class ProjectsService {
             name: users.name,
             email: users.email,
             displayName: users.displayName,
-            avatar: users.avatar,
+            image: users.image,
           }
         })
         .from(projectInvites)
@@ -583,7 +583,7 @@ export class ProjectsService {
           name: result.invitedBy.name,
           email: result.invitedBy.email,
           displayName: result.invitedBy.displayName,
-          avatar: result.invitedBy.avatar,
+          image: result.invitedBy.image,
         }
       };
 
