@@ -6,8 +6,8 @@ import { PaginationDto } from './common.dto';
 export class CreateUserSpeciesDto {
   @IsNotEmpty()
   @IsInt()
-  @Type(() => Number)
-  scientificSpeciesId: number;
+  @Type(() => String)
+  scientificSpeciesId: string;
 
   @IsOptional()
   @IsString()

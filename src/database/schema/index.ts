@@ -383,7 +383,7 @@ export const scientificSpecies = pgTable('scientific_species', {
 export const projectSpecies = pgTable('project_species', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
-  scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
+  scientificSpeciesId: varchar('scientific_species_id').notNull().references(() => scientificSpecies.uid),
   isNativeSpecies: boolean('is_native_species').default(false),
   isDisabled: boolean('is_disabled').default(false),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
@@ -623,7 +623,7 @@ export const interventionSpecies = pgTable('intervention_species', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').notNull().references(() => interventions.id, { onDelete: 'cascade' }),
 
-  scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
+  scientificSpeciesId: varchar('scientific_species_id').references(() => scientificSpecies.uid),
   isUnknown: boolean('is_unknown').default(false).notNull(),
   customSpeciesName: varchar('custom_species_name', { length: 255 }),
 
@@ -1010,7 +1010,7 @@ export const projectSpeciesRelations = relations(projectSpecies, ({ one, many })
   }),
   scientificSpecies: one(scientificSpecies, {
     fields: [projectSpecies.scientificSpeciesId],
-    references: [scientificSpecies.id],
+    references: [scientificSpecies.uid],
   }),
   images: many(speciesImages),
 }));
@@ -1079,7 +1079,7 @@ export const interventionSpeciesRelations = relations(interventionSpecies, ({ on
   }),
   scientificSpecies: one(scientificSpecies, {
     fields: [interventionSpecies.scientificSpeciesId],
-    references: [scientificSpecies.id],
+    references: [scientificSpecies.uid],
   }),
   trees: many(trees),
 }));

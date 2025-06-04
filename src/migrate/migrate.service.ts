@@ -10,7 +10,8 @@ import {
   dataConflicts,
   projects,
   sites,
-  interventions
+  interventions,
+  projectSpecies
 } from '../database/schema/index';
 import { eq, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -18,6 +19,8 @@ import { generateUid } from 'src/util/uidGenerator';
 import { UsersService } from 'src/users/users.service';
 import { error } from 'console';
 import { boolean } from 'drizzle-orm/gel-core';
+import { ProjectsService } from 'src/projects/projects.service';
+import { createProjectTitle, removeDuplicatesByScientificSpeciesId } from 'src/common/utils/projectName.util';
 
 export interface MigrationProgress {
   userId: number;
@@ -45,6 +48,7 @@ export class MigrationService {
     private drizzleService: DrizzleService,
     private httpService: HttpService,
     private usersetvice: UsersService,
+    private projectService: ProjectsService,
 
   ) { }
 
@@ -159,9 +163,17 @@ export class MigrationService {
 
       // Step 4: Migrate User Species
       if (!userMigrationRecord.migratedEntities.species) {
-        console.log('Migrating user species');
-        // stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id);
+        stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
       }
+
+
+      if (stop) {
+        console.log('Issue in  species migration');
+        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for species', 'migration');
+        return
+      }
+      console.log('Species  migrated');
+
 
 
       // // Step 4: Migrate Interventions
@@ -340,58 +352,66 @@ export class MigrationService {
     }
   }
 
-  // private async migrateUserSpecies(uid: number, authToken: string, migrationId: number): Promise<boolean> {
-  //   try {
-  //     await this.logMigration(uid, 'info', 'Starting User Species migration', 'interventions');
-  //     const speciesResponse = await this.makeApiCall(`/treemapper/species`, authToken);
-  //     if (!speciesResponse || speciesResponse === null) {
-  //       await this.updateMigrationProgress(migrationId, 'species', false, true);
-  //       await this.logMigration(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
-  //       return true;
-  //     }
-  //     const userSpecies = speciesResponse.data;
-  //     const batchSize = 50;
-  //     for (let i = 0; i < oldInterventions.length; i += batchSize) {
-  //       const batch = oldInterventions.slice(i, i + batchSize);
+  private async migrateUserSpecies(uid: number, authToken: string, migrationId: number, email: string): Promise<boolean> {
+    try {
+      await this.logMigration(migrationId, 'info', 'Starting User Species migration', 'interventions');
+      const speciesResponse = await this.makeApiCall(`/treemapper/species`, authToken);
+      if (!speciesResponse || speciesResponse === null) {
+        await this.updateMigrationProgress(migrationId, 'species', false, true);
+        await this.logMigration(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
+        return true;
+      }
+      let projectId;
+      const personalProject = await this.drizzleService.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.isPersonal, true))
+        .limit(1);
 
-  //       for (const oldIntervention of batch) {
-  //         try {
-  //           const transformedIntervention = this.transformInterventionData(oldIntervention, uid);
-
-  //           const existingIntervention = await this.dataSource
-  //             .select()
-  //             .from(interventions)
-  //             .where(eq(interventions.uid, oldIntervention.id))
-  //             .limit(1);
-
-  //           if (existingIntervention.length > 0) {
-  //             await this.handleDataConflict(migrationId, 'intervention', oldIntervention.id, 'intervention_exists', {
-  //               existing: existingIntervention[0],
-  //               new: transformedIntervention
-  //             });
-  //           } else {
-  //             await this.dataSource.insert(interventions).values(transformedIntervention);
-  //             migratedCount++;
-  //           }
-
-  //         } catch (error) {
-  //           failedCount++;
-  //           await this.logMigration(uid, 'error', `Intervention migration failed for intervention ${oldIntervention.id}: ${error.message}`, 'intervention', oldIntervention.id);
-  //         }
-  //       }
-
-  //       // Log batch progress
-  //       await this.logMigration(uid, 'info', `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(oldInterventions.length / batchSize)}`, 'interventions');
-  //     }
-
-  //     await this.updateMigrationProgress(migrationId, 'interventions', true);
-  //     await this.logMigration(uid, 'info', `Interventions migration completed: ${migratedCount} succeeded, ${failedCount} failed`, 'interventions');
-
-  //   } catch (error) {
-  //     await this.logMigration(uid, 'error', `Interventions migration failed: ${error.message}`, 'interventions', null, error.stack);
-  //     throw error;
-  //   }
-  // }
+      if (personalProject.length > 0) {
+        projectId = personalProject[0].id
+      } else {
+        const name = email.split('@')[0]
+        const projectName = createProjectTitle(name)
+        const payload = {
+          projectName,
+          projectType: 'personal',
+          "description": "This is your personal project, you can add species to it. You can invite other users to this project.",
+        }
+        await this.logMigration(migrationId, 'warning', `Personal project not found. Created new`, 'species');
+        const newPersonalProject = await this.projectService.createPersonalProject(payload, uid)
+        if (newPersonalProject) {
+          projectId = newPersonalProject.data?.id
+        }
+      }
+      if (speciesResponse.data.length === 0) {
+        await this.updateMigrationProgress(migrationId, 'species', true, false);
+        await this.logMigration(migrationId, 'info', `Species migration done. No species found`, 'species');
+        return false
+      }
+      const tranformedData = this.transformSpeciesData(speciesResponse.data, projectId, uid)
+      const uniqueSpecies = removeDuplicatesByScientificSpeciesId(tranformedData)
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        const insertedSpecies = await tx
+          .insert(projectSpecies)
+          .values(uniqueSpecies)
+          .returning();
+        return insertedSpecies;
+      })
+      if (result) {
+        await this.logMigration(migrationId, 'info', `Species migration done`, 'species');
+        await this.updateMigrationProgress(migrationId, 'species', true, false);
+        return false
+      }
+      await this.logMigration(migrationId, 'error', `Species migration failed.(After running bulk)`, 'species');
+      await this.updateMigrationProgress(migrationId, 'species', false, true);
+      return true
+    } catch (error) {
+      await this.logMigration(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species');
+      await this.updateMigrationProgress(migrationId, 'species', false, true);
+      return true
+    }
+  }
 
 
   // private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
@@ -674,7 +694,7 @@ export class MigrationService {
       uid: projectData.id,
       createdById: userId,
       slug: projectData.slug,
-      projectName: projectData.name, 
+      projectName: projectData.name,
       purpose: projectData.classification || 'Unknown',
       projectType: getProjectScale(projectData.classification),
       ecosystem: projectData.metadata?.ecosystem || 'Unknown',
@@ -790,6 +810,35 @@ export class MigrationService {
     return false
   }
 
+  private transformSpeciesData(inputData, projectId, addedById) {
+    if (!projectId || !addedById) {
+      throw new Error('projectId and addedById are required in options');
+    }
+    
+    return inputData.map(species => {
+      return {
+        uid: generateUid('psp'),
+        scientificSpeciesId: species.scientificSpecies,
+        projectId: projectId,
+        addedById: addedById,
+        isNativeSpecies: false,
+        isDisabled: false,
+        aliases: species.aliases || null,
+        commonName: species.aliases || null, // Using aliases as common name since that's what we have
+        image: species.image || null,
+        description: species.description || null,
+        notes: null, // Not provided in input
+        favourite: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          originalId: species.id,
+          scientificName: species.scientificName,
+          importedAt: new Date().toISOString()
+        }
+      };
+    });
+  }
 
 
   // private transformInterventionData(oldInterventionData: any, uid: string): any {

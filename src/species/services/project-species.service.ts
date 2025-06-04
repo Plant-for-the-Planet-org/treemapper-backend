@@ -26,7 +26,7 @@ export class ProjectSpeciesService {
     const scientificSpeciesExists = await this.drizzle.db
       .select()
       .from(scientificSpecies)
-      .where(eq(scientificSpecies.id, createDto.scientificSpeciesId))
+      .where(eq(scientificSpecies.uid, createDto.scientificSpeciesId))
       .limit(1);
 
     if (!scientificSpeciesExists.length) {

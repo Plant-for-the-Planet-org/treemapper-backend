@@ -147,7 +147,7 @@ export class CreateInterventionDto {
 
   @IsOptional()
   @IsNumber()
-  scientificSpecies: number;
+  scientificSpecies: string;
 
   @IsOptional()
   @IsString()

@@ -4,7 +4,7 @@ import { MigrationService } from './migrate.service'
 import { MigrationController } from './migrate.controller'
 import { DatabaseModule } from '../database/database.module';
 import { UsersModule } from 'src/users/users.module';
-
+import { ProjectsModule } from 'src/projects/projects.module';
 
 @Module({
   imports: [
@@ -13,7 +13,8 @@ import { UsersModule } from 'src/users/users.module';
       maxRedirects: 5,
     }),
     DatabaseModule,
-    UsersModule
+    UsersModule,
+    ProjectsModule
   ],
   controllers: [MigrationController],
   providers: [MigrationService],

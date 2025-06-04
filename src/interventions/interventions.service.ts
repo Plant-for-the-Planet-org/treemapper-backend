@@ -223,7 +223,7 @@ export class InterventionsService {
               const existingSpecies = await tx
                 .select()
                 .from(scientificSpecies)
-                .where(eq(scientificSpecies.id, createInterventionDto.scientificSpecies))
+                .where(eq(scientificSpecies.uid, createInterventionDto.scientificSpecies))
                 .limit(1);
 
               if (existingSpecies.length === 0) {
