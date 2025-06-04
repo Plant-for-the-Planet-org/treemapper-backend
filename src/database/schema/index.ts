@@ -27,19 +27,46 @@ import { customType } from 'drizzle-orm/pg-core';
 // CUSTOM TYPES
 // ============================================================================
 
-const geometry = (srid?: number) =>
+export interface GeoJSONGeometry {
+  type: 'Point' | 'LineString' | 'Polygon' | 'MultiPoint' | 'MultiLineString' | 'MultiPolygon';
+  coordinates: number[] | number[][] | number[][][] | number[][][][];
+}
+
+export interface GeoJSONFeature {
+  type: 'Feature';
+  geometry: GeoJSONGeometry;
+  properties?: Record<string, any>;
+}
+
+export interface GeoJSONFeatureCollection {
+  type: 'FeatureCollection';
+  features: GeoJSONFeature[];
+}
+
+export type GeoJSONInput = GeoJSONGeometry | GeoJSONFeature | GeoJSONFeatureCollection;
+
+// Improved custom type
+export const geometry = (srid: number = 4326) =>
   customType<{
-    data: any; // GeoJSON object
-    driverData: any; // raw string or binary from PostGIS
+    data: GeoJSONGeometry;
+    driverData: string; // PostGIS returns WKT/WKB as string
   }>({
     dataType() {
-      return srid ? `geometry(Geometry,${srid})` : 'geometry';
+      return `geometry(Geometry,${srid})`;
     },
-    toDriver(value: any): any {
-      return value;
+
+    toDriver(value: GeoJSONGeometry): string {
+      // Convert GeoJSON to PostGIS format
+      return `ST_GeomFromGeoJSON('${JSON.stringify(value)}')`;
     },
-    fromDriver(value: any): any {
-      return value;
+
+    fromDriver(value: string): GeoJSONGeometry {
+      // PostGIS should return GeoJSON when you use ST_AsGeoJSON
+      try {
+        return JSON.parse(value) as GeoJSONGeometry;
+      } catch (error) {
+        throw new Error(`Failed to parse geometry from database: ${error}`);
+      }
     },
   });
 
@@ -54,18 +81,6 @@ export const userTypeEnum = pgEnum('user_type', ['individual', 'education', 'tpo
 
 // Site and tree enums
 export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'barren', 'reforestation']);
-export const treeStatusEnum = pgEnum('tree_status', ['alive', 'dead', 'unknown', 'removed']);
-export const recordTypeEnum = pgEnum('record_type', [
-  'planting',
-  'measurement',
-  'status_change',
-  'inspection',
-  'maintenance',
-  'death',
-  'removal',
-  'health_assessment',
-  'growth_monitoring'
-]);
 
 // Intervention enums
 export const interventionTypeEnum = pgEnum('intervention_type', [
@@ -91,6 +106,18 @@ export const interventionTypeEnum = pgEnum('intervention_type', [
   'soil-improvement',
   'stop-tree-harvesting',
 ]);
+export const treeStatusEnum = pgEnum('tree_status', ['alive', 'dead', 'unknown', 'removed']);
+export const recordTypeEnum = pgEnum('record_type', [
+  'planting',
+  'measurement',
+  'status_change',
+  'inspection',
+  'maintenance',
+  'death',
+  'removal',
+  'health_assessment',
+  'growth_monitoring'
+]);
 
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
 export const captureModeEnum = pgEnum('capture_mode', ['on_site', 'off_site']);
@@ -100,7 +127,7 @@ export const treeTypeEnum = pgEnum('tree_enum', ['single', 'sample']);
 
 // Coordinate and measurement enums
 export const coordinateTypeEnum = pgEnum('coordinate_type', ['gps', 'manual', 'estimated']);
-export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'survey']);
+export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'survey', 'web_import']);
 
 // Image and media enums
 export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record']);
@@ -115,26 +142,21 @@ export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 
 export const interventionConfigurations = pgTable('intervention_configurations', {
   id: serial('id').primaryKey(),
   interventionType: interventionTypeEnum('intervention_type').notNull().unique(),
-
-  // Species capabilities
-  allowsSpecies: boolean('allows_species').notNull().default(false),
-  allowsMultipleSpecies: boolean('allows_multiple_species').notNull().default(false),
-  requiresSpecies: boolean('requires_species').notNull().default(false),
-
-  // Tree registration capabilities
-  allowsTreeRegistration: boolean('allows_tree_registration').notNull().default(false),
-  requiresTreeRegistration: boolean('requires_tree_registration').notNull().default(false),
-  allowsSampleTrees: boolean('allows_sample_trees').notNull().default(false),
-
-  // Configuration metadata
+  allowsSpecies: boolean('allows_species').default(false),
+  allowsMultipleSpecies: boolean('allows_multiple_species').default(false),
+  requiresSpecies: boolean('requires_species').default(false),
+  allowsTreeRegistration: boolean('allows_tree_registration').default(false),
+  requiresTreeRegistration: boolean('requires_tree_registration').default(false),
+  allowsSampleTrees: boolean('allows_sample_trees').default(false),
   description: text('description'),
   metadata: jsonb('metadata'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   interventionTypeIdx: index('intervention_config_type_idx').on(table.interventionType),
 }));
+
+//NOTE: serial 3x faster than uid for internal Joins
 
 // ============================================================================
 // User Migrations Table
@@ -145,7 +167,7 @@ export const userMigrations = pgTable('user_migrations', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   user: integer('user_id').notNull().references(() => users.id),
   planetId: varchar('planet_id', { length: 50 }).notNull().unique(),
-  status: varchar('status', { length: 50 }).notNull().default('in_progress'), // completed, stoped
+  status: varchar('status', { length: 50 }).notNull().default('in_progress'),
   migratedEntities: jsonb('migrated_entities').$type<{
     user: boolean;
     projects: boolean;
@@ -157,25 +179,22 @@ export const userMigrations = pgTable('user_migrations', {
     "user": false,
     "projects": false,
     "sites": false,
-    "species":false,
+    "species": false,
     "interventions": false,
     "images": false,
   }),
-  // Timestamps for tracking
   migrationStartedAt: timestamp('migration_started_at'),
   migrationCompletedAt: timestamp('migration_completed_at'),
   lastUpdatedAt: timestamp('last_updated_at'),
   email: varchar('email', { length: 320 }).notNull(),
   errorMessage: text('error_message'),
   retryCount: integer('retry_count').default(0),
-  // Metadata
   migrationVersion: varchar('migration_version', { length: 50 }).default('1.0'),
-  additionalMetadata: jsonb('additional_metadata'),
+  metadata: jsonb('metadata'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  userIdx: index('user_id_idx').on(table.user),
-  statusIdx: index('status_idx').on(table.status),
+  userIdx: index('user_id_idx').on(table.user)
 }));
 
 // ============================================================================
@@ -186,7 +205,7 @@ export const migrationLogs = pgTable('migration_logs', {
   id: serial('id').primaryKey(),
   userMigrationId: integer('user_migration_id').references(() => userMigrations.id),
   uid: varchar('uid', { length: 50 }).notNull(),
-  level: varchar('level', { length: 20 }).notNull(), // info, warning, error
+  level: varchar('level', { length: 20 }).notNull(), // info, warning, error,
   message: text('message').notNull(),
   entity: varchar('entity', { length: 50 }), // project sites
   entityId: varchar('entity_id', { length: 255 }),
@@ -195,27 +214,6 @@ export const migrationLogs = pgTable('migration_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// ============================================================================
-// Data Conflicts
-// ============================================================================
-
-export const dataConflicts = pgTable('data_conflicts', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userMigrationId: integer('user_migration_id').references(() => userMigrations.id),
-
-  entity: varchar('entity', { length: 50 }).notNull(),
-  entityId: varchar('entity_id', { length: 255 }).notNull(),
-  field: varchar('field', { length: 100 }).notNull(),
-
-  oldValue: jsonb('old_value'),
-  newValue: jsonb('new_value'),
-
-  resolution: varchar('resolution', { length: 50 }), // keep_old, keep_new, merge, manual
-  resolvedAt: timestamp('resolved_at'),
-  resolvedBy: varchar('resolved_by', { length: 255 }), // system or user ID
-
-  createdAt: timestamp('created_at').defaultNow(),
-});
 
 
 
@@ -234,16 +232,15 @@ export const users = pgTable('users', {
   firstname: varchar('firstname', { length: 255 }),
   lastname: varchar('lastname', { length: 255 }),
   displayName: varchar('display_name', { length: 400 }),
-  avatar: text('avatar'),
-  avatarCdn: text('avatar_cdn'),
-  slug: varchar('slug', { length: 100 }),
+  image: text('image'),
+  slug: varchar('slug', { length: 100 }).unique(),
   type: userTypeEnum('type').default('individual'),
   country: char('country', { length: 2 }),
   url: text('url'),
   supportPin: varchar('support_pin', { length: 20 }),
   isPrivate: boolean('is_private').default(false).notNull(),
   bio: text('bio'),
-  locale: varchar('locale', { length: 10 }).default('en_US'),
+  locale: varchar('locale', { length: 10 }).default('en'),
   isActive: boolean('is_active').default(true).notNull(),
   lastLoginAt: timestamp('last_login_at'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -275,14 +272,10 @@ export const projects = pgTable('projects', {
   description: text('description'),
   classification: varchar('classification', { length: 100 }),
   image: text('image'),
-  imageCdn: text('image_cdn'),
-  allImages: jsonb('images'),
   videoUrl: text('video_url'),
   country: varchar('country', { length: 2 }),
   location: geometry(4326)('location'),
   originalGeometry: jsonb('original_geometry'),
-  latitude: doublePrecision('latitude'),
-  longitude: doublePrecision('longitude'),
   geometryType: varchar('geometry_type', { length: 50 }),
   url: text('url'),
   linkText: varchar('link_text', { length: 100 }),
@@ -300,10 +293,7 @@ export const projects = pgTable('projects', {
   locationIdx: index('projects_location_gist_idx').using('gist', table.location),
   slugIdx: index('projects_slug_idx').on(table.slug),
   uidIdx: index('project_uid_idx').on(table.uid),
-  createdByIdx: index('projects_created_by_idx').on(table.createdById),
-  uniquePrimaryPerUser: uniqueIndex('projects_unique_primary_per_user_idx')
-    .on(table.createdById)
-    .where(sql`${table.isPrimary} = true`)
+  createdByIdx: index('projects_created_by_idx').on(table.createdById)
 }));
 
 // ============================================================================
@@ -363,8 +353,6 @@ export const scientificSpecies = pgTable('scientific_species', {
   commonName: varchar('common_name', { length: 400 }),
   description: text('description'),
   image: text('image'),
-  imageCdn: text('image_cdn'),
-  allImages: jsonb('images'),
   gbifId: varchar('gbif_id', { length: 100 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -372,7 +360,6 @@ export const scientificSpecies = pgTable('scientific_species', {
   metadata: jsonb('metadata'),
 }, (table) => ({
   scientificNameIdx: index('scientific_species_name_idx').on(table.scientificName),
-  commonNameIdx: index('scientific_species_common_name_idx').on(table.commonName),
   uidIdx: index('scientific_species_uid_idx').on(table.uid),
 }));
 
@@ -391,8 +378,6 @@ export const projectSpecies = pgTable('project_species', {
   aliases: varchar('aliases', { length: 255 }),
   commonName: varchar('local_name', { length: 255 }),
   image: text('image'),
-  imageCdn: text('image_cdn'),
-  allImages: jsonb('images'),
   description: text('description'),
   notes: text('notes'),
   favourite: boolean('favourite').default(false).notNull(),
@@ -415,6 +400,7 @@ export const projectSpecies = pgTable('project_species', {
 
 export const speciesImages = pgTable('species_images', {
   id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
   speciesId: integer('species_id').notNull().references(() => projectSpecies.id, { onDelete: 'cascade' }),
   filename: varchar('filename', { length: 255 }).notNull(),
   originalName: varchar('original_name', { length: 255 }),
@@ -422,17 +408,13 @@ export const speciesImages = pgTable('species_images', {
   size: bigint('size', { mode: 'number' }),
   width: integer('width'),
   height: integer('height'),
-  image: text('image'),
-  imageCdn: text('image_cdn'),
-  allImages: jsonb('images'),
   isPrimary: boolean('is_primary').default(false),
-  hide: boolean('hide').default(false),
+  isPrivate: boolean('is_private').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
-  speciesIdIdx: index('species_images_species_id_idx').on(table.speciesId),
-  primaryImageIdx: index('species_images_primary_idx').on(table.speciesId, table.isPrimary),
-  sizeCheck: check('species_images_size_check', sql`size IS NULL OR size > 0`)
+  uidIdxSpeciesImages: index('uid_species_image_idx').on(table.uid),
+  speciesIdIdx: index('species_images_species_id_idx').on(table.speciesId)
 }));
 
 // ============================================================================
@@ -447,26 +429,17 @@ export const speciesRequests = pgTable('species_requests', {
   description: text('description'),
   requestReason: text('request_reason'),
   gbifId: varchar('gbif_id', { length: 100 }),
-
-  // Request metadata
   requestedById: integer('requested_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }), // Optional: species request for a specific project
   status: speciesRequestStatusEnum('status').notNull().default('pending'),
-
-  // Admin handling
   reviewedById: integer('reviewed_by_id').references(() => users.id),
   adminNotes: text('admin_notes'),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  requestedByIdx: index('species_requests_requested_by_idx').on(table.requestedById),
-  statusIdx: index('species_requests_status_idx').on(table.status),
-  scientificNameIdx: index('species_requests_scientific_name_idx').on(table.scientificName),
-  reviewedByIdx: index('species_requests_reviewed_by_idx').on(table.reviewedById),
-  projectIdx: index('species_requests_project_idx').on(table.projectId),
+  requestedByIdx: index('species_requests_requested_by_idx').on(table.requestedById)
 }));
 
 // ============================================================================
@@ -507,11 +480,9 @@ export const siteImages = pgTable('site_images', {
   size: bigint('size', { mode: 'number' }),
   width: integer('width'),
   height: integer('height'),
-  image: text('image'),
-  imageCdn: text('image_cdn'),
   isPrimary: boolean('is_primary').default(false),
   caption: text('caption'),
-  hide: boolean('hide').default(false),
+  isPrivate: boolean('is_private').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -529,89 +500,38 @@ export const interventions = pgTable('interventions', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   discr: interventionDiscriminatorEnum('discr').notNull().default('intervention'),
-
-  // Core relationships
   userId: integer('user_id').notNull().references(() => users.id),
   projectId: integer('project_id').references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
-
-  // Intervention details
   type: interventionTypeEnum('type').notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 64 }).unique().notNull(),
-
-  // Capture information
   captureMode: captureModeEnum('capture_mode').notNull(),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
-
-  // Temporal data
   registrationDate: timestamp('registration_date', { withTimezone: true }).notNull(),
   interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),
   interventionEndDate: timestamp('intervention_end_date', { withTimezone: true }).notNull(),
-
-  // Spatial data
   location: geometry(4326)('location').notNull(),
   originalGeometry: jsonb('original_geometry').notNull(),
   geometryType: varchar('geometry_type', { length: 50 }),
   deviceLocation: jsonb('device_location'),
-
-  // Intervention metrics
   treesPlanted: bigint('trees_planted', { mode: 'number' }),
   sampleTreeCount: bigint('sample_tree_count', { mode: 'number' }).default(0),
-
-
-  // Status and quality
-  interventionStatus: interventionStatusEnum('status').default('active'),
-
-  // Content
+  interventionStatus: interventionStatusEnum('intervention_status').default('active'),
   description: varchar('description', { length: 2048 }),
-
-  // Images
   image: text('image'),
-  imageCdn: text('image_cdn'),
-
-  // Privacy and metadata
   isPrivate: boolean('is_private').default(false).notNull(),
   metadata: jsonb('metadata'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   // Basic indexes
-  discrIdx: index('interventions_discr_idx').on(table.discr),
   projectIdx: index('interventions_project_idx').on(table.projectId),
   projectSiteIdx: index('interventions_project_site_idx').on(table.projectSiteId),
   userIdx: index('interventions_user_idx').on(table.userId),
-  typeIdx: index('interventions_type_idx').on(table.type),
-  idempotencyKeyIdx: index('interventions_idempotencyKey_idx').on(table.idempotencyKey),
-  captureModeIdx: index('interventions_capture_mode_idx').on(table.captureMode),
-  captureStatusIdx: index('interventions_capture_status_idx').on(table.captureStatus),
-  privateIdx: index('interventions_private_idx').on(table.isPrivate),
-  parentIdx: index('interventions_parent_idx').on(table.parentInterventionId),
   uidIdx: index('interventions_uid_idx').on(table.uid),
-  hidIdx: index('interventions_hid_idx').on(table.hid),
-
-  // Temporal indexes
-  startDateIdx: index('interventions_start_date_idx').on(table.interventionStartDate),
-  endDateIdx: index('interventions_end_date_idx').on(table.interventionEndDate),
-  dateRangeIdx: index('interventions_date_range_idx').on(table.interventionStartDate, table.interventionEndDate),
-
-  // Metric indexes
-  treesPlantedIdx: index('interventions_trees_planted_idx').on(table.treesPlanted),
-
-
-  // Composite indexes
-  userTypeIdx: index('interventions_user_type_idx').on(table.userId, table.type),
-
-  // Performance indexes
-  treeInterventionsIdx: index('interventions_with_trees_idx')
-    .on(table.type)
-    .where(sql`type IN ('multi-tree-registration', 'sample-tree-registration', 'single-tree-registration', 'enrichment-planting')`),
-
-  // Constraints
-  sampleTreeCountCheck: check('interventions_sample_tree_count_check', sql`sample_tree_count IS NULL OR sample_tree_count >= 0`),
-  dateRangeCheck: check('interventions_date_range_check', sql`intervention_end_date >= intervention_start_date`),
+  hidIdx: index('interventions_hid_idx').on(table.hid)
 }));
 
 // ============================================================================
@@ -622,13 +542,11 @@ export const interventionSpecies = pgTable('intervention_species', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').notNull().references(() => interventions.id, { onDelete: 'cascade' }),
-
   scientificSpeciesId: varchar('scientific_species_id').references(() => scientificSpecies.uid),
   isUnknown: boolean('is_unknown').default(false).notNull(),
   customSpeciesName: varchar('custom_species_name', { length: 255 }),
-
   plantedCount: bigint('planted_count', { mode: 'number' }).default(0),
-  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }), // Percentage
+  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }),
   notes: text('notes'),
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -636,10 +554,7 @@ export const interventionSpecies = pgTable('intervention_species', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   interventionIdx: index('intervention_species_intervention_idx').on(table.interventionId),
-  speciesIdx: index('intervention_species_species_idx').on(table.scientificSpeciesId),
-  plantedCountIdx: index('intervention_species_planted_count_idx').on(table.plantedCount),
-  uidIdx: index('intervention_species_uid_idx').on(table.uid),
-  plantedCountCheck: check('intervention_species_planted_count_check', sql`planted_count >= 0`)
+  speciesIdx: index('intervention_species_species_idx').on(table.scientificSpeciesId)
 }));
 
 // ============================================================================
@@ -650,48 +565,27 @@ export const trees = pgTable('trees', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   hid: varchar('hid', { length: 50 }).notNull().unique(),
-
-  // Core relationships
   interventionId: integer('intervention_id').references(() => interventions.id, { onDelete: 'set null' }),
   interventionSpeciesId: integer('intervention_species_id').references(() => interventionSpecies.id, { onDelete: 'set null' }),
   userId: integer('user_id').notNull().references(() => users.id),
-
-  // Tree identification
   tag: varchar('tag', { length: 100 }),
   treeType: treeTypeEnum('tree_type').notNull(),
-
-  // Location data
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
-
-  // Core tree data
   plantingDate: date('planting_date').notNull(),
-
-  // Current measurements
   height: doublePrecision('height'),
-  width: doublePrecision('width'), // DBH
-
-  // Capture metadata
+  width: doublePrecision('width'),
   captureMode: captureModeEnum('capture_mode').notNull(),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
-
-  // Status tracking
   status: treeStatusEnum('status').default('alive').notNull(),
   statusReason: varchar('status_reason', { length: 100 }),
   statusChangedAt: timestamp('status_changed_at', { withTimezone: true }),
-
-
-  // Measurement tracking
   lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
   nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
   measurementFrequency: integer('measurement_frequency_days'),
-
-  // Images
   image: text('image'),
-
-  // Metadata
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -700,24 +594,7 @@ export const trees = pgTable('trees', {
   // Core indexes for common queries
   interventionIdx: index('trees_intervention_idx').on(table.interventionId),
   treeUidIdx: index('trees_uid_idx').on(table.uid),
-  treeHidIdx: index('trees_hid_idx').on(table.hid),
-  interventionSpeciesIdx: index('trees_intervention_species_idx').on(table.interventionSpeciesId),
-  userIdIdx: index('trees_user_id_idx').on(table.userId),
-  statusIdx: index('trees_status_idx').on(table.status),
-  plantingDateIdx: index('trees_planting_date_idx').on(table.plantingDate),
-  lastMeasurementIdx: index('trees_last_measurement_idx').on(table.lastMeasurementDate),
-  nextMeasurementIdx: index('trees_next_measurement_idx').on(table.nextMeasurementDate),
-  coordsIdx: index('trees_coords_idx').on(table.latitude, table.longitude),
-
-  // Composite indexes for common queries
-  statusDateIdx: index('trees_status_date_idx').on(table.status, table.statusChangedAt),
-  interventionStatusIdx: index('trees_intervention_status_idx').on(table.interventionId, table.status),
-
-  // Spatial index
-  locationIdx: index('trees_location_gist_idx').using('gist', sql`ST_Point(longitude, latitude)`),
-
-  // Constraints
-  measurementFrequencyCheck: check('trees_measurement_frequency_check', sql`measurement_frequency_days IS NULL OR measurement_frequency_days > 0`),
+  treeHidIdx: index('trees_hid_idx').on(table.hid)
 }));
 
 // ============================================================================
@@ -733,6 +610,7 @@ export const treeRecords = pgTable('tree_records', {
   // Record metadata
   recordType: recordTypeEnum('record_type').notNull(),
   recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+  image: text('image'),
 
   // Measurements
   height: doublePrecision('height'),
@@ -784,38 +662,7 @@ export const treeRecords = pgTable('tree_records', {
 }, (table) => ({
   // Core relationship indexes
   treeIdIdx: index('tree_records_tree_id_idx').on(table.treeId),
-  recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById),
-  recordTypeIdx: index('tree_records_type_idx').on(table.recordType),
-  recordedAtIdx: index('tree_records_recorded_at_idx').on(table.recordedAt),
-  uidIdx: index('tree_records_uid_idx').on(table.uid),
-
-  // Composite indexes for common queries
-  treeRecordTypeIdx: index('tree_records_tree_type_idx').on(table.treeId, table.recordType),
-  treeRecordedAtIdx: index('tree_records_tree_recorded_at_idx').on(table.treeId, table.recordedAt),
-  statusChangeIdx: index('tree_records_status_change_idx').on(table.treeId, table.newStatus),
-  healthScoreIdx: index('tree_records_health_score_idx').on(table.healthScore),
-  priorityLevelIdx: index('tree_records_priority_idx').on(table.priorityLevel),
-
-  // Performance indexes
-  latestRecordsIdx: index('tree_records_latest_idx')
-    .on(table.treeId, table.recordedAt)
-    .where(sql`deleted_at IS NULL`),
-  measurementRecordsIdx: index('tree_records_measurements_idx')
-    .on(table.treeId, table.recordedAt)
-    .where(sql`record_type = 'measurement' AND deleted_at IS NULL`),
-  healthRecordsIdx: index('tree_records_health_idx')
-    .on(table.treeId, table.healthScore)
-    .where(sql`health_score IS NOT NULL`),
-  plantingRecordsIdx: index('tree_records_planting_idx')
-    .on(table.treeId)
-    .where(sql`record_type = 'planting'`),
-
-  // Constraints
-  healthScoreCheck: check('tree_records_health_score_check', sql`health_score IS NULL OR (health_score >= 0 AND health_score <= 100)`),
-  vitalityScoreCheck: check('tree_records_vitality_score_check', sql`vitality_score IS NULL OR (vitality_score >= 0 AND vitality_score <= 100)`),
-  statusChangeConsistency: check('tree_records_status_change_check',
-    sql`(record_type = 'status_change' AND previous_status IS NOT NULL AND new_status IS NOT NULL) OR 
-        (record_type != 'status_change')`),
+  recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById)
 }));
 
 // ============================================================================
@@ -832,9 +679,9 @@ export const interventionImages = pgTable('intervention_images', {
   size: bigint('size', { mode: 'number' }),
   width: integer('width'),
   height: integer('height'),
-  image: text('image'),
   imageType: imageTypeEnum('image_type').notNull().default('detail'),
   isPrimary: boolean('is_primary').default(false),
+  isPrivate: boolean('is_private').default(false),
   caption: text('caption'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -861,10 +708,6 @@ export const treeImages = pgTable('tree_images', {
   size: bigint('size', { mode: 'number' }),
   width: integer('width'),
   height: integer('height'),
-
-  // Image storage
-  image: varchar('image', { length: 300 }), // Removed unique constraint - trees can share images
-
   // Image metadata
   imageType: imageTypeEnum('image_type').notNull().default('detail'),
   isPrimary: boolean('is_primary').default(false),
@@ -1159,7 +1002,6 @@ export const speciesRequestRelations = relations(speciesRequests, ({ one }) => (
 
 export const userMigrationsRelations = relations(userMigrations, ({ many }) => ({
   logs: many(migrationLogs),
-  conflicts: many(dataConflicts),
 }));
 
 export const migrationLogsRelations = relations(migrationLogs, ({ one }) => ({

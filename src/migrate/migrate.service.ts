@@ -176,8 +176,8 @@ export class MigrationService {
 
 
 
-      // // Step 4: Migrate Interventions
-      // await this.migrateUserInterventions(uid, authToken, userMigrationRecord.id);
+      // Step 4: Migrate Interventions
+      // await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
 
       // // Step 5: Handle Images (placeholder for S3 copy)
       // await this.handleImageMigration(uid, userMigrationRecord.id);
@@ -416,7 +416,7 @@ export class MigrationService {
 
   // private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
   //   try {
-  //     await this.logMigration(uid, 'info', 'Starting User Species migration', 'interventions');
+  //     await this.logMigration(uid, 'info', 'Starting User intervention migration', 'interventions');
   //     const species = await this.makeApiCall(`/treemapper/species`, authToken);
   //     if (!interventionsResponse || interventionsResponse === null) {
   //       await this.updateMigrationProgress(migrationId, 'species', false, false);
