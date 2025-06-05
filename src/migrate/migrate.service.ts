@@ -10,7 +10,8 @@ import {
   projects,
   sites,
   interventions,
-  projectSpecies
+  projectSpecies,
+  projectMembers
 } from '../database/schema/index';
 import { eq, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -298,11 +299,36 @@ export class MigrationService {
           if (existingProject.length > 0) {
             await this.logMigration(migrationId, 'warning', `Project already exist`, 'projects', JSON.stringify(transformedProject));
           } else {
-            await this.drizzleService.db.insert(projects).values(transformedProject).catch(async () => {
+
+            const projectResult = await this.drizzleService.db
+              .insert(projects)
+              .values(transformedProject)
+              .returning();
+
+            if (!projectResult || projectResult.length === 0) {
               await this.updateMigrationProgress(migrationId, 'projects', false, true);
-              await this.logMigration(migrationId, 'error', `Projects migration stoped. Error in DB insertion`, 'projects', JSON.stringify(transformedProject));
+              await this.logMigration(
+                migrationId,
+                'error',
+                'Projects migration stopped. No project data returned from DB insertion',
+                'projects',
+                JSON.stringify(transformedProject)
+              );
               stop = true;
-            });
+            }
+            if (!stop) {
+              const projectId = projectResult[0].id;
+              await this.drizzleService.db
+                .insert(projectMembers)
+                .values({
+                  projectId: projectId,
+                  userId: userId,
+                  uid: generateUid('mem'),
+                  role: 'owner',
+                  joinedAt: new Date(),
+                })
+                .returning();
+            }
           }
           await this.logMigration(migrationId, 'info', `Project with id:${transformedProject.uid} migrated.Moving to next project`, 'projects');
         } catch (error) {

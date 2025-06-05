@@ -33,7 +33,7 @@ export const interventionConfigurationSeedData = [
     interventionType: 'multi-tree-registration' as const,
     allowsSpecies: true,
     allowsMultipleSpecies: true,
-    requiresSpecies: false,
+    requiresSpecies: true,
     allowsTreeRegistration: true,
     requiresTreeRegistration: true,
     allowsSampleTrees: true,

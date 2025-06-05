@@ -11,6 +11,8 @@ import { generateUid } from 'src/util/uidGenerator';
 
 import { CacheService } from '../cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../cache/cache-keys';
+import { R2Service } from 'src/common/services/r2.service';
+import { CreatePresignedUrlDto } from './dto/signed-url.dto';
 
 @Injectable()
 export class UsersService {
@@ -18,6 +20,7 @@ export class UsersService {
   constructor(
     private drizzleService: DrizzleService,
     private cacheService: CacheService,
+    private readonly r2Service: R2Service
   ) { }
 
   // Consistent user selection for full user data
@@ -152,8 +155,43 @@ export class UsersService {
   }
 
 
+
+
   async migrateSuccess(id: number): Promise<Boolean> {
     return await this.updateUseMigration(id);
+  }
+
+  async generateR2Url(udi: number, dto: CreatePresignedUrlDto): Promise<any> {
+    try {
+      if (!dto.fileName || !dto.fileType) {
+        throw new BadRequestException('fileName and fileType are required');
+      }
+
+      // Validate file type (optional)
+      const allowedTypes = ['image/'];
+      if (!allowedTypes.some(type => dto.fileType.startsWith(type))) {
+        throw new BadRequestException('File type not allowed');
+      }
+
+      // Validate file size through filename or add size parameter
+      // This is a simple check - you might want more sophisticated validation
+
+      const result = await this.r2Service.generatePresignedUrl({
+        fileName: dto.fileName,
+        fileType: dto.fileType,
+        folder: dto.folder || 'uploads', // default folder
+      });
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+      }
+    }
   }
 
   async updateUseMigration(id: number): Promise<Boolean> {

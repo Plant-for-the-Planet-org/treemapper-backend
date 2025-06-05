@@ -30,6 +30,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from './entities/user.entity';
+import { CreatePresignedUrlDto } from './dto/signed-url.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -69,7 +70,13 @@ export class UsersController {
     return await this.usersService.migrateSuccess(user.id);
   }
 
+  @Post('presign-url')
+  async getSignedUrl(
+    @Body() dto: CreatePresignedUrlDto,
+    @CurrentUser() user: User) {
+    return await this.usersService.generateR2Url(user.id,dto);
 
+  }
 
 
 
