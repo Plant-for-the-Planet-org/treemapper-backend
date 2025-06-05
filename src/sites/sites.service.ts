@@ -78,17 +78,7 @@ export class SiteService {
     return this.getSiteById(newSite.id);
   }
 
-  async getAllSitesByProject(
-    membership: ProjectGuardResponse,
-    queryDto: QuerySitesDto
-  ) {
-    const { page = 1, limit = 10, status } = queryDto;
-    const offset = (page - 1) * limit;
-
-    // Build where conditions
-    const whereConditions = [eq(sites.projectId, membership.projectId)];
-
-    // Get sites with pagination
+  async getAllSitesByProject(membership: ProjectGuardResponse) {
     const sitesData = await this.drizzleService.db
       .select({
         uid: sites.uid,
@@ -101,7 +91,7 @@ export class SiteService {
         updatedAt: sites.updatedAt,
         project: {
           uid: projects.uid,
-          projectName: projects.projectName,
+          name: projects.projectName, // or projectName if that's the field name
           slug: projects.slug,
         },
         createdBy: {
@@ -112,28 +102,11 @@ export class SiteService {
         }
       })
       .from(sites)
-      .leftJoin(projects, eq(sites.projectId, projects.id))
-      .leftJoin(users, eq(sites.createdById, users.id))
-      .where(and(...whereConditions))
-      .orderBy(desc(sites.createdAt))
-      .limit(limit)
-      .offset(offset);
+      .where(eq(sites.projectId, membership.projectId))
+      .leftJoin(projects, eq(sites.projectId, projects.id)) // Fixed: join on projects.id
+      .leftJoin(users, eq(sites.createdById, users.id)); // Fixed: this was correct
 
-    // Get total count
-    const [totalCount] = await this.drizzleService.db
-      .select({ count: count() })
-      .from(sites)
-      .where(and(...whereConditions));
-
-    return {
-      data: sitesData,
-      pagination: {
-        page,
-        limit,
-        total: totalCount.count,
-        totalPages: Math.ceil(totalCount.count / limit),
-      }
-    };
+    return sitesData;
   }
 
   async getSiteByUid(projectId: number, siteUid: string) {

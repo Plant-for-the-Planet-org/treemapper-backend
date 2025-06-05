@@ -96,7 +96,7 @@ export class ProjectSpeciesService {
           },
         })
         .from(projectSpecies)
-        .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
+        .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.uid))
         .where(eq(projectSpecies.projectId, membership.projectId))
         .orderBy(desc(projectSpecies.createdAt))
     ]);

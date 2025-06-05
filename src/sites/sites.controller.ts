@@ -53,15 +53,9 @@ export class SiteController {
   ) {
     // All project members can view sites
     const result = await this.siteService.getAllSitesByProject(
-      membership,
-      queryDto
-    );
+      membership);
 
-    return {
-      status: 'success',
-      message: 'Sites retrieved successfully',
-      ...result,
-    };
+    return result;
   }
 
   // @Get('stats')
