@@ -11,9 +11,10 @@ import {
   sites,
   interventions,
   projectSpecies,
-  projectMembers
+  projectMembers,
+  scientificSpecies
 } from '../database/schema/index';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
 import { generateUid } from 'src/util/uidGenerator';
 import { UsersService } from 'src/users/users.service';
@@ -135,7 +136,7 @@ export class MigrationService {
       }
 
       if (stop) {
-        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for user and will not proceed further', 'migration');
+        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stopped for user and will not proceed further', 'migration');
         return;
       }
       console.log('Migrating done for "user"');
@@ -149,7 +150,7 @@ export class MigrationService {
 
 
       if (stop) {
-        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for project', 'migration');
+        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stopped for project', 'migration');
         return
       }
       console.log('User project migrated');
@@ -163,24 +164,24 @@ export class MigrationService {
 
       if (stop) {
         console.log('Issue in  site migration');
-        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for site', 'migration');
+        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stopped for site', 'migration');
         return
       }
       console.log('Sites  migrated');
 
 
-      // // Step 4: Migrate User Species
-      // if (!userMigrationRecord.migratedEntities.species) {
-      //   stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
-      // }
+      // Step 4: Migrate User Species
+      if (!userMigrationRecord.migratedEntities.species) {
+        stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
+      }
 
 
-      // if (stop) {
-      //   console.log('Issue in  species migration');
-      //   await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for species', 'migration');
-      //   return
-      // }
-      // console.log('Species  migrated');
+      if (stop) {
+        console.log('Issue in  species migration');
+        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stopped for species', 'migration');
+        return
+      }
+      console.log('Species  migrated');
 
 
 
@@ -262,7 +263,7 @@ export class MigrationService {
       console.log("Before")
       const updatedResult = await this.usersetvice.update(userId, transformedUser).catch(async () => {
         await this.updateMigrationProgress(migrationId, 'user', false, true);
-        await this.logMigration(migrationId, 'error', `User migration stoped while wrtiting to db`, 'user', JSON.stringify(transformedUser));
+        await this.logMigration(migrationId, 'error', `User migration stopped while wrtiting to db`, 'user', JSON.stringify(transformedUser));
         throw ''
       })
       console.log("After", updatedResult)
@@ -434,15 +435,35 @@ export class MigrationService {
         await this.logMigration(migrationId, 'info', `Species migration done. No species found`, 'species');
         return false
       }
-      const tranformedData = this.transformSpeciesData(speciesResponse.data, projectId, uid)
-      const uniqueSpecies = removeDuplicatesByScientificSpeciesId(tranformedData)
+      const cleanData = removeDuplicatesByScientificSpeciesId(speciesResponse.data)
+      const speciesIds = cleanData.map(el => el.scientificSpecies);
+      const existingSciSpecies = await this.drizzleService.db
+        .select({
+          uid: scientificSpecies.uid,
+          id: scientificSpecies.id
+        })
+        .from(scientificSpecies)
+        .where(inArray(scientificSpecies.uid, speciesIds));
+
+      const existingSpeciesMap = new Map(
+        existingSciSpecies.map(species => [species.uid, species.id])
+      );
+      const transformedData = this.transformSpeciesDataWithMapping(
+        cleanData,
+        projectId,
+        uid,
+        existingSpeciesMap
+      );
+
+
       const result = await this.drizzleService.db.transaction(async (tx) => {
         const insertedSpecies = await tx
           .insert(projectSpecies)
-          .values(uniqueSpecies)
+          .values(transformedData)
           .returning();
         return insertedSpecies;
       })
+      console.log("sd", result)
       if (result) {
         await this.logMigration(migrationId, 'info', `Species migration done`, 'species');
         await this.updateMigrationProgress(migrationId, 'species', true, false);
@@ -456,6 +477,48 @@ export class MigrationService {
       await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
     }
+  }
+
+  private transformSpeciesDataWithMapping(
+    cleanData: any[],
+    projectId: string,
+    uid: number,
+    existingSpeciesMap: Map<string, number>
+  ) {
+    return cleanData.map(species => {
+      const internalId = existingSpeciesMap.get(species.scientificSpecies);
+      return {
+        uid: species.id,
+        scientificSpeciesId: internalId,
+        projectId: projectId,
+        addedById: uid,
+        isNativeSpecies: false,
+        isDisabled: false,
+        aliases: species.aliases || null,
+        commonName: species.aliases || null, // Using aliases as common name since that's what we have
+        image: species.image || null,
+        description: species.description || null,
+        notes: null, // Not provided in input
+        favourite: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          scientificName: species.scientificName,
+          importedAt: new Date().toISOString(),
+          planet_record: true,
+          planet_uid: species.id
+        }
+      };
+      return {
+        ...species,
+        projectId,
+        uid,
+        scientificSpeciesId: species.scientificSpecies,
+        internalSpeciesId: internalId || null, // Map internal ID if exists
+        isExisting: !!internalId, // Flag to indicate if species exists
+        // Add other transformed fields as needed
+      };
+    });
   }
 
 
@@ -607,7 +670,7 @@ export class MigrationService {
             'images': updatedEntities.images || false,
             "species": updatedEntities.species || false,
           },
-          status: stop ? 'stoped' : 'in_progress',
+          status: stop ? 'stopped' : 'in_progress',
           lastUpdatedAt: new Date()
         })
         .where(eq(userMigrations.id, migrationId));
@@ -639,7 +702,7 @@ export class MigrationService {
       await this.drizzleService.db
         .update(userMigrations)
         .set({
-          status: 'stoped',
+          status: 'stopped',
           errorMessage: error.message
         })
         .where(eq(userMigrations.id, migrationId));
@@ -788,7 +851,7 @@ export class MigrationService {
     let stopProcess = false
     for (const site of projectData.sites) {
       if (stopProcess) {
-        await this.logMigration(migrationId, 'error', `Site loop stoped for project:${projectData.id}`, 'sites', JSON.stringify(projectData));
+        await this.logMigration(migrationId, 'error', `Site loop stopped for project:${projectData.id}`, 'sites', JSON.stringify(projectData));
         return true
       }
       const siteExist = await this.drizzleService.db
@@ -857,7 +920,9 @@ export class MigrationService {
         metadata: {
           originalId: species.id,
           scientificName: species.scientificName,
-          importedAt: new Date().toISOString()
+          importedAt: new Date().toISOString(),
+          planet_record: true,
+          planet_uid: species.id
         }
       };
     });
