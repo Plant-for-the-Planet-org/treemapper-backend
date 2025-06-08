@@ -97,6 +97,7 @@ CREATE TABLE "interventions" (
 	"project_id" integer,
 	"project_site_id" integer,
 	"parent_intervention_id" integer,
+	"parent_id" varchar,
 	"type" "intervention_type" NOT NULL,
 	"idempotency_key" varchar(64) NOT NULL,
 	"capture_mode" "capture_mode" NOT NULL,
@@ -116,10 +117,9 @@ CREATE TABLE "interventions" (
 	"is_private" boolean DEFAULT false NOT NULL,
 	"metadata" jsonb,
 	"scientific_species_id" integer,
-	"is_unknown" boolean DEFAULT false NOT NULL,
 	"custom_species_name" varchar(255),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
 	"deleted_at" timestamp with time zone,
 	"planet_record" boolean DEFAULT false,
 	"tag" varchar(100),
@@ -134,8 +134,8 @@ CREATE TABLE "interventions" (
 	"longitude" double precision,
 	"altitude" numeric(8, 2),
 	"accuracy" numeric(6, 2),
-	"planting_date" date NOT NULL,
 	"has_records" boolean DEFAULT false NOT NULL,
+	"planted_species" jsonb DEFAULT '[]'::jsonb,
 	CONSTRAINT "interventions_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "interventions_hid_unique" UNIQUE("hid"),
 	CONSTRAINT "interventions_idempotency_key_unique" UNIQUE("idempotency_key")
@@ -420,6 +420,7 @@ ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" F
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_parent_intervention_id_interventions_id_fk" FOREIGN KEY ("parent_intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_parent_id_interventions_uid_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."interventions"("uid") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "migration_logs" ADD CONSTRAINT "migration_logs_user_migration_id_user_migrations_id_fk" FOREIGN KEY ("user_migration_id") REFERENCES "public"."user_migrations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -449,6 +450,7 @@ CREATE INDEX "intervention_records_intervention_idx" ON "intervention_records" U
 CREATE INDEX "tree_records_recorded_by_idx" ON "intervention_records" USING btree ("recorded_by_id");--> statement-breakpoint
 CREATE INDEX "interventions_project_idx" ON "interventions" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "interventions_project_site_idx" ON "interventions" USING btree ("project_site_id");--> statement-breakpoint
+CREATE INDEX "parent_idx" ON "interventions" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "interventions_user_idx" ON "interventions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "interventions_uid_idx" ON "interventions" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "interventions_hid_idx" ON "interventions" USING btree ("hid");--> statement-breakpoint

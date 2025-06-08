@@ -85,7 +85,6 @@ export class DeviceLocationDto {
   @Min(0)
   accuracy?: number;
 
-  @ApiPropertyOptional({ example: 100.5 })
   @IsOptional()
   @IsNumber()
   altitude?: number;
@@ -147,7 +146,7 @@ export class CreateInterventionDto {
 
   @IsOptional()
   @IsNumber()
-  scientificSpecies: string;
+  scientificSpecies: number;
 
   @IsOptional()
   @IsString()
@@ -160,6 +159,22 @@ export class CreateInterventionDto {
   @IsOptional()
   longitude: number;
 
+  @IsOptional()
+  height: number;
+
+  @IsOptional()
+  width: number;
+
+  @ApiPropertyOptional({ example: 10.5 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  accuracy?: number;
+
+  @IsOptional()
+  @IsNumber()
+  altitude?: number;
+
 
   @IsOptional()
   @IsNumber()
@@ -167,10 +182,18 @@ export class CreateInterventionDto {
   sampleTreeCount?: number;
 
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  treesPlanted?: number;
+
+
   @ApiPropertyOptional({ example: 'restoration-2024' })
   @IsOptional()
   @IsString()
   tag?: string;
+
+
 }
 
 // src/modules/interventions/dto/update-intervention.dto.ts

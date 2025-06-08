@@ -37,212 +37,235 @@ export class InterventionsService {
     private drizzleService: DrizzleService,
   ) { }
 
+  private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
+
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
+    }
+
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' &&
+      locationInput.features &&
+      locationInput.features.length > 0 &&
+      locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
+
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
+
+    throw new BadRequestException('Invalid GeoJSON format');
+  }
+
   async create(createInterventionDto: CreateInterventionDto, membership: ProjectGuardResponse): Promise<any> {
-    // try {
-    //   let newHID = generateParentHID();
-    //   let projectSiteNumId = 0;
+    try {
+      let newHID = generateParentHID();
+      let projectSiteId: null | number = null;
 
-    //   const existingHid = await this.drizzleService.db
-    //     .select()
-    //     .from(interventions)
-    //     .where(eq(interventions.hid, newHID))
-    //     .limit(1);
+      const existingHid = await this.drizzleService.db
+        .select()
+        .from(interventions)
+        .where(eq(interventions.hid, newHID))
+        .limit(1);
 
-    //   if (existingHid.length > 0) {
-    //     newHID = generateParentHID();
-    //     const existingHid = await this.drizzleService.db
-    //       .select()
-    //       .from(interventions)
-    //       .where(eq(interventions.hid, newHID))
-    //       .limit(1);
-    //     if (existingHid.length > 0) {
-    //       throw new ConflictException('Intervention with this HID already exists');
-    //     }
-    //   }
+      if (existingHid.length > 0) {
+        newHID = generateParentHID();
+        const existingHid = await this.drizzleService.db
+          .select()
+          .from(interventions)
+          .where(eq(interventions.hid, newHID))
+          .limit(1);
+        if (existingHid.length > 0) {
+          throw new ConflictException('Intervention with this HID already exists');
+        }
+      }
 
-    //   const interventionConfig = interventionConfigurationSeedData.find(el => el.interventionType === createInterventionDto.type);
-    //   if (!interventionConfig) {
-    //     throw new BadRequestException('Invalid intervention type');
-    //   }
+      const interventionConfig = interventionConfigurationSeedData.find(el => el.interventionType === createInterventionDto.type);
 
-    //   // Early validation for species configuration
-    //   if (interventionConfig.allowsMultipleSpecies) {
-    //     // For multi-species: only plantedSpecies should be present
-    //     if (createInterventionDto.scientificSpecies || createInterventionDto.otherSpecies) {
-    //       throw new BadRequestException('For multi-species interventions, only plantedSpecies should be provided');
-    //     }
-    //     if (interventionConfig.requiresSpecies && (!createInterventionDto.plantedSpecies || createInterventionDto.plantedSpecies.length === 0)) {
-    //       throw new BadRequestException('This intervention type requires at least one species in plantedSpecies');
-    //     }
-    //   } else if (interventionConfig.allowsSpecies) {
-    //     // For single-species: either scientificSpecies OR otherSpecies, not plantedSpecies
-    //     if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
-    //       throw new BadRequestException('For single-species interventions, use scientificSpecies or otherSpecies instead of plantedSpecies');
-    //     }
-    //     if (createInterventionDto.scientificSpecies && createInterventionDto.otherSpecies) {
-    //       throw new BadRequestException('For single-species interventions, provide either scientificSpecies OR otherSpecies, not both');
-    //     }
-    //     if (interventionConfig.requiresSpecies && !createInterventionDto.scientificSpecies && !createInterventionDto.otherSpecies) {
-    //       throw new BadRequestException('This intervention type requires either scientificSpecies or otherSpecies');
-    //     }
-    //   } else {
-    //     // No species allowed
-    //     if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
-    //       throw new BadRequestException('This intervention type does not allow species');
-    //     }
-    //     if (createInterventionDto.scientificSpecies) {
-    //       throw new BadRequestException('This intervention type does not allow species');
-    //     }
-    //     if (createInterventionDto.otherSpecies) {
-    //       throw new BadRequestException('This intervention type does not allow species');
-    //     }
-    //   }
+      if (!interventionConfig) {
+        throw new BadRequestException('Invalid intervention type');
+      }
 
-    //   // Project site validation
-    //   if (createInterventionDto.plantProjectSite && !createInterventionDto.plantProject) {
-    //     throw new BadRequestException('Project site ID provided without project ID');
-    //   }
+      if (interventionConfig.allowsMultipleSpecies) {
+        // For multi-species: only plantedSpecies should be present
+        if (createInterventionDto.scientificSpecies || createInterventionDto.otherSpecies) {
+          throw new BadRequestException('For multi-species interventions, only plantedSpecies should be provided');
+        }
+        if (interventionConfig.requiresSpecies && (!createInterventionDto.plantedSpecies || createInterventionDto.plantedSpecies.length === 0)) {
+          throw new BadRequestException('This intervention type requires at least one species in plantedSpecies');
+        }
+      } else if (interventionConfig.allowsSpecies) {
+        // For single-species: either scientificSpecies OR otherSpecies, not plantedSpecies
+        if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+          throw new BadRequestException('For single-species interventions, use scientificSpecies or otherSpecies instead of plantedSpecies');
+        }
+        if (createInterventionDto.scientificSpecies && createInterventionDto.otherSpecies) {
+          throw new BadRequestException('For single-species interventions, provide either scientificSpecies OR otherSpecies, not both');
+        }
+        if (interventionConfig.requiresSpecies && !createInterventionDto.scientificSpecies && !createInterventionDto.otherSpecies) {
+          throw new BadRequestException('This intervention type requires either scientificSpecies or otherSpecies');
+        }
+      } else {
+        // No species allowed
+        if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+        if (createInterventionDto.scientificSpecies) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+        if (createInterventionDto.otherSpecies) {
+          throw new BadRequestException('This intervention type does not allow species');
+        }
+      }
 
-    //   if (createInterventionDto.plantProject && createInterventionDto.plantProjectSite) {
-    //     const site = await this.drizzleService.db
-    //       .select()
-    //       .from(sites)
-    //       .where(eq(sites.uid, createInterventionDto.plantProjectSite))
-    //       .limit(1);
-    //     if (site.length === 0) {
-    //       throw new NotFoundException('Site not found');
-    //     }
-    //     projectSiteNumId = site[0].id;
-    //   }
+      // Project site validation
+      if (createInterventionDto.plantProjectSite && !createInterventionDto.plantProject) {
+        throw new BadRequestException('Project site ID provided without project ID');
+      }
 
-    //   // Use allowed literal values for captureStatus
-    //   const captureStatus: CaptureStatus = interventionConfig.allowsSampleTrees ? CaptureStatus.INCOMPLETE : CaptureStatus.COMPLETE;
-    //   const sampleTreeCount = createInterventionDto.sampleTreeCount || 0;
-    //   const geometryType = createInterventionDto.geometry.type || 'Point';
+      if (createInterventionDto.plantProject && createInterventionDto.plantProjectSite) {
+        const site = await this.drizzleService.db
+          .select()
+          .from(sites)
+          .where(eq(sites.uid, createInterventionDto.plantProjectSite))
+          .limit(1);
+        if (site.length === 0) {
+          throw new NotFoundException('Site not found');
+        }
+        projectSiteId = site[0].id;
+      }
 
-    //   // Start transaction for intervention creation
-    //   return await this.drizzleService.db.transaction(async (tx) => {
-    //     // Generate UID
-    //     const uid = generateUid('inv');
+      const sampleTreeCount = createInterventionDto.sampleTreeCount || 0;
+      const geometryType = createInterventionDto.geometry.type || 'Point';
 
-    //     // Prepare intervention data matching your schema exactly
-    //     const interventionData = {
-    //       uid: uid,
-    //       hid: newHID,
-    //       discr: 'intervention' as const,
-    //       userId: membership.userId,
-    //       idempotencyKey: generateUid('inv'),
-    //       type: createInterventionDto.type,
-    //       interventionStartDate: new Date(createInterventionDto.interventionStartDate),
-    //       interventionEndDate: new Date(createInterventionDto.interventionEndDate),
-    //       captureMode: 'on_site' as const,
-    //       captureStatus: captureStatus,
-    //       location: sql`ST_GeomFromGeoJSON(${JSON.stringify(createInterventionDto.geometry)})`,
-    //       originalGeometry: createInterventionDto.geometry,
-    //       sampleTreeCount: sampleTreeCount,
-    //       projectId: membership.projectId,
-    //       deviceLocation: createInterventionDto.deviceLocation,
-    //       metaData: createInterventionDto.metadata || {},
-    //       projectSiteId: projectSiteNumId,
-    //       geometryType: geometryType,
-    //       registrationDate: new Date(createInterventionDto.registrationDate),
-    //       createdAt: new Date(),
-    //       updatedAt: new Date(),
-    //     };
 
-    //     // Create intervention
-    //     const result = await tx
-    //       .insert(interventions)
-    //       .values(interventionData)
-    //       .returning();
+      const geometry = this.getGeoJSONForPostGIS(createInterventionDto.geometry);
+      const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+      let plantedSpecies: { uid: string; plantedCount: any; scientificSpeciesId?: any; isUnknown?: boolean; customSpeciesName?: string }[] = [];
+        const uid = generateUid('inv');
+        if (interventionConfig.allowsSpecies) {
+          if (interventionConfig.allowsMultipleSpecies) {
+            if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
+              // Validate that all scientific species exist
+              const checkIfSciExists = createInterventionDto.plantedSpecies.filter(s => s.scientificSpeciesId);
+              const speciesIds = checkIfSciExists.map(s => s.scientificSpeciesId);
+              if (speciesIds.length > 0) {
+                const existingSpecies = await this.drizzleService.db
+                  .select()
+                  .from(scientificSpecies)
+                  .where(inArray(scientificSpecies.id, speciesIds));
 
-    //     const newIntervention = Array.isArray(result) ? result[0] : undefined;
-    //     if (!newIntervention) {
-    //       throw new Error('Failed to create intervention');
-    //     }
+                if (existingSpecies.length !== speciesIds.length) {
+                  throw new BadRequestException('One or more species not found');
+                }
+              }
 
-    //     console.log('New intervention created:', newIntervention);
+              // Insert intervention species
+              const speciesData = createInterventionDto.plantedSpecies.map(species => {
+                const payload = {
+                  uid: generateUid('invspc'),
+                  plantedCount: species.treeCount
+                }
+                if (species.scientificSpeciesId) {
+                  payload['scientificSpeciesId'] = species.scientificSpeciesId;
+                }
+                if (species.otherSpecies) {
+                  payload['isUnknown'] = true;
+                  payload['customSpeciesName'] = 'Unknown'
+                }
+                return payload
+              });
+              plantedSpecies = speciesData
+            }
+          } else {
+            // Single-species handling
+            if (createInterventionDto.otherSpecies) {
+              const speciesData = {
+                uid: generateUid('invspc'),
+                isUnknown: true,
+                customSpeciesName: 'Unknown',
+                plantedCount: 1
+              };
+            }
 
-    //     // Handle species creation based on intervention configuration
-    //     if (interventionConfig.allowsSpecies) {
-    //       if (interventionConfig.allowsMultipleSpecies) {
-    //         // Multi-species handling
-    //         if (createInterventionDto.plantedSpecies && createInterventionDto.plantedSpecies.length > 0) {
-    //           // Validate that all scientific species exist
-    //           const checkIfSciExists = createInterventionDto.plantedSpecies.filter(s => s.scientificSpeciesId);
-    //           const speciesIds = checkIfSciExists.map(s => s.scientificSpeciesId);
+            if (createInterventionDto.scientificSpecies) {
+              const existingSpecies = await this.drizzleService.db
+                .select()
+                .from(scientificSpecies)
+                .where(eq(scientificSpecies.id, createInterventionDto.scientificSpecies))
+                .limit(1);
 
-    //           if (speciesIds.length > 0) {
-    //             const existingSpecies = await tx
-    //               .select()
-    //               .from(scientificSpecies)
-    //               .where(inArray(scientificSpecies.id, speciesIds));
+              if (existingSpecies.length === 0) {
+                throw new BadRequestException('Scientific species not found');
+              }
 
-    //             if (existingSpecies.length !== speciesIds.length) {
-    //               throw new BadRequestException('One or more species not found');
-    //             }
-    //           }
+              const speciesData = {
+                uid: generateUid('invspc'),
+                scientificSpeciesId: createInterventionDto.scientificSpecies,
+                plantedCount: 1
+              };
+            }
+          }
+        }
 
-    //           // Insert intervention species
-    //           const speciesData = createInterventionDto.plantedSpecies.map(species => {
-    //             const payload = {
-    //               uid: generateUid('invspc'),
-    //               interventionId: newIntervention.id,
-    //               plantedCount: species.treeCount
-    //             }
-    //             if (species.scientificSpeciesId) {
-    //               payload['scientificSpeciesId'] = species.scientificSpeciesId;
-    //             }
-    //             if (species.otherSpecies) {
-    //               payload['isUnknown'] = true;
-    //               payload['customSpeciesName'] = 'Unknown'
-    //             }
-    //             return payload
-    //           });
+        // Prepare intervention data matching your schema exactly
+        const interventionData = {
+          uid: uid,
+          hid: newHID,
+          discr: 'intervention' as const,
+          userId: membership.userId,
+          idempotencyKey: generateUid('inv'), //Dosomething
+          type: createInterventionDto.type,
+          interventionStartDate: new Date(createInterventionDto.interventionStartDate),
+          interventionEndDate: new Date(createInterventionDto.interventionEndDate),
+          captureMode: 'on_site' as const, //dosomething
+          captureStatus: sampleTreeCount > 0 ? CaptureStatus.INCOMPLETE : CaptureStatus.COMPLETE,
+          location: locationValue,
+          originalGeometry: createInterventionDto.geometry,
+          sampleTreeCount: sampleTreeCount || null,
+          projectId: membership.projectId,
+          deviceLocation: createInterventionDto.deviceLocation,
+          metaData: createInterventionDto.metadata || null,
+          projectSiteId: projectSiteId || null,
+          geometryType: geometryType,
+          registrationDate: new Date(createInterventionDto.registrationDate),
+          treesPlanted: createInterventionDto.sampleTreeCount || null,
+          scientificSpeciesId: createInterventionDto.scientificSpecies,
+          otherSpecies: createInterventionDto.otherSpecies,
+          tag: createInterventionDto.tag,
+          height: createInterventionDto.height,
+          width: createInterventionDto.width,
+          latitude: createInterventionDto.latitude,
+          longitude: createInterventionDto.longitude,
+          has_records: false,
+          plantedSpecies:[]
+        };
 
-    //           console.log('Intervention data:', "Here is the species data", speciesData);
-    //           await tx.insert(interventionSpecies).values(speciesData);
-    //         }
-    //       } else {
-    //         // Single-species handling
-    //         if (createInterventionDto.otherSpecies) {
-    //           const speciesData = {
-    //             uid: generateUid('invspc'),
-    //             interventionId: newIntervention.id,
-    //             isUnknown: true,
-    //             customSpeciesName: 'Unknown',
-    //             plantedCount: 1
-    //           };
-    //           await tx.insert(interventionSpecies).values(speciesData);
-    //         }
+        // Create intervention
+        const result = await this.drizzleService.db
+          .insert(interventions)
+          .values(interventionData)
+          .returning();
 
-    //         if (createInterventionDto.scientificSpecies) {
-    //           const existingSpecies = await tx
-    //             .select()
-    //             .from(scientificSpecies)
-    //             .where(eq(scientificSpecies.uid, createInterventionDto.scientificSpecies))
-    //             .limit(1);
+        const newIntervention = Array.isArray(result) ? result[0] : undefined;
+        if (!newIntervention) {
+          throw new Error('Failed to create intervention');
+        }
 
-    //           if (existingSpecies.length === 0) {
-    //             throw new BadRequestException('Scientific species not found');
-    //           }
+        console.log('New intervention created:', newIntervention);
 
-    //           const speciesData = {
-    //             uid: generateUid('invspc'),
-    //             interventionId: newIntervention.id,
-    //             scientificSpeciesId: createInterventionDto.scientificSpecies,
-    //             plantedCount: 1
-    //           };
-    //           await tx.insert(interventionSpecies).values(speciesData);
-    //         }
-    //       }
-    //     }
+        // Handle species creation based on intervention configuration
 
-    //     return { uid: newIntervention.uid, hid: newIntervention.hid } as InterventionResponseDto;
-    //   });
-    // } catch (error) {
-    //   throw new BadRequestException(`Failed to create intervention: ${error.message}`);
-    // }
+        return { uid: newIntervention.uid, hid: newIntervention.hid } as InterventionResponseDto;
+    } catch (error) {
+      throw new BadRequestException(`Failed to create intervention: ${error.message}`);
+    }
   }
 
   async findOne(id: number): Promise<InterventionResponseDto> {

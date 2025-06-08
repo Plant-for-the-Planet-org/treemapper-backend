@@ -22,6 +22,7 @@ import { error } from 'console';
 import { boolean } from 'drizzle-orm/gel-core';
 import { ProjectsService } from 'src/projects/projects.service';
 import { createProjectTitle, removeDuplicatesByScientificSpeciesId } from 'src/common/utils/projectName.util';
+import { CaptureStatus } from 'src/interventions/interventions.service';
 
 export interface MigrationProgress {
   userId: number;
@@ -185,8 +186,8 @@ export class MigrationService {
 
 
 
-      // // Step 4: Migrate Interventions
-      // // await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
+      // Step 4: Migrate Interventions
+      // await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
 
       // // // Step 5: Handle Images (placeholder for S3 copy)
       // // await this.handleImageMigration(uid, userMigrationRecord.id);
@@ -522,61 +523,72 @@ export class MigrationService {
   }
 
 
+
   // private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
   //   try {
   //     await this.logMigration(uid, 'info', 'Starting User intervention migration', 'interventions');
-  //     const species = await this.makeApiCall(`/treemapper/species`, authToken);
-  //     if (!interventionsResponse || interventionsResponse === null) {
-  //       await this.updateMigrationProgress(migrationId, 'species', false, false);
-  //       await this.logMigration(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
+  //     const interventionResponse = await this.makeApiCall(`/treemapper/interventions?limit=100&_scope=extended&page=1`, authToken);
+  //     if (!interventionResponse || interventionResponse === null) {
+  //       await this.updateMigrationProgress(migrationId, 'interventions', false, false);
+  //       await this.logMigration(migrationId, 'error', `interventions migration failed. No response interventions`, 'interventions');
   //       return true;
   //     }
-  //     const oldInterventions = interventionsResponse.data;
+  //     const oldInterventions = interventionResponse.data;
+  //     const projectNumId = 0
+  //     const siteNumId = 0
 
-  //     let migratedCount = 0;
-  //     let failedCount = 0;
+  //     const tranformedParentIntervention = oldInterventions.map(el => {
+  //       const geometry = this.getGeoJSONForPostGIS(el.geometry);
+  //       const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+  //       const parentIntervention = {
+  //         uid: el.id,
+  //         hid: el.hid,
+  //         discr: 'intervention' as const,
+  //         userId: uid,
+  //         idempotencyKey: generateUid('inv'), //Dosomething
+  //         type: el.type,
+  //         interventionStartDate: el.interventionStartDate ? new Date(el.interventionStartDate) : new Date(),
+  //         interventionEndDate: el.interventionEndDate ? new Date(el.interventionEndDate) : new Date(),
+  //         captureMode: 'on_site' as const, //dosomething
+  //         captureStatus: el.sampleTreeCount > 0 && el.sampleTreeCount === el.sampleInterventions.length ? CaptureStatus.COMPLETE : CaptureStatus.INCOMPLETE,
+  //         location: locationValue,
+  //         originalGeometry: el.geometry,
+  //         sampleTreeCount: el.sampleTreeCount,
+  //         projectId: projectNumId,
+  //         deviceLocation: el.deviceLocation,
+  //         metaData: el.metadata || null,
+  //         projectSiteId: siteNumId,
+  //         geometryType: "Point",
+  //         registrationDate: new Date(el.registrationDate),
+  //         createdAt: new Date(),
+  //         updatedAt: new Date(),
+  //         treesPlanted: createInterventionDto.sampleTreeCount || null,
+  //         scientificSpeciesId: createInterventionDto.scientificSpecies,
+  //         otherSpecies: createInterventionDto.otherSpecies,
+  //         tag: createInterventionDto.tag,
+  //         height: createInterventionDto.height,
+  //         width: createInterventionDto.width,
+  //         latitude: createInterventionDto.latitude,
+  //         longitude: createInterventionDto.longitude,
+  //         altitude: createInterventionDto.altitude,
+  //         accuracy: createInterventionDto.longitude,
+  //         has_records: false,
+  //       };
 
-  //     // Process in batches to avoid memory issues
-  //     const batchSize = 50;
-  //     for (let i = 0; i < oldInterventions.length; i += batchSize) {
-  //       const batch = oldInterventions.slice(i, i + batchSize);
+  //       return
+  //     })
 
-  //       for (const oldIntervention of batch) {
-  //         try {
-  //           const transformedIntervention = this.transformInterventionData(oldIntervention, uid);
 
-  //           const existingIntervention = await this.dataSource
-  //             .select()
-  //             .from(interventions)
-  //             .where(eq(interventions.uid, oldIntervention.id))
-  //             .limit(1);
 
-  //           if (existingIntervention.length > 0) {
-  //             await this.handleDataConflict(migrationId, 'intervention', oldIntervention.id, 'intervention_exists', {
-  //               existing: existingIntervention[0],
-  //               new: transformedIntervention
-  //             });
-  //           } else {
-  //             await this.dataSource.insert(interventions).values(transformedIntervention);
-  //             migratedCount++;
-  //           }
 
-  //         } catch (error) {
-  //           failedCount++;
-  //           await this.logMigration(uid, 'error', `Intervention migration failed for intervention ${oldIntervention.id}: ${error.message}`, 'intervention', oldIntervention.id);
-  //         }
-  //       }
-
-  //       // Log batch progress
-  //       await this.logMigration(uid, 'info', `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(oldInterventions.length / batchSize)}`, 'interventions');
+  //     try {
+  //       await this.updateMigrationProgress(migrationId, 'interventions', true);
+  //       await this.logMigration(uid, 'info', `Interventions migration completed: ${migratedCount} succeeded, ${failedCount} failed`, 'interventions');
   //     }
-
-  //     await this.updateMigrationProgress(migrationId, 'interventions', true);
-  //     await this.logMigration(uid, 'info', `Interventions migration completed: ${migratedCount} succeeded, ${failedCount} failed`, 'interventions');
-
-  //   } catch (error) {
-  //     await this.logMigration(uid, 'error', `Interventions migration failed: ${error.message}`, 'interventions', null, error.stack);
-  //     throw error;
+  //     catch (error) {
+  //       await this.logMigration(uid, 'error', `Interventions migration failed: ${error.message}`, 'interventions', null, error.stack);
+  //       throw error;
+  //     }
   //   }
   // }
 

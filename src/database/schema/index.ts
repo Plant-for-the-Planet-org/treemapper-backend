@@ -452,6 +452,7 @@ export const interventions = pgTable('interventions', {
   projectId: integer('project_id').references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
+  parent: varchar('parent_id').references(() => interventions.uid),
   type: interventionTypeEnum('type').notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 64 }).unique().notNull(),
   captureMode: captureModeEnum('capture_mode').notNull(),
@@ -471,8 +472,7 @@ export const interventions = pgTable('interventions', {
   isPrivate: boolean('is_private').default(false).notNull(),
   metadata: jsonb('metadata'),
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
-  isUnknown: boolean('is_unknown').default(false).notNull(),
-  customSpeciesName: varchar('custom_species_name', { length: 255 }),
+  otherSpecies: varchar('custom_species_name', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -489,12 +489,14 @@ export const interventions = pgTable('interventions', {
   longitude: doublePrecision('longitude'),
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
-  plantingDate: date('planting_date').notNull(),
+  plantingDate:  timestamp('planting_date', { withTimezone: true }),
   has_records: boolean('has_records').default(false).notNull(),
+  plantedSpecies: jsonb('planted_species').default([])
 }, (table) => ({
   // Basic indexes
   projectIdx: index('interventions_project_idx').on(table.projectId),
   projectSiteIdx: index('interventions_project_site_idx').on(table.projectSiteId),
+  parentIdx: index('parent_idx').on(table.uid),
   userIdx: index('interventions_user_idx').on(table.userId),
   uidIdx: index('interventions_uid_idx').on(table.uid),
   hidIdx: index('interventions_hid_idx').on(table.hid)

@@ -11,8 +11,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { MigrationModule } from './migrate/migrate.module.ts';
 import { SpeciesModule } from './species/species.module';
 import { SitesModule } from './sites/sites.module';
-// import { InterventionsModule } from './interventions/interventions.module';
-// import { TreesModule } from './trees/trees.module';
+import { InterventionsModule } from './interventions/interventions.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -25,7 +24,7 @@ import { SitesModule } from './sites/sites.module';
     ProjectsModule,
     SpeciesModule,
     SitesModule,
-    // InterventionsModule,
+   InterventionsModule
     // TreesModule
   ],
   controllers: [AppController],
