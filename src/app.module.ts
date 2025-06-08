@@ -1,50 +1,34 @@
+// src/app.module.ts
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
-import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
-import { APP_GUARD } from '@nestjs/core';
-import { ProjectsModule } from './projects/projects.module';
-import { CommonModule } from './common/common.module';
-import { ProjectInviteModule } from './project-invite/project-invite.module';
-import { ProjectSitesModule } from './project-sites/project-sites.module';
+import { CacheService } from './cache/cache.service';
 import { AuthModule } from './auth/auth.module';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { RolesGuard } from './auth/roles.guard';
-import { HealthModule } from './health/health.module';
-import { ProjectUsersModule } from './project-users/project-users.module';
+import { ProjectsModule } from './projects/projects.module';
+import { MigrationModule } from './migrate/migrate.module.ts';
 import { SpeciesModule } from './species/species.module';
-
-
+import { SitesModule } from './sites/sites.module';
+// import { InterventionsModule } from './interventions/interventions.module';
+// import { TreesModule } from './trees/trees.module';
 @Module({
   imports: [
-    CacheModule.register({
-      ttl: 3600, // Time to live in seconds (1 hour)
-      max: 100,  // Maximum number of items in cache
-      isGlobal: true // Make cache available everywhere
+    ConfigModule.forRoot({
+      isGlobal: true,
     }),
-    AuthModule,
-    ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
+    AuthModule,
     UsersModule,
+    MigrationModule,
     ProjectsModule,
-    CommonModule,
-    ProjectInviteModule,
-    ProjectSitesModule,
-    HealthModule,
-    ProjectUsersModule,
-    SpeciesModule
+    SpeciesModule,
+    SitesModule,
+    // InterventionsModule,
+    // TreesModule
   ],
-  controllers: [],
-  providers: [
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
-  ],
+  controllers: [AppController],
+  providers: [AppService, CacheService],
 })
-export class AppModule {}
+export class AppModule { }
