@@ -164,9 +164,6 @@ export const migrationLogs = pgTable('migration_logs', {
 });
 
 
-
-
-
 // ============================================================================
 // USERS TABLE
 // ============================================================================
@@ -503,8 +500,6 @@ export const interventions = pgTable('interventions', {
   hidIdx: index('interventions_hid_idx').on(table.hid)
 }));
 
-
-
 export const interventionRecords = pgTable('intervention_records', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
@@ -547,7 +542,6 @@ export const interventionRecords = pgTable('intervention_records', {
   interventionIdx: index('intervention_records_intervention_idx').on(table.interventionId),
   recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById)
 }));
-
 
 export const interventionImages = pgTable('intervention_images', {
   id: serial('id').primaryKey(),
@@ -627,7 +621,6 @@ export const notifications = pgTable('notifications', {
   userCategoryIdx: index('notifications_user_category_idx').on(table.userId, table.category),
   unreadNotificationsIdx: index('notifications_unread_idx').on(table.userId).where(sql`is_read = false AND is_archived = false`),
 }));
-
 
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
@@ -794,7 +787,6 @@ export const interventionImagesRelations = relations(interventionImages, ({ one 
     references: [interventions.id],
   })
 }));
-
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {

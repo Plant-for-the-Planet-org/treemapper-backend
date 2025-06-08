@@ -113,7 +113,6 @@ export class MigrationService {
 
     try {
       console.log('Migrating started');
-      // Create migration record
       userMigrationRecord = await this.createMigrationRecord(userId, planetId, email);
 
       if (userMigrationRecord.status === 'completed') {
@@ -170,28 +169,36 @@ export class MigrationService {
       console.log('Sites  migrated');
 
 
-      // Step 4: Migrate User Species
-      if (!userMigrationRecord.migratedEntities.species) {
-        stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
-      }
+      // // Step 4: Migrate User Species
+      // if (!userMigrationRecord.migratedEntities.species) {
+      //   stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
+      // }
 
 
-      if (stop) {
-        console.log('Issue in  species migration');
-        await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for species', 'migration');
-        return
-      }
-      console.log('Species  migrated');
+      // if (stop) {
+      //   console.log('Issue in  species migration');
+      //   await this.logMigration(userMigrationRecord.id, 'error', 'Migration stoped for species', 'migration');
+      //   return
+      // }
+      // console.log('Species  migrated');
 
 
 
-      // Step 4: Migrate Interventions
-      // await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
+      // // Step 4: Migrate Interventions
+      // // await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
 
-      // // Step 5: Handle Images (placeholder for S3 copy)
-      // await this.handleImageMigration(uid, userMigrationRecord.id);
-      await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
+      // // // Step 5: Handle Images (placeholder for S3 copy)
+      // // await this.handleImageMigration(uid, userMigrationRecord.id);
+      // await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
+      // await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
+
+
+      //Test
+      await this.updateMigrationProgress(userMigrationRecord.id, 'sites', true, false);
+      await this.updateMigrationProgress(userMigrationRecord.id, 'species', true, false);
       await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
+
+
       // Mark migration as complete
       await this.completeMigration(userMigrationRecord.id);
 
@@ -299,40 +306,47 @@ export class MigrationService {
           if (existingProject.length > 0) {
             await this.logMigration(migrationId, 'warning', `Project already exist`, 'projects', JSON.stringify(transformedProject));
           } else {
+            await this.drizzleService.db.transaction(async (tx) => {
+              try {
+                const projectResult = await tx
+                  .insert(projects)
+                  .values(transformedProject)
+                  .returning({ id: projects.id, uid: projects.uid });
 
-            const projectResult = await this.drizzleService.db
-              .insert(projects)
-              .values(transformedProject)
-              .returning();
+                if (!projectResult || projectResult.length === 0) {
+                  throw new Error('Project insertion returned no results');
+                }
 
-            if (!projectResult || projectResult.length === 0) {
-              await this.updateMigrationProgress(migrationId, 'projects', false, true);
-              await this.logMigration(
-                migrationId,
-                'error',
-                'Projects migration stopped. No project data returned from DB insertion',
-                'projects',
-                JSON.stringify(transformedProject)
-              );
-              stop = true;
-            }
-            if (!stop) {
-              const projectId = projectResult[0].id;
-              await this.drizzleService.db
-                .insert(projectMembers)
-                .values({
-                  projectId: projectId,
-                  userId: userId,
-                  uid: generateUid('mem'),
-                  role: 'owner',
-                  joinedAt: new Date(),
-                })
-                .returning();
-            }
+                const newProjectId = projectResult[0].id;
+
+                // Insert project membership
+                await tx
+                  .insert(projectMembers)
+                  .values({
+                    projectId: newProjectId,
+                    userId: userId,
+                    uid: generateUid('mem'),
+                    role: 'owner',
+                    joinedAt: new Date(),
+                  });
+
+                await this.logMigration(
+                  migrationId,
+                  'info',
+                  `Successfully migrated project '${projectResult[0].uid}'`,
+                  'projects',
+                  projectResult[0].uid
+                );
+                stop = false;
+              } catch (error) {
+                await this.updateMigrationProgress(migrationId, 'projects', false, true);
+                await this.logMigration(migrationId, 'error', `Projects migration failed: At 12837`, 'projects', JSON.stringify(error.stack));
+                stop = true
+              }
+            })
           }
           await this.logMigration(migrationId, 'info', `Project with id:${transformedProject.uid} migrated.Moving to next project`, 'projects');
         } catch (error) {
-          console.log("ASDC", error)
           await this.logMigration(migrationId, 'error', `Project migration failed for project at catch block`, 'project', JSON.stringify(oldProject));
           stop = true;
         }
@@ -641,8 +655,7 @@ export class MigrationService {
       firstname: oldUserData.firstname || null,
       lastname: oldUserData.lastname || null,
       displayName: oldUserData.displayName || null,
-      avatar: oldUserData.image || '',
-      avatarCdn: oldUserData.image || '', // Same as avatar for now
+      image: oldUserData.image || '',
       slug: oldUserData.slug || null,
       type: oldUserData.type,
       country: oldUserData.country,
