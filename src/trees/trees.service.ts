@@ -2,11 +2,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { and, eq, desc, asc, gte, lte, inArray, sql, count, avg } from 'drizzle-orm';
 import { 
-  trees, 
-  treeRecords, 
   interventions, 
   scientificSpecies,
-  interventionSpecies,
   users
 } from '../database/schema'
 import { 

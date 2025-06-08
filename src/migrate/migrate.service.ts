@@ -638,7 +638,6 @@ export class MigrationService {
   private transformUserData(oldUserData: any, userId: number): any {
     const transformedUser = {
       uid: oldUserData.id, // Use old ID as UID
-      name: oldUserData.name || null,
       firstname: oldUserData.firstname || null,
       lastname: oldUserData.lastname || null,
       displayName: oldUserData.displayName || null,
@@ -658,6 +657,7 @@ export class MigrationService {
       updatedAt: new Date(),
       deletedAt: null,
       migratedAt: new Date(),
+      planetRecord: true
     };
     return transformedUser;
   }

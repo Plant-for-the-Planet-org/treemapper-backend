@@ -532,7 +532,7 @@ export class ProjectsService {
           },
           invitedBy: {
             uid: users.uid,
-            name: users.name,
+            name: users.displayName,
             email: users.email,
             displayName: users.displayName,
             image: users.image,
@@ -1033,7 +1033,7 @@ export class ProjectsService {
         error: null,
         data: {
           userId: memberId,
-          name: memberToUpdate.user.name,
+          name: memberToUpdate.user.displayName,
           email: memberToUpdate.user.email,
           role: result.role,
         },

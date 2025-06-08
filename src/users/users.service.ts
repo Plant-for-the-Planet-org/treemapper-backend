@@ -30,7 +30,6 @@ export class UsersService {
     auth0Id: users.auth0Id,
     email: users.email,
     authName: users.authName,
-    name: users.name,
     firstname: users.firstname,
     lastname: users.lastname,
     displayName: users.displayName,
@@ -49,13 +48,13 @@ export class UsersService {
     deletedAt: users.deletedAt,
     migratedAt: users.migratedAt,
     supportPin: users.supportPin,
+    planetRecord: users.planetRecord
   } as const;
 
   // Public user selection (excludes sensitive fields)
   private readonly PUBLIC_USER_SELECT = {
     uid: users.uid,
     email: users.email,
-    name: users.name,
     firstname: users.firstname,
     lastname: users.lastname,
     displayName: users.displayName,
@@ -225,7 +224,6 @@ export class UsersService {
       .returning({
         uid: users.uid,
         email: users.email,
-        name: users.name,
         firstname: users.firstname,
         lastname: users.lastname,
         displayName: users.displayName,
@@ -243,6 +241,7 @@ export class UsersService {
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         migratedAt: users.migratedAt,
+        planetRecord: users.planetRecord
       });
 
     return result[0];

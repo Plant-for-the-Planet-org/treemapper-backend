@@ -7,7 +7,7 @@ export class CreateUserSpeciesDto {
   @IsNotEmpty()
   @IsInt()
   @Type(() => String)
-  scientificSpeciesId: string;
+  scientificSpeciesId: number;
 
   @IsOptional()
   @IsString()

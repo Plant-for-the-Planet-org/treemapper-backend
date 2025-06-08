@@ -21,7 +21,6 @@ export class CacheWarmerService {
             .select({
                 uid: users.uid,
                 email: users.email,
-                name: users.name,
                 firstname: users.firstname,
                 lastname: users.lastname,
                 displayName: users.displayName,
