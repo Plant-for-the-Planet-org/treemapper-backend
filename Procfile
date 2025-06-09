@@ -1,1 +1,1 @@
-web: yarn start:prod
+web: node dist/src/main.js
