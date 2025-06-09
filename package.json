@@ -25,7 +25,7 @@
     "set-user-role": "ts-node scripts/create-admin.ts"
   },
   "engines": {
-    "node": "18.x",
+    "node": "23.x",
     "yarn": "1.22.x"
   },
   "dependencies": {
