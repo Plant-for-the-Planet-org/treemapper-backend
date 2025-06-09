@@ -13,7 +13,12 @@ async function bootstrap() {
 
   try {
     const app = await NestFactory.create(AppModule);
-
+    app.enableCors({
+      origin: true, // Allow all origins
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    });
     // CRITICAL: Add body parser limits FIRST, before any other middleware
     app.use(json({ limit: '10mb' }));
     app.use(urlencoded({ extended: true, limit: '10mb' }));
