@@ -24,20 +24,6 @@ async function bootstrap() {
     // Global filters for error handling
     app.useGlobalFilters(new HttpExceptionFilter());
 
-    // Enable CORS - Allow both development and production URLs
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'http://localhost:3000',
-      'https://treemapper-dashboard-1944c398f284.herokuapp.com'
-    ].filter(Boolean); // Remove any undefined values
-
-    app.enableCors({
-      origin: true, // Allow all origins temporarily
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    });
-
     // API prefix
     app.setGlobalPrefix('api');
 
