@@ -58,6 +58,15 @@ export class InterventionsController {
     return this.interventionsService.create(createInterventionDto, membership);
   }
 
+  @Get('/projects/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async findAllintervention(
+    @Membership() membership: any
+  ): Promise<InterventionResponseDto> {
+    return this.interventionsService.findAll(membership);
+  }
+
   // @Get()
   // @ApiOperation({ summary: 'Get all interventions with filtering and pagination' })
   // @ApiResponse({
