@@ -23,6 +23,8 @@ export class ProjectSpeciesService {
     membership: ProjectGuardResponse,
     createDto: CreateUserSpeciesDto,
   ) {
+
+    console.log("SDCDS",createDto)
     const scientificSpeciesExists = await this.drizzle.db
       .select()
       .from(scientificSpecies)
@@ -67,6 +69,7 @@ export class ProjectSpeciesService {
         description: createDto.description || scientificSpeciesData.description,
         notes: createDto.notes,
         favourite: createDto.favourite || false,
+        metadata: createDto.metadata || null
       })
       .returning();
 
@@ -96,7 +99,7 @@ export class ProjectSpeciesService {
           },
         })
         .from(projectSpecies)
-        .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.uid))
+        .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
         .where(eq(projectSpecies.projectId, membership.projectId))
         .orderBy(desc(projectSpecies.createdAt))
     ]);

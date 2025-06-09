@@ -191,8 +191,8 @@ export class MigrationService {
 
       // // // Step 5: Handle Images (placeholder for S3 copy)
       // // await this.handleImageMigration(uid, userMigrationRecord.id);
-      // await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
-      // await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
+      await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
+      await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
 
 
       //Test

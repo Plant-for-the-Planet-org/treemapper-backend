@@ -9,50 +9,50 @@ import { v4 as uuidv4 } from 'uuid';
 export class SpeciesRequestService {
   constructor(private readonly drizzle: DrizzleService) {}
 
-  // async createRequest(
-  //   userId: number,
-  //   projectId: number,
-  //   createDto: CreateSpeciesRequestDto,
-  // ) {
-  //   // Check if scientific name already exists
-  //   const existingSpecies = await this.drizzle.db
-  //     .select()
-  //     .from(scientificSpecies)
-  //     .where(eq(scientificSpecies.scientificName, createDto.scientificName))
-  //     .limit(1);
+  async createRequest(
+    userId: number,
+    projectId: number,
+    createDto: CreateSpeciesRequestDto,
+  ) {
+    // Check if scientific name already exists
+    const existingSpecies = await this.drizzle.db
+      .select()
+      .from(scientificSpecies)
+      .where(eq(scientificSpecies.scientificName, createDto.scientificName))
+      .limit(1);
 
-  //   if (existingSpecies.length > 0) {
-  //     throw new ConflictException('Species already exists in the database');
-  //   }
+    if (existingSpecies.length > 0) {
+      throw new ConflictException('Species already exists in the database');
+    }
 
-  //   // Check if there's already a pending request for this species
-  //   const existingRequest = await this.drizzle.db
-  //     .select()
-  //     .from(speciesRequests)
-  //     .where(
-  //       and(
-  //         eq(speciesRequests.scientificName, createDto.scientificName),
-  //         eq(speciesRequests.status, 'pending'),
-  //       ),
-  //     )
-  //     .limit(1);
+    // Check if there's already a pending request for this species
+    const existingRequest = await this.drizzle.db
+      .select()
+      .from(speciesRequests)
+      .where(
+        and(
+          eq(speciesRequests.scientificName, createDto.scientificName),
+          eq(speciesRequests.status, 'pending'),
+        ),
+      )
+      .limit(1);
 
-  //   if (existingRequest.length > 0) {
-  //     throw new ConflictException('There is already a pending request for this species');
-  //   }
+    if (existingRequest.length > 0) {
+      throw new ConflictException('There is already a pending request for this species');
+    }
 
-  //   const newRequest = await this.drizzle.db
-  //     .insert(speciesRequests)
-  //     .values({
-  //       uid: uuidv4(),
-  //       ...createDto,
-  //       requestedById: userId,
-  //       projectId,
-  //     })
-  //     .returning();
+    const newRequest = await this.drizzle.db
+      .insert(speciesRequests)
+      .values({
+        uid: uuidv4(),
+        ...createDto,
+        requestedById: userId,
+        projectId,
+      })
+      .returning();
 
-  //   return newRequest[0];
-  // }
+    return newRequest[0];
+  }
 
   // async getRequests(filterDto: SpeciesRequestFilterDto) {
   //   const { page = 1, limit = 10, search, status } = filterDto;

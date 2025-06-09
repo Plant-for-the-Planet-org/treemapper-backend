@@ -1,5 +1,5 @@
 {
-  "id": "310f0d24-5103-458a-9f0e-8a70d24f49c9",
+  "id": "7ff7220a-5eb3-4b59-8b7d-b3c368483954",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -840,7 +840,8 @@
           "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "now()"
         },
         "deleted_at": {
           "name": "deleted_at",
@@ -926,6 +927,12 @@
         "accuracy": {
           "name": "accuracy",
           "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "planting_date": {
+          "name": "planting_date",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
