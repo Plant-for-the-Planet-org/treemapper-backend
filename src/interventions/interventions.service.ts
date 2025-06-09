@@ -177,7 +177,7 @@ export class InterventionsService {
               }
               if (species.otherSpecies) {
                 payload['isUnknown'] = true;
-                payload['customSpeciesName'] = 'Unknown'
+                payload['customSpeciesName'] = species.customSpeciesName
               }
               return payload
             });
@@ -229,7 +229,7 @@ export class InterventionsService {
         originalGeometry: createInterventionDto.geometry,
         sampleTreeCount: sampleTreeCount || null,
         projectId: membership.projectId,
-        deviceLocation: createInterventionDto.deviceLocation,
+        deviceLocation: createInterventionDto.deviceLocation || null,
         metaData: createInterventionDto.metadata || null,
         projectSiteId: projectSiteId || null,
         geometryType: geometryType,
