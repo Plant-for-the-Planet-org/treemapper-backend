@@ -10,17 +10,17 @@ import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  
+
   try {
     const app = await NestFactory.create(AppModule);
-    
+
     // CRITICAL: Add body parser limits FIRST, before any other middleware
     app.use(json({ limit: '10mb' }));
     app.use(urlencoded({ extended: true, limit: '10mb' }));
 
     // Global interceptors for response formatting
     app.useGlobalInterceptors(new ResponseInterceptor());
-    
+
     // Global filters for error handling
     app.useGlobalFilters(new HttpExceptionFilter());
 
@@ -32,20 +32,22 @@ async function bootstrap() {
     ].filter(Boolean); // Remove any undefined values
 
     app.enableCors({
-      origin: allowedOrigins,
+      origin: true, // Allow all origins temporarily
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
     // API prefix
     app.setGlobalPrefix('api');
-    
+
     // Validation pipe
     app.useGlobalPipes(new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
     }));
-    
+
     // Global JWT guard (with public route exclusions)
     const jwtGuard = app.get(JwtAuthGuard);
     app.useGlobalGuards(jwtGuard);
@@ -62,20 +64,20 @@ async function bootstrap() {
       SwaggerModule.setup('api/docs', app, document);
       logger.log('Swagger documentation available at /api/docs');
     }
-    
+
     // Use Heroku's dynamic port, bind to all interfaces
     const port = process.env.PORT || 3001;
     await app.listen(port, '0.0.0.0');
-    
+
     // Log the correct URL based on environment
-    const baseUrl = process.env.NODE_ENV === 'production' 
+    const baseUrl = process.env.NODE_ENV === 'production'
       ? `https://treemapper-backend-abb922f4cbd0.herokuapp.com`
       : `http://localhost:${port}`;
-    
+
     logger.log(`🚀 Application is running on: ${baseUrl}`);
     logger.log(`📚 API Documentation: ${baseUrl}/api/docs`);
     logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    
+
   } catch (error) {
     logger.error('❌ Error starting the application:', error);
     process.exit(1);
