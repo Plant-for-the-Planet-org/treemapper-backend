@@ -13,24 +13,44 @@ async function bootstrap() {
 
   try {
     const app = await NestFactory.create(AppModule);
+    
+    // CORS Configuration - Move this to the very beginning
     app.enableCors({
-      origin: true, // Allow all origins
+      origin: [
+        'https://treemapper-dashboard-1944c398f284.herokuapp.com',
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'https://localhost:3000', // In case of HTTPS locally
+      ],
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+      allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'Accept',
+        'Origin',
+        'X-Requested-With',
+        'Access-Control-Allow-Origin',
+        'Access-Control-Allow-Headers',
+        'Access-Control-Allow-Methods',
+      ],
+      exposedHeaders: ['Authorization'],
+      preflightContinue: false,
+      optionsSuccessStatus: 204,
     });
-    // CRITICAL: Add body parser limits FIRST, before any other middleware
+
+    // Body parser limits
     app.use(json({ limit: '10mb' }));
     app.use(urlencoded({ extended: true, limit: '10mb' }));
+
+    // API prefix
+    app.setGlobalPrefix('api');
 
     // Global interceptors for response formatting
     app.useGlobalInterceptors(new ResponseInterceptor());
 
     // Global filters for error handling
     app.useGlobalFilters(new HttpExceptionFilter());
-
-    // API prefix
-    app.setGlobalPrefix('api');
 
     // Validation pipe
     app.useGlobalPipes(new ValidationPipe({
@@ -43,7 +63,7 @@ async function bootstrap() {
     const jwtGuard = app.get(JwtAuthGuard);
     app.useGlobalGuards(jwtGuard);
 
-    // Swagger setup - Only in development or if explicitly enabled
+    // Swagger setup
     if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
       const config = new DocumentBuilder()
         .setTitle('TreeMapper API')
@@ -56,11 +76,9 @@ async function bootstrap() {
       logger.log('Swagger documentation available at /api/docs');
     }
 
-    // Use Heroku's dynamic port, bind to all interfaces
     const port = process.env.PORT || 3001;
     await app.listen(port, '0.0.0.0');
 
-    // Log the correct URL based on environment
     const baseUrl = process.env.NODE_ENV === 'production'
       ? `https://treemapper-backend-abb922f4cbd0.herokuapp.com`
       : `http://localhost:${port}`;
