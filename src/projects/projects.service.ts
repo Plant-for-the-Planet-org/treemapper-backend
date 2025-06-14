@@ -8,7 +8,7 @@ import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
 import { eq, and, desc, ne, asc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
-import { NotificationService } from '../notification/notification.service';
+import { EmailService } from '../email/email.service';
 import { v4 as uuidv4 } from 'uuid';
 import { generateUid } from 'src/util/uidGenerator';
 import { User } from 'src/users/entities/user.entity';
@@ -81,7 +81,7 @@ export interface ProjectMembersAndInvitesResponse {
 export class ProjectsService {
   constructor(
     private drizzleService: DrizzleService,
-    private notificationService: NotificationService,
+    private emailService: EmailService,
   ) { }
 
   private getGeoJSONForPostGIS(locationInput: any): any {
@@ -480,7 +480,7 @@ export class ProjectsService {
         })
         .returning();
 
-      await this.notificationService.sendProjectInviteEmail({
+      await this.emailService.sendProjectInviteEmail({
         email,
         projectName: membership.projectName,
         role,

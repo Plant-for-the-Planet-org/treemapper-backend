@@ -576,38 +576,22 @@ export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-
-  // Notification content
   type: varchar('type', { length: 50 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   message: text('message').notNull(),
-
-  // Related entities
   relatedEntityType: varchar('related_entity_type', { length: 50 }),
   relatedEntityId: integer('related_entity_id'),
-
-  // Notification metadata
   priority: varchar('priority', { length: 20 }).default('normal'),
   category: varchar('category', { length: 50 }),
-
-  // Status tracking
   isRead: boolean('is_read').default(false).notNull(),
   isArchived: boolean('is_archived').default(false).notNull(),
-
-  // Action details
   actionUrl: text('action_url'),
   actionText: varchar('action_text', { length: 100 }),
-
-  // Scheduling
   scheduledFor: timestamp('scheduled_for'),
   expiresAt: timestamp('expires_at'),
-
-  // Delivery tracking
   deliveryMethod: varchar('delivery_method', { length: 50 }).default('in_app'),
   sentAt: timestamp('sent_at'),
   deliveredAt: timestamp('delivered_at'),
-
-  // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
