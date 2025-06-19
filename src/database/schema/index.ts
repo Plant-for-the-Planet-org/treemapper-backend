@@ -478,6 +478,7 @@ export const interventions = pgTable('interventions', {
   isPrivate: boolean('is_private').default(false).notNull(),
   metadata: jsonb('metadata'),
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
+  // scientificSpeciesName: varchar('scientific_species_name', { length: 255 }),
   otherSpecies: varchar('custom_species_name', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

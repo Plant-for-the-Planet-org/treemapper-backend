@@ -167,21 +167,21 @@ export class InterventionsService {
             }
 
             // Insert intervention species
-            const speciesData = createInterventionDto.plantedSpecies.map(species => {
-              const payload = {
-                uid: generateUid('invspc'),
-                plantedCount: species.treeCount
-              }
-              if (species.scientificSpeciesId) {
-                payload['scientificSpeciesId'] = species.scientificSpeciesId;
-              }
-              if (species.otherSpecies) {
-                payload['isUnknown'] = true;
-                payload['customSpeciesName'] = 'Unknown'
-              }
-              return payload
-            });
-            plantedSpecies = speciesData
+            // const speciesData = createInterventionDto.plantedSpecies.map(species => {
+            //   const payload = {
+            //     uid: generateUid('invspc'),
+            //     plantedCount: species.treeCount
+            //   }
+            //   if (species.scientificSpeciesId) {
+            //     payload['scientificSpeciesId'] = species.scientificSpeciesId;
+            //   }
+            //   if (species.otherSpecies) {
+            //     payload['isUnknown'] = true;
+            //     payload['customSpeciesName'] = 'Unknown'
+            //   }
+            //   return payload
+            // });
+            // plantedSpecies = speciesData
           }
         } else {
           // Single-species handling
