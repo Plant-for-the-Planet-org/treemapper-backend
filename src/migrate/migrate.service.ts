@@ -739,14 +739,16 @@ export class MigrationService {
           .values(parentIntervention)
           .returning();
 
-        result.forEach(element => {
-          finalInterventionIDMapping.push({
-            id: element.id,
-            uid: element.uid,
-            success: true,
-            error: null
-          })
-        });
+        if (Array.isArray(result)) {
+          result.forEach(element => {
+            finalInterventionIDMapping.push({
+              id: element.id,
+              uid: element.uid,
+              success: true,
+              error: null
+            });
+          });
+        }
       } catch (error) {
         // Uncomment if you have this method implemented
         const chunkResults = await this.insertChunkIndividually(parentIntervention);
