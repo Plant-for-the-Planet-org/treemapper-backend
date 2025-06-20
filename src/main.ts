@@ -4,7 +4,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
+// import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
@@ -67,8 +67,8 @@ async function bootstrap() {
     }));
 
     // Global JWT guard (with public route exclusions)
-    const jwtGuard = app.get(JwtAuthGuard);
-    app.useGlobalGuards(jwtGuard);
+    // const jwtGuard = app.get(JwtAuthGuard);
+    // app.useGlobalGuards(jwtGuard);
 
     // Swagger setup
     if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {

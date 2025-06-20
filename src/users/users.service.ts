@@ -7,7 +7,7 @@ import { eq, and, or, like, desc, asc, count, isNull } from 'drizzle-orm';
 import { generateUid } from 'src/util/uidGenerator';
 
 import { CacheService } from '../cache/cache.service';
-import { CACHE_KEYS, CACHE_TTL } from '../cache/cache-keys';
+// import { CACHE_KEYS, CACHE_TTL } from '../cache/cache-keys';
 import { R2Service } from 'src/common/services/r2.service';
 import { CreatePresignedUrlDto } from './dto/signed-url.dto';
 
@@ -101,50 +101,53 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    const cacheKey = CACHE_KEYS.USER.BY_EMAIL(email);
+    // const cacheKey = CACHE_KEYS.USER.BY_EMAIL(email);
 
-    return await this.cacheService.getOrSet(
-      cacheKey,
-      async () => {
-        const result = await this.drizzleService.db
-          .select(this.FULL_USER_SELECT)
-          .from(users)
-          .where(and(eq(users.email, email), isNull(users.deletedAt)))
-          .limit(1);
+    // return await this.cacheService.getOrSet(
+    //   cacheKey,
+    //   async () => {
+    //     const result = await this.drizzleService.db
+    //       .select(this.FULL_USER_SELECT)
+    //       .from(users)
+    //       .where(and(eq(users.email, email), isNull(users.deletedAt)))
+    //       .limit(1);
 
-        return result[0] || null;
-      },
-      CACHE_TTL.MEDIUM
-    );
+    //     return result[0] || null;
+    //   },
+    //   CACHE_TTL.MEDIUM
+    // );
+    return null
   }
 
   async findByAuth0Id(auth0Id: string): Promise<User | null> {
-    return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    // return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    return null
   }
 
   async findById(id: number): Promise<User | null> {
-    const cacheKey = CACHE_KEYS.USER.BY_ID(id);
+    // const cacheKey = CACHE_KEYS.USER.BY_ID(id);
 
-    return await this.cacheService.get(
-      cacheKey
-    );
+    // return await this.cacheService.get(
+    //   cacheKey
+    // );
+    return null
   }
 
 
 
   // Private helper methods
   private async cacheNewUser(user: User): Promise<void> {
-    try {
-      await Promise.all([
-        this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), user, CACHE_TTL.MEDIUM),
-        this.cacheService.set(CACHE_KEYS.USER.BY_EMAIL(user.email), user, CACHE_TTL.MEDIUM),
-        this.cacheService.set(CACHE_KEYS.USER.BY_ID(user.id), user, CACHE_TTL.MEDIUM),
-      ]);
-      this.logger.debug(`Cached user: ${user.auth0Id}`);
-    } catch (error) {
-      this.logger.error(`Failed to cache user: ${user.auth0Id}`, error);
-      // Don't throw - cache failure shouldn't break user operations
-    }
+    // try {
+    //   await Promise.all([
+    //     this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), user, CACHE_TTL.MEDIUM),
+    //     this.cacheService.set(CACHE_KEYS.USER.BY_EMAIL(user.email), user, CACHE_TTL.MEDIUM),
+    //     this.cacheService.set(CACHE_KEYS.USER.BY_ID(user.id), user, CACHE_TTL.MEDIUM),
+    //   ]);
+    //   this.logger.debug(`Cached user: ${user.auth0Id}`);
+    // } catch (error) {
+    //   this.logger.error(`Failed to cache user: ${user.auth0Id}`, error);
+    //   // Don't throw - cache failure shouldn't break user operations
+    // }
   }
 
 
@@ -200,9 +203,9 @@ export class UsersService {
         email: users.email,
         authID: users.auth0Id,
       });
-    this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));
-    this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(result[0].authID));
-    this.cacheService.delete(CACHE_KEYS.USER.BY_EMAIL(result[0].email));
+    // this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));
+    // this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(result[0].authID));
+    // this.cacheService.delete(CACHE_KEYS.USER.BY_EMAIL(result[0].email));
     return true;
   }
 

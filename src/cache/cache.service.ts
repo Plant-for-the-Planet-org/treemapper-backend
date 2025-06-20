@@ -1,124 +1,146 @@
-// src/cache/cache.service.ts
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
-
-
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { ICacheService } from './cache.interface';
+import { RedisCacheService } from './redis-cache.service';
+import { MemoryCacheService } from './memory-cache.service';
+import { CacheConfig } from './cache.config';
 
 @Injectable()
-export class CacheService {
+export class CacheService implements ICacheService {
   private readonly logger = new Logger(CacheService.name);
+  private cacheService: ICacheService;
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  constructor(
+    private readonly redisCacheService: RedisCacheService,
+    private readonly memoryCacheService: MemoryCacheService,
+    @Inject('CACHE_CONFIG') private readonly config: CacheConfig,
+  ) {
+    this.initializeCacheService();
+  }
 
-  /**
-   * Get value from cache
-   */
-  async get<T>(key: string): Promise<T | null> {
-    try {
-      const value = await this.cacheManager.get<T>(key);
-      if (value) {
-        this.logger.debug(`Cache HIT for key: ${key}`);
-      } else {
-        this.logger.debug(`Cache MISS for key: ${key}`);
-      }
-      return value || null;
-    } catch (error) {
-      this.logger.error(`Cache GET error for key ${key}:`, error);
-      return null;
+  private async initializeCacheService() {
+    if (this.config.type === 'redis') {
+      this.logger.log('Using Redis cache');
+      this.cacheService = this.redisCacheService;
+    } else {
+      this.logger.log('Using Memory cache');
+      this.cacheService = this.memoryCacheService;
     }
   }
 
-  /**
-   * Set value in cache
-   */
-  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
-    try {
-      await this.cacheManager.set(key, value, ttl);
-      this.logger.debug(`Cache SET for key: ${key}, TTL: ${ttl || 'default'}`);
-    } catch (error) {
-      this.logger.error(`Cache SET error for key ${key}:`, error);
-    }
+  // Utility methods
+  buildKey(...parts: string[]): string {
+    return parts.join(':');
   }
 
-  /**
-   * Delete value from cache
-   */
-  async delete(key: string): Promise<void> {
-    try {
-      await this.cacheManager.del(key);
-      this.logger.debug(`Cache DELETE for key: ${key}`);
-    } catch (error) {
-      this.logger.error(`Cache DELETE error for key ${key}:`, error);
-    }
-  }
-
-  /**
-   * Delete multiple keys matching pattern
-   */
-  async deletePattern(pattern: string): Promise<void> {
-    try {
-      // This works with Redis store
-      const store = (this.cacheManager as any).store;
-      if (typeof store.keys === 'function') {
-        const keys = await store.keys(pattern);
-        if (keys.length > 0) {
-          await Promise.all(keys.map((key: string) => this.cacheManager.del(key)));
-          this.logger.debug(`Cache DELETE pattern: ${pattern}, deleted ${keys.length} keys`);
-        }
-      } else {
-        this.logger.warn('Cache store does not support keys(pattern) method.');
-      }
-    } catch (error) {
-      this.logger.error(`Cache DELETE pattern error for ${pattern}:`, error);
-    }
-  }
-
-  /**
-   * Clear all cache
-   */
-  async reset(): Promise<void> {
-    try {
-      const store = (this.cacheManager as any).store;
-      if (typeof store.reset === 'function') {
-        await store.reset();
-        this.logger.debug('Cache RESET - all keys deleted');
-      } else {
-        this.logger.warn('Cache store does not support reset() method.');
-      }
-    } catch (error) {
-      this.logger.error('Cache RESET error:', error);
-    }
-  }
-
-  /**
-   * Get or set pattern - if key doesn't exist, call factory function
-   */
-  async getOrSet<T>(
-    key: string, 
-    factory: () => Promise<T>, 
+  async wrap<T>(
+    key: string,
+    fn: () => Promise<T>,
     ttl?: number
-  ): Promise<T | null> {
-    try {
-      let value = await this.get<T>(key);
-      
-      if (value === null) {
-        value = await factory();
-        if (value !== null && value !== undefined) {
-          await this.set(key, value, ttl);
-        }
-      }
-      
-      return value;
-    } catch (error) {
-      this.logger.error(`Cache GET_OR_SET error for key ${key}:`, error);
-      // Fallback to factory function if cache fails
-      try {
-        return await factory();
-      } catch (factoryError) {
-        this.logger.error(`Factory function error for key ${key}:`, factoryError);
-        return null;
-      }
+  ): Promise<T> {
+    const cached = await this.get<T>(key);
+    if (cached !== null) {
+      return cached;
     }
+
+    const result = await fn();
+    await this.set(key, result, ttl);
+    return result;
+  }
+
+  async remember<T>(
+    key: string,
+    fn: () => Promise<T>,
+    ttl?: number
+  ): Promise<T> {
+    return this.wrap(key, fn, ttl);
+  }
+
+  // Delegate all methods to the active cache service
+  async get<T>(key: string): Promise<T | null> {
+    return this.cacheService.get<T>(key);
+  }
+
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    return this.cacheService.set(key, value, ttl);
+  }
+
+  async del(key: string): Promise<void> {
+    return this.cacheService.del(key);
+  }
+
+  async delByPattern(pattern: string): Promise<void> {
+    return this.cacheService.delByPattern(pattern);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    return this.cacheService.exists(key);
+  }
+
+  async increment(key: string, value?: number): Promise<number> {
+    return this.cacheService.increment(key, value);
+  }
+
+  async decrement(key: string, value?: number): Promise<number> {
+    return this.cacheService.decrement(key, value);
+  }
+
+  async expire(key: string, ttl: number): Promise<void> {
+    return this.cacheService.expire(key, ttl);
+  }
+
+  async ttl(key: string): Promise<number> {
+    return this.cacheService.ttl(key);
+  }
+
+  async mget<T>(keys: string[]): Promise<(T | null)[]> {
+    return this.cacheService.mget<T>(keys);
+  }
+
+  async mset(keyValuePairs: Record<string, any>, ttl?: number): Promise<void> {
+    return this.cacheService.mset(keyValuePairs, ttl);
+  }
+
+  async flush(): Promise<void> {
+    return this.cacheService.flush();
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    return this.cacheService.keys(pattern);
+  }
+
+  async hget(key: string, field: string): Promise<string | null> {
+    return this.cacheService.hget(key, field);
+  }
+
+  async hset(key: string, field: string, value: any): Promise<void> {
+    return this.cacheService.hset(key, field, value);
+  }
+
+  async hgetall(key: string): Promise<Record<string, string>> {
+    return this.cacheService.hgetall(key);
+  }
+
+  async hdel(key: string, field: string): Promise<void> {
+    return this.cacheService.hdel(key, field);
+  }
+
+  async sadd(key: string, members: string[]): Promise<number> {
+    return this.cacheService.sadd(key, members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return this.cacheService.smembers(key);
+  }
+
+  async srem(key: string, members: string[]): Promise<number> {
+    return this.cacheService.srem(key, members);
+  }
+
+  async zadd(key: string, score: number, member: string): Promise<number> {
+    return this.cacheService.zadd(key, score, member);
+  }
+
+  async zrange(key: string, start: number, stop: number): Promise<string[]> {
+    return this.cacheService.zrange(key, start, stop);
   }
 }
