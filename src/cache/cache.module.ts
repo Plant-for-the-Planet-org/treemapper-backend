@@ -3,6 +3,7 @@ import { CacheService } from './cache.service';
 import { RedisCacheService } from './redis-cache.service';
 import { MemoryCacheService } from './memory-cache.service';
 import { CacheConfig } from './cache.config';
+import { CacheHealthService } from './cache-health.service';
 
 @Module({})
 export class CacheModule {
@@ -29,8 +30,9 @@ export class CacheModule {
           inject: ['CACHE_CONFIG'],
         },
         CacheService,
+        CacheHealthService,
       ],
-      exports: [CacheService],
+      exports: [CacheService,CacheHealthService],
       global: true,
     };
   }
