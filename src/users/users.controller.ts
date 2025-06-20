@@ -52,7 +52,6 @@ export class UsersController {
       displayName: users.displayName,
       image: users.image,
       slug: users.slug,
-      authName: users.authName,
       type: users.type,
       country: users.country,
       url: users.url,

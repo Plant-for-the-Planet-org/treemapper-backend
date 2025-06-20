@@ -96,8 +96,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })
@@ -127,8 +126,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })
@@ -168,8 +166,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })

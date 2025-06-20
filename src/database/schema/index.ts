@@ -451,7 +451,7 @@ export const projectSpecies = pgTable('project_species', {
 }, (table) => ({
   uniqueProjectSpecies: uniqueIndex('unique_project_species').on(table.projectId, table.scientificSpeciesId),
   scientificSpeciesIdx: index('project_species_scientific_species_idx').on(table.scientificSpeciesId),
-  projectIdx: index('project_species_project_idx').on(table.projectId),
+  projectIdx: index('project_species_projects_idx').on(table.projectId),
   addedByIdx: index('project_species_added_by_idx').on(table.addedById),
   nativeSpeciesIdx: index('project_species_native_idx').on(table.isNativeSpecies),
 }));
@@ -559,7 +559,7 @@ export const interventionSpecies = pgTable('intervention_species', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  interventionIdx: index('intervention_images_intervention_id_idx').on(table.interventionId)
+  interventionIdx: index('interventions_intervention_id_idx').on(table.interventionId)
 }));
 
 export const trees = pgTable('trees', {

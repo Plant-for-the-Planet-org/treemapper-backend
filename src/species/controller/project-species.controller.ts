@@ -28,52 +28,52 @@ import { ProjectGuardResponse } from '../../projects/projects.service';
 export class ProjectSpeciesController {
   constructor(private readonly userSpeciesService: ProjectSpeciesService) { }
 
-  @Post('/:id')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  async create(
-    @Membership() membership: ProjectGuardResponse,
-    @Body() createDto: CreateUserSpeciesDto
-  ) {
-    return this.userSpeciesService.create(
-      membership,
-      createDto,
-    );
-  }
+  // @Post('/:id')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async create(
+  //   @Membership() membership: ProjectGuardResponse,
+  //   @Body() createDto: CreateUserSpeciesDto
+  // ) {
+  //   return this.userSpeciesService.create(
+  //     membership,
+  //     createDto,
+  //   );
+  // }
 
-  @Get('/:id')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
-  @UseGuards(ProjectPermissionsGuard)
-  async getAll(
-    @Membership() membership: ProjectGuardResponse,
-  ) {
-    return this.userSpeciesService.getAll(membership);
-  }
+  // @Get('/:id')
+  // @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async getAll(
+  //   @Membership() membership: ProjectGuardResponse,
+  // ) {
+  //   return this.userSpeciesService.getAll(membership);
+  // }
 
-  @Put('/:id/species/:species')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
-  @UseGuards(ProjectPermissionsGuard)
-  async update(
-    @Param('species') species: string,
-    @Membership() membership: ProjectGuardResponse,
-    @Body() updateDto: UpdateUserSpeciesDto,
-  ) {
-    return this.userSpeciesService.update(
-      species,
-      membership,
-      updateDto,
-    );
-  }
+  // @Put('/:id/species/:species')
+  // @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async update(
+  //   @Param('species') species: string,
+  //   @Membership() membership: ProjectGuardResponse,
+  //   @Body() updateDto: UpdateUserSpeciesDto,
+  // ) {
+  //   return this.userSpeciesService.update(
+  //     species,
+  //     membership,
+  //     updateDto,
+  //   );
+  // }
 
-  @Delete('/:id/species/:species')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor')
-  @UseGuards(ProjectPermissionsGuard)
-  async delete(
-    @Param('species') species: string,
-    @Membership() membership: ProjectGuardResponse,
-  ) {
-    return this.userSpeciesService.delete(species, membership);
-  }
+  // @Delete('/:id/species/:species')
+  // @ProjectRoles('owner', 'admin', 'manager', 'contributor')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async delete(
+  //   @Param('species') species: string,
+  //   @Membership() membership: ProjectGuardResponse,
+  // ) {
+  //   return this.userSpeciesService.delete(species, membership);
+  // }
 
 
   // @Get(':id')

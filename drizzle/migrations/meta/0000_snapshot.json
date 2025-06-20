@@ -1,5 +1,5 @@
 {
-  "id": "d891bad0-2711-4742-9c55-c0edfa696495",
+  "id": "600cb914-5560-4622-9b98-1500b4f08898",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -26,9 +26,16 @@
           "primaryKey": false,
           "notNull": true
         },
+        "triggered_by_id": {
+          "name": "triggered_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "job_type": {
           "name": "job_type",
-          "type": "varchar(50)",
+          "type": "analytics_job_type",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -38,42 +45,10 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'processing'"
+          "default": "'pending'"
         },
-        "triggered_by": {
-          "name": "triggered_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duration": {
-          "name": "duration",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_steps": {
-          "name": "total_steps",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "completed_steps": {
-          "name": "completed_steps",
+        "progress": {
+          "name": "progress",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -85,25 +60,48 @@
           "primaryKey": false,
           "notNull": false
         },
-        "records_processed": {
-          "name": "records_processed",
+        "total_steps": {
+          "name": "total_steps",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "default": 0
+          "notNull": false
         },
-        "errors_encountered": {
-          "name": "errors_encountered",
-          "type": "integer",
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
-          "default": 0
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "error_message": {
           "name": "error_message",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "processing_time": {
+          "name": "processing_time",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "memory_usage": {
+          "name": "memory_usage",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
         },
         "metadata": {
           "name": "metadata",
@@ -127,15 +125,24 @@
         }
       },
       "indexes": {
-        "analytics_jobs_project_status_idx": {
-          "name": "analytics_jobs_project_status_idx",
+        "analytics_jobs_project_idx": {
+          "name": "analytics_jobs_project_idx",
           "columns": [
             {
               "expression": "project_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "analytics_jobs_status_idx": {
+          "name": "analytics_jobs_status_idx",
+          "columns": [
             {
               "expression": "status",
               "isExpression": false,
@@ -148,11 +155,41 @@
           "method": "btree",
           "with": {}
         },
-        "analytics_jobs_started_at_idx": {
-          "name": "analytics_jobs_started_at_idx",
+        "analytics_jobs_triggered_by_idx": {
+          "name": "analytics_jobs_triggered_by_idx",
           "columns": [
             {
-              "expression": "started_at",
+              "expression": "triggered_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "analytics_jobs_type_idx": {
+          "name": "analytics_jobs_type_idx",
+          "columns": [
+            {
+              "expression": "job_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "analytics_jobs_created_at_idx": {
+          "name": "analytics_jobs_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -175,15 +212,15 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "analytics_jobs_triggered_by_users_id_fk": {
-          "name": "analytics_jobs_triggered_by_users_id_fk",
+        "analytics_jobs_triggered_by_id_users_id_fk": {
+          "name": "analytics_jobs_triggered_by_id_users_id_fk",
           "tableFrom": "analytics_jobs",
           "tableTo": "users",
           "columnsFrom": [
-            "triggered_by"
+            "triggered_by_id"
           ],
           "columnsTo": [
             "id"
@@ -352,6 +389,663 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.geospatial_analytics": {
+      "name": "geospatial_analytics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "analytics_job_id": {
+          "name": "analytics_job_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
+        },
+        "total_project_area": {
+          "name": "total_project_area",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "planted_area": {
+          "name": "planted_area",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unplanted_area": {
+          "name": "unplanted_area",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coverage_percentage": {
+          "name": "coverage_percentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_tree_density": {
+          "name": "average_tree_density",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "high_density_zones": {
+          "name": "high_density_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medium_density_zones": {
+          "name": "medium_density_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "low_density_zones": {
+          "name": "low_density_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "high_survival_zones": {
+          "name": "high_survival_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medium_survival_zones": {
+          "name": "medium_survival_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "low_survival_zones": {
+          "name": "low_survival_zones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tree_clusters": {
+          "name": "tree_clusters",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_cluster_size": {
+          "name": "average_cluster_size",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "largest_cluster_size": {
+          "name": "largest_cluster_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "isolated_trees": {
+          "name": "isolated_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elevation_range": {
+          "name": "elevation_range",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slope_range": {
+          "name": "slope_range",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aspect_distribution": {
+          "name": "aspect_distribution",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "best_performing_area": {
+          "name": "best_performing_area",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_performing_area": {
+          "name": "worst_performing_area",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "high_growth_zones": {
+          "name": "high_growth_zones",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "boundary_length": {
+          "name": "boundary_length",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "perimeter_to_area_ratio": {
+          "name": "perimeter_to_area_ratio",
+          "type": "numeric(8, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "compactness_index": {
+          "name": "compactness_index",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spatial_distribution_index": {
+          "name": "spatial_distribution_index",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uniformity_score": {
+          "name": "uniformity_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calculated_at": {
+          "name": "calculated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "geospatial_analytics_project_idx": {
+          "name": "geospatial_analytics_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "geospatial_analytics_calculated_at_idx": {
+          "name": "geospatial_analytics_calculated_at_idx",
+          "columns": [
+            {
+              "expression": "calculated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "geospatial_analytics_best_area_gist_idx": {
+          "name": "geospatial_analytics_best_area_gist_idx",
+          "columns": [
+            {
+              "expression": "best_performing_area",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        },
+        "geospatial_analytics_worst_area_gist_idx": {
+          "name": "geospatial_analytics_worst_area_gist_idx",
+          "columns": [
+            {
+              "expression": "worst_performing_area",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "geospatial_analytics_project_id_projects_id_fk": {
+          "name": "geospatial_analytics_project_id_projects_id_fk",
+          "tableFrom": "geospatial_analytics",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "geospatial_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "geospatial_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "geospatial_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "geospatial_analytics_uid_unique": {
+          "name": "geospatial_analytics_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        },
+        "geospatial_analytics_project_id_unique": {
+          "name": "geospatial_analytics_project_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "project_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.intervention_analytics": {
+      "name": "intervention_analytics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "analytics_job_id": {
+          "name": "analytics_job_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
+        },
+        "total_interventions": {
+          "name": "total_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_interventions": {
+          "name": "completed_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_interventions": {
+          "name": "active_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_interventions": {
+          "name": "failed_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "planned_interventions": {
+          "name": "planned_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "on_hold_interventions": {
+          "name": "on_hold_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_interventions": {
+          "name": "cancelled_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direct_seeding_success_rate": {
+          "name": "direct_seeding_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enrichment_planting_success_rate": {
+          "name": "enrichment_planting_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "maintenance_success_rate": {
+          "name": "maintenance_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fencing_success_rate": {
+          "name": "fencing_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "other_intervention_success_rate": {
+          "name": "other_intervention_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_intervention_duration": {
+          "name": "average_intervention_duration",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shortest_intervention_duration": {
+          "name": "shortest_intervention_duration",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longest_intervention_duration": {
+          "name": "longest_intervention_duration",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_trees_per_intervention": {
+          "name": "average_trees_per_intervention",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_trees_from_interventions": {
+          "name": "total_trees_from_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intervention_density": {
+          "name": "intervention_density",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spring_interventions": {
+          "name": "spring_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summer_interventions": {
+          "name": "summer_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "autumn_interventions": {
+          "name": "autumn_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "winter_interventions": {
+          "name": "winter_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_effective_season": {
+          "name": "most_effective_season",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_successful_intervention_type": {
+          "name": "most_successful_intervention_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "least_successful_intervention_type": {
+          "name": "least_successful_intervention_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interventions_with_follow_up": {
+          "name": "interventions_with_follow_up",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_follow_up_time": {
+          "name": "average_follow_up_time",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "follow_up_success_rate": {
+          "name": "follow_up_success_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sites_with_interventions": {
+          "name": "sites_with_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_interventions_per_site": {
+          "name": "average_interventions_per_site",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calculated_at": {
+          "name": "calculated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "intervention_analytics_project_idx": {
+          "name": "intervention_analytics_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "intervention_analytics_calculated_at_idx": {
+          "name": "intervention_analytics_calculated_at_idx",
+          "columns": [
+            {
+              "expression": "calculated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "intervention_analytics_most_successful_idx": {
+          "name": "intervention_analytics_most_successful_idx",
+          "columns": [
+            {
+              "expression": "most_successful_intervention_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "intervention_analytics_project_id_projects_id_fk": {
+          "name": "intervention_analytics_project_id_projects_id_fk",
+          "tableFrom": "intervention_analytics",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "intervention_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "intervention_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "intervention_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "intervention_analytics_uid_unique": {
+          "name": "intervention_analytics_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        },
+        "intervention_analytics_project_id_unique": {
+          "name": "intervention_analytics_project_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "project_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.intervention_images": {
       "name": "intervention_images",
       "schema": "",
@@ -378,7 +1072,7 @@
           "name": "filename",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "original_name": {
           "name": "original_name",
@@ -474,42 +1168,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "intervention_images_primary_idx": {
-          "name": "intervention_images_primary_idx",
-          "columns": [
-            {
-              "expression": "intervention_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "is_primary",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "intervention_images_type_idx": {
-          "name": "intervention_images_type_idx",
-          "columns": [
-            {
-              "expression": "image_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -523,7 +1181,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -563,188 +1221,21 @@
           "primaryKey": false,
           "notNull": true
         },
-        "recorded_by_id": {
-          "name": "recorded_by_id",
+        "updated_by": {
+          "name": "updated_by",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "record_type": {
-          "name": "record_type",
-          "type": "record_type",
-          "typeSchema": "public",
+        "title": {
+          "name": "title",
+          "type": "varchar",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "image": {
-          "name": "image",
+        "description": {
+          "name": "description",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "health_score": {
-          "name": "health_score",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vitality_score": {
-          "name": "vitality_score",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "structural_integrity": {
-          "name": "structural_integrity",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "previous_status": {
-          "name": "previous_status",
-          "type": "tree_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_status": {
-          "name": "new_status",
-          "type": "tree_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status_reason": {
-          "name": "status_reason",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "findings": {
-          "name": "findings",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "findings_severity": {
-          "name": "findings_severity",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "findings_comments": {
-          "name": "findings_comments",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weather_conditions": {
-          "name": "weather_conditions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "soil_conditions": {
-          "name": "soil_conditions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "surrounding_vegetation": {
-          "name": "surrounding_vegetation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pests_observed": {
-          "name": "pests_observed",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "diseases_observed": {
-          "name": "diseases_observed",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "damage_observed": {
-          "name": "damage_observed",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "growth_rate": {
-          "name": "growth_rate",
-          "type": "numeric(6, 3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "leaf_density": {
-          "name": "leaf_density",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fruiting_status": {
-          "name": "fruiting_status",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recommended_actions": {
-          "name": "recommended_actions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "priority_level": {
-          "name": "priority_level",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_public": {
-          "name": "is_public",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "device_location": {
-          "name": "device_location",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -761,12 +1252,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -785,62 +1270,11 @@
           "method": "btree",
           "with": {}
         },
-        "tree_records_recorded_by_idx": {
-          "name": "tree_records_recorded_by_idx",
+        "intervention_updated_by_idx": {
+          "name": "intervention_updated_by_idx",
           "columns": [
             {
-              "expression": "recorded_by_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "intervention_records_type_idx": {
-          "name": "intervention_records_type_idx",
-          "columns": [
-            {
-              "expression": "record_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "intervention_records_recorded_at_idx": {
-          "name": "intervention_records_recorded_at_idx",
-          "columns": [
-            {
-              "expression": "recorded_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "intervention_records_intervention_recorded_at_idx": {
-          "name": "intervention_records_intervention_recorded_at_idx",
-          "columns": [
-            {
-              "expression": "intervention_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recorded_at",
+              "expression": "updated_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -866,12 +1300,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "intervention_records_recorded_by_id_users_id_fk": {
-          "name": "intervention_records_recorded_by_id_users_id_fk",
+        "intervention_records_updated_by_users_id_fk": {
+          "name": "intervention_records_updated_by_users_id_fk",
           "tableFrom": "intervention_records",
           "tableTo": "users",
           "columnsFrom": [
-            "recorded_by_id"
+            "updated_by"
           ],
           "columnsTo": [
             "id"
@@ -884,6 +1318,140 @@
       "uniqueConstraints": {
         "intervention_records_uid_unique": {
           "name": "intervention_records_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.intervention_species": {
+      "name": "intervention_species",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "intervention_id": {
+          "name": "intervention_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scientific_species_id": {
+          "name": "scientific_species_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "species_name": {
+          "name": "species_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_unknown": {
+          "name": "is_unknown",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "other_species_name": {
+          "name": "other_species_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "interventions_intervention_id_idx": {
+          "name": "interventions_intervention_id_idx",
+          "columns": [
+            {
+              "expression": "intervention_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "intervention_species_intervention_id_interventions_id_fk": {
+          "name": "intervention_species_intervention_id_interventions_id_fk",
+          "tableFrom": "intervention_species",
+          "tableTo": "interventions",
+          "columnsFrom": [
+            "intervention_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "intervention_species_scientific_species_id_scientific_species_id_fk": {
+          "name": "intervention_species_scientific_species_id_scientific_species_id_fk",
+          "tableFrom": "intervention_species",
+          "tableTo": "scientific_species",
+          "columnsFrom": [
+            "scientific_species_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "intervention_species_uid_unique": {
+          "name": "intervention_species_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -948,12 +1516,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
         "type": {
           "name": "type",
           "type": "intervention_type",
@@ -1012,23 +1574,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "geometry_type": {
-          "name": "geometry_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "device_location": {
           "name": "device_location",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
-        "trees_planted": {
-          "name": "trees_planted",
+        "tree_count": {
+          "name": "tree_count",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": 0
         },
         "sample_tree_count": {
           "name": "sample_tree_count",
@@ -1070,18 +1627,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "scientific_species_id": {
-          "name": "scientific_species_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_species_name": {
-          "name": "custom_species_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1102,106 +1647,12 @@
           "primaryKey": false,
           "notNull": false
         },
-        "planet_record": {
-          "name": "planet_record",
+        "migrated_intervetion": {
+          "name": "migrated_intervetion",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "tag": {
-          "name": "tag",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "tree_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'alive'"
-        },
-        "status_reason": {
-          "name": "status_reason",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status_changed_at": {
-          "name": "status_changed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_measurement_date": {
-          "name": "last_measurement_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "next_measurement_date": {
-          "name": "next_measurement_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "latitude": {
-          "name": "latitude",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "altitude": {
-          "name": "altitude",
-          "type": "numeric(8, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "accuracy": {
-          "name": "accuracy",
-          "type": "numeric(6, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "planting_date": {
-          "name": "planting_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "has_records": {
-          "name": "has_records",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "planted_species": {
-          "name": "planted_species",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
         }
       },
       "indexes": {
@@ -1265,149 +1716,11 @@
           "method": "btree",
           "with": {}
         },
-        "interventions_uid_idx": {
-          "name": "interventions_uid_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_hid_idx": {
-          "name": "interventions_hid_idx",
-          "columns": [
-            {
-              "expression": "hid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "interventions_type_idx": {
           "name": "interventions_type_idx",
           "columns": [
             {
               "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_status_idx": {
-          "name": "interventions_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_planting_date_idx": {
-          "name": "interventions_planting_date_idx",
-          "columns": [
-            {
-              "expression": "planting_date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_species_idx": {
-          "name": "interventions_species_idx",
-          "columns": [
-            {
-              "expression": "scientific_species_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_project_type_idx": {
-          "name": "interventions_project_type_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_project_status_idx": {
-          "name": "interventions_project_status_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interventions_project_planting_date_idx": {
-          "name": "interventions_project_planting_date_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planting_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1471,32 +1784,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "interventions_parent_id_interventions_uid_fk": {
-          "name": "interventions_parent_id_interventions_uid_fk",
-          "tableFrom": "interventions",
-          "tableTo": "interventions",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "uid"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "interventions_scientific_species_id_scientific_species_id_fk": {
-          "name": "interventions_scientific_species_id_scientific_species_id_fk",
-          "tableFrom": "interventions",
-          "tableTo": "scientific_species",
-          "columnsFrom": [
-            "scientific_species_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1541,7 +1828,7 @@
           "name": "user_migration_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "uid": {
           "name": "uid",
@@ -1551,7 +1838,8 @@
         },
         "level": {
           "name": "level",
-          "type": "varchar(20)",
+          "type": "log_level",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -1563,7 +1851,8 @@
         },
         "entity": {
           "name": "entity",
-          "type": "varchar(50)",
+          "type": "entity_type",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -1587,13 +1876,29 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_migration_id_idx": {
+          "name": "user_migration_id_idx",
+          "columns": [
+            {
+              "expression": "user_migration_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "migration_logs_user_migration_id_user_migrations_id_fk": {
           "name": "migration_logs_user_migration_id_user_migrations_id_fk",
@@ -1989,173 +2294,288 @@
           "primaryKey": false,
           "notNull": true
         },
-        "total_trees_planted": {
-          "name": "total_trees_planted",
+        "analytics_job_id": {
+          "name": "analytics_job_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_species_planted": {
-          "name": "total_species_planted",
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
+        },
+        "total_trees": {
+          "name": "total_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "area_covered": {
-          "name": "area_covered",
+        "alive_trees": {
+          "name": "alive_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dead_trees": {
+          "name": "dead_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sick_trees": {
+          "name": "sick_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unknown_status_trees": {
+          "name": "unknown_status_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "removed_trees": {
+          "name": "removed_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "survival_rate": {
+          "name": "survival_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_height": {
+          "name": "average_height",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_width": {
+          "name": "average_width",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_health_score": {
+          "name": "average_health_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_vitality_score": {
+          "name": "average_vitality_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_growth_rate": {
+          "name": "total_growth_rate",
+          "type": "numeric(8, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_species": {
+          "name": "total_species",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "native_species_count": {
+          "name": "native_species_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "endangered_species_count": {
+          "name": "endangered_species_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "species_diversity_index": {
+          "name": "species_diversity_index",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_sites": {
+          "name": "total_sites",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_sites": {
+          "name": "active_sites",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_area": {
+          "name": "total_area",
           "type": "numeric(12, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "total_active_sites": {
-          "name": "total_active_sites",
+        "tree_density": {
+          "name": "tree_density",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_interventions": {
+          "name": "total_interventions",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_native_species": {
-          "name": "total_native_species",
+        "completed_interventions": {
+          "name": "completed_interventions",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_non_native_species": {
-          "name": "total_non_native_species",
+        "active_interventions": {
+          "name": "active_interventions",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_contributors": {
-          "name": "total_contributors",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "active_contributors_30_days": {
-          "name": "active_contributors_30_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "alive_trees_count": {
-          "name": "alive_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "dead_trees_count": {
-          "name": "dead_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "unknown_trees_count": {
-          "name": "unknown_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "overall_survival_rate": {
-          "name": "overall_survival_rate",
+        "intervention_success_rate": {
+          "name": "intervention_success_rate",
           "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "intervention_types_distribution": {
-          "name": "intervention_types_distribution",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
-        },
-        "recent_trees_planted": {
-          "name": "recent_trees_planted",
+        "total_members": {
+          "name": "total_members",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "recent_interventions": {
-          "name": "recent_interventions",
+        "active_members": {
+          "name": "active_members",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "recent_measurements": {
-          "name": "recent_measurements",
+        "owner_count": {
+          "name": "owner_count",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "previous_month_trees_planted": {
-          "name": "previous_month_trees_planted",
+        "admin_count": {
+          "name": "admin_count",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "trees_planted_growth_rate": {
-          "name": "trees_planted_growth_rate",
+        "contributor_count": {
+          "name": "contributor_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observer_count": {
+          "name": "observer_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_activities": {
+          "name": "total_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_30_days": {
+          "name": "activities_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_7_days": {
+          "name": "activities_last_7_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trees_planted_last_30_days": {
+          "name": "trees_planted_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurements_taken_last_30_days": {
+          "name": "measurements_taken_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_trees": {
+          "name": "target_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_progress": {
+          "name": "target_progress",
           "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "previous_month_interventions": {
-          "name": "previous_month_interventions",
-          "type": "integer",
+        "projected_completion_date": {
+          "name": "projected_completion_date",
+          "type": "date",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "interventions_growth_rate": {
-          "name": "interventions_growth_rate",
+        "mobile_app_usage": {
+          "name": "mobile_app_usage",
           "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "monthly_trees_planted": {
-          "name": "monthly_trees_planted",
-          "type": "jsonb",
+        "web_app_usage": {
+          "name": "web_app_usage",
+          "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
+          "notNull": false
         },
-        "weekly_trees_planted": {
-          "name": "weekly_trees_planted",
-          "type": "jsonb",
+        "tablet_usage": {
+          "name": "tablet_usage",
+          "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
+          "notNull": false
         },
-        "daily_trees_planted": {
-          "name": "daily_trees_planted",
-          "type": "jsonb",
+        "tree_growth_trend": {
+          "name": "tree_growth_trend",
+          "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
+          "notNull": false
         },
-        "member_activity_summary": {
-          "name": "member_activity_summary",
-          "type": "jsonb",
+        "survival_rate_trend": {
+          "name": "survival_rate_trend",
+          "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
+          "notNull": false
+        },
+        "activity_trend": {
+          "name": "activity_trend",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "membership_trend": {
+          "name": "membership_trend",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
         },
         "calculated_at": {
           "name": "calculated_at",
@@ -2163,18 +2583,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "calculation_duration": {
-          "name": "calculation_duration",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "data_quality_score": {
-          "name": "data_quality_score",
-          "type": "numeric(3, 2)",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -2192,8 +2600,8 @@
         }
       },
       "indexes": {
-        "project_analytics_project_unique": {
-          "name": "project_analytics_project_unique",
+        "project_analytics_project_idx": {
+          "name": "project_analytics_project_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -2202,7 +2610,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2212,6 +2620,21 @@
           "columns": [
             {
               "expression": "calculated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "project_analytics_version_idx": {
+          "name": "project_analytics_version_idx",
+          "columns": [
+            {
+              "expression": "version",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2234,7 +2657,20 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "project_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "project_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -2245,6 +2681,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "uid"
+          ]
+        },
+        "project_analytics_project_id_unique": {
+          "name": "project_analytics_project_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "project_id"
           ]
         }
       },
@@ -2274,114 +2717,128 @@
           "primaryKey": false,
           "notNull": true
         },
-        "snapshot_year": {
-          "name": "snapshot_year",
+        "analytics_job_id": {
+          "name": "analytics_job_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "snapshot_month": {
-          "name": "snapshot_month",
-          "type": "integer",
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false,
+          "default": "'1.0'"
         },
-        "snapshot_date": {
-          "name": "snapshot_date",
+        "period": {
+          "name": "period",
+          "type": "aggregation_period",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'monthly'"
+        },
+        "period_start": {
+          "name": "period_start",
           "type": "date",
           "primaryKey": false,
           "notNull": true
         },
-        "total_trees_planted": {
-          "name": "total_trees_planted",
+        "period_end": {
+          "name": "period_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_trees": {
+          "name": "total_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_species_planted": {
-          "name": "total_species_planted",
+        "alive_trees": {
+          "name": "alive_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "area_covered": {
-          "name": "area_covered",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
-        },
-        "total_active_sites": {
-          "name": "total_active_sites",
+        "dead_trees": {
+          "name": "dead_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_native_species": {
-          "name": "total_native_species",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "total_non_native_species": {
-          "name": "total_non_native_species",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "total_contributors": {
-          "name": "total_contributors",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "alive_trees_count": {
-          "name": "alive_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "dead_trees_count": {
-          "name": "dead_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "overall_survival_rate": {
-          "name": "overall_survival_rate",
+        "survival_rate": {
+          "name": "survival_rate",
           "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "trees_planted_this_month": {
-          "name": "trees_planted_this_month",
+        "average_height": {
+          "name": "average_height",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_width": {
+          "name": "average_width",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_health_score": {
+          "name": "average_health_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_species": {
+          "name": "total_species",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "interventions_this_month": {
-          "name": "interventions_this_month",
+        "total_members": {
+          "name": "total_members",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "new_members_this_month": {
-          "name": "new_members_this_month",
+        "active_members": {
+          "name": "active_members",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
+        },
+        "total_activities": {
+          "name": "total_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trees_planted": {
+          "name": "trees_planted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurements_taken": {
+          "name": "measurements_taken",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interventions_completed": {
+          "name": "interventions_completed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_progress": {
+          "name": "target_progress",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -2392,38 +2849,11 @@
         }
       },
       "indexes": {
-        "project_analytics_history_project_snapshot": {
-          "name": "project_analytics_history_project_snapshot",
+        "project_analytics_history_project_idx": {
+          "name": "project_analytics_history_project_idx",
           "columns": [
             {
               "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "snapshot_year",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "snapshot_month",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "project_analytics_history_snapshot_date_idx": {
-          "name": "project_analytics_history_snapshot_date_idx",
-          "columns": [
-            {
-              "expression": "snapshot_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2434,8 +2864,29 @@
           "method": "btree",
           "with": {}
         },
-        "project_analytics_history_project_date_idx": {
-          "name": "project_analytics_history_project_date_idx",
+        "project_analytics_history_period_idx": {
+          "name": "project_analytics_history_period_idx",
+          "columns": [
+            {
+              "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "period_end",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "project_analytics_history_project_period_idx": {
+          "name": "project_analytics_history_project_period_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -2444,7 +2895,7 @@
               "nulls": "last"
             },
             {
-              "expression": "snapshot_date",
+              "expression": "period_start",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2467,7 +2918,20 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_analytics_history_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "project_analytics_history_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "project_analytics_history",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -2475,6 +2939,298 @@
       "uniqueConstraints": {
         "project_analytics_history_uid_unique": {
           "name": "project_analytics_history_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.project_audit": {
+      "name": "project_audit",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modified_by": {
+          "name": "modified_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "project_species_project_idx": {
+          "name": "project_species_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "modified_by_idx": {
+          "name": "modified_by_idx",
+          "columns": [
+            {
+              "expression": "modified_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_audit_project_id_projects_id_fk": {
+          "name": "project_audit_project_id_projects_id_fk",
+          "tableFrom": "project_audit",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_audit_modified_by_users_id_fk": {
+          "name": "project_audit_modified_by_users_id_fk",
+          "tableFrom": "project_audit",
+          "tableTo": "users",
+          "columnsFrom": [
+            "modified_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "project_audit_uid_unique": {
+          "name": "project_audit_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.project_images": {
+      "name": "project_images",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "filename": {
+          "name": "filename",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "size": {
+          "name": "size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uploaded_from": {
+          "name": "uploaded_from",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_private": {
+          "name": "is_private",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "project_images_site_id_idx": {
+          "name": "project_images_site_id_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_images_project_id_projects_id_fk": {
+          "name": "project_images_project_id_projects_id_fk",
+          "tableFrom": "project_images",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "project_images_uid_unique": {
+          "name": "project_images_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -2532,6 +3288,12 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "discarded_by": {
+          "name": "discarded_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -2654,6 +3416,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "project_invites_discarded_by_users_id_fk": {
+          "name": "project_invites_discarded_by_users_id_fk",
+          "tableFrom": "project_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "discarded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2667,13 +3442,6 @@
         },
         "project_invites_token_unique": {
           "name": "project_invites_token_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        },
-        "project_invites_token": {
-          "name": "project_invites_token",
           "nullsNotDistinct": false,
           "columns": [
             "token"
@@ -2712,8 +3480,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
+        "project_role": {
+          "name": "project_role",
           "type": "project_role",
           "typeSchema": "public",
           "primaryKey": false,
@@ -2730,8 +3498,7 @@
           "name": "joined_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -2779,11 +3546,11 @@
           "method": "btree",
           "with": {}
         },
-        "project_members_uid_idx": {
-          "name": "project_members_uid_idx",
+        "project_members_role_idx": {
+          "name": "project_members_role_idx",
           "columns": [
             {
-              "expression": "uid",
+              "expression": "project_role",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2806,7 +3573,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "project_members_user_id_users_id_fk": {
@@ -2819,7 +3586,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -2874,6 +3641,13 @@
           "notNull": false,
           "default": false
         },
+        "is_endangered": {
+          "name": "is_endangered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
         "is_disabled": {
           "name": "is_disabled",
           "type": "boolean",
@@ -2893,14 +3667,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "aliases": {
-          "name": "aliases",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "local_name": {
-          "name": "local_name",
+        "common_name": {
+          "name": "common_name",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
@@ -2994,8 +3762,8 @@
           "method": "btree",
           "with": {}
         },
-        "project_species_project_idx": {
-          "name": "project_species_project_idx",
+        "project_species_projects_idx": {
+          "name": "project_species_projects_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -3014,21 +3782,6 @@
           "columns": [
             {
               "expression": "added_by_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "project_species_uid_idx": {
-          "name": "project_species_uid_idx",
-          "columns": [
-            {
-              "expression": "uid",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3079,7 +3832,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "project_species_added_by_id_users_id_fk": {
@@ -3092,7 +3845,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -3100,6 +3853,154 @@
       "uniqueConstraints": {
         "project_species_uid_unique": {
           "name": "project_species_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.project_species_images": {
+      "name": "project_species_images",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "species_id": {
+          "name": "species_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "filename": {
+          "name": "filename",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "size": {
+          "name": "size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_private": {
+          "name": "is_private",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uid_species_image_idx": {
+          "name": "uid_species_image_idx",
+          "columns": [
+            {
+              "expression": "uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "species_images_species_id_idx": {
+          "name": "species_images_species_id_idx",
+          "columns": [
+            {
+              "expression": "species_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_species_images_species_id_project_species_id_fk": {
+          "name": "project_species_images_species_id_project_species_id_fk",
+          "tableFrom": "project_species_images",
+          "tableTo": "project_species",
+          "columnsFrom": [
+            "species_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "project_species_images_uid_unique": {
+          "name": "project_species_images_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -3134,7 +4035,7 @@
         },
         "slug": {
           "name": "slug",
-          "type": "varchar(400)",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
         },
@@ -3222,21 +4123,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "geometry_type": {
-          "name": "geometry_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "url": {
           "name": "url",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "link_text": {
-          "name": "link_text",
-          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -3286,19 +4175,12 @@
           "primaryKey": false,
           "notNull": false
         },
-        "last_analytics_refresh": {
-          "name": "last_analytics_refresh",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "analytics_status": {
-          "name": "analytics_status",
-          "type": "analytics_status",
-          "typeSchema": "public",
+        "migrated_project": {
+          "name": "migrated_project",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": false,
-          "default": "'pending'"
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -3313,19 +4195,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "planet_record": {
-          "name": "planet_record",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
         }
       },
       "indexes": {
@@ -3344,56 +4213,11 @@
           "method": "gist",
           "with": {}
         },
-        "projects_slug_idx": {
-          "name": "projects_slug_idx",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "project_uid_idx": {
-          "name": "project_uid_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "projects_created_by_idx": {
           "name": "projects_created_by_idx",
           "columns": [
             {
               "expression": "created_by_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "projects_analytics_refresh_idx": {
-          "name": "projects_analytics_refresh_idx",
-          "columns": [
-            {
-              "expression": "last_analytics_refresh",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3465,18 +4289,24 @@
         },
         "common_name": {
           "name": "common_name",
-          "type": "varchar(400)",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "family": {
+          "name": "family",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "genus": {
+          "name": "genus",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
         "description": {
           "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "image": {
-          "name": "image",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -3596,11 +4426,48 @@
           "primaryKey": false,
           "notNull": true
         },
-        "site_name": {
-          "name": "site_name",
-          "type": "varchar(255)",
+        "analytics_job_id": {
+          "name": "analytics_job_id",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
+        },
+        "total_trees": {
+          "name": "total_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alive_trees": {
+          "name": "alive_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dead_trees": {
+          "name": "dead_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sick_trees": {
+          "name": "sick_trees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "survival_rate": {
+          "name": "survival_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
         },
         "site_area": {
           "name": "site_area",
@@ -3608,97 +4475,183 @@
           "primaryKey": false,
           "notNull": false
         },
-        "total_interventions": {
-          "name": "total_interventions",
-          "type": "integer",
+        "tree_density": {
+          "name": "tree_density",
+          "type": "numeric(8, 2)",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "total_trees_planted": {
-          "name": "total_trees_planted",
-          "type": "integer",
+        "planted_area": {
+          "name": "planted_area",
+          "type": "numeric(12, 2)",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "alive_trees_count": {
-          "name": "alive_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "dead_trees_count": {
-          "name": "dead_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "unknown_trees_count": {
-          "name": "unknown_trees_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "survival_rate": {
-          "name": "survival_rate",
+        "coverage_percentage": {
+          "name": "coverage_percentage",
           "type": "numeric(5, 2)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
+          "notNull": false
         },
-        "unique_species_count": {
-          "name": "unique_species_count",
+        "total_species": {
+          "name": "total_species",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
         "native_species_count": {
           "name": "native_species_count",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "native_species_percentage": {
-          "name": "native_species_percentage",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
-        },
-        "last_intervention_date": {
-          "name": "last_intervention_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
           "notNull": false
         },
-        "last_measurement_date": {
-          "name": "last_measurement_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "active_contributors": {
-          "name": "active_contributors",
+        "endangered_species_count": {
+          "name": "endangered_species_count",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "density_per_hectare": {
-          "name": "density_per_hectare",
+        "species_diversity_index": {
+          "name": "species_diversity_index",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dominant_species_id": {
+          "name": "dominant_species_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_height": {
+          "name": "average_height",
           "type": "numeric(8, 2)",
           "primaryKey": false,
           "notNull": false
         },
-        "site_productivity_score": {
-          "name": "site_productivity_score",
+        "average_width": {
+          "name": "average_width",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_growth_rate": {
+          "name": "average_growth_rate",
+          "type": "numeric(8, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_health_score": {
+          "name": "average_health_score",
           "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_vitality_score": {
+          "name": "average_vitality_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_elevation": {
+          "name": "average_elevation",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_slope": {
+          "name": "average_slope",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aspect_direction": {
+          "name": "aspect_direction",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_interventions": {
+          "name": "total_interventions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_activities": {
+          "name": "total_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_30_days": {
+          "name": "activities_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unique_contributors": {
+          "name": "unique_contributors",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_activity_date": {
+          "name": "last_activity_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "survival_rate_rank": {
+          "name": "survival_rate_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "growth_rate_rank": {
+          "name": "growth_rate_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diversity_rank": {
+          "name": "diversity_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activity_rank": {
+          "name": "activity_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "overall_performance_rank": {
+          "name": "overall_performance_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "performance_score": {
+          "name": "performance_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_planting_date": {
+          "name": "first_planting_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_planting_date": {
+          "name": "last_planting_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "establishment_duration": {
+          "name": "establishment_duration",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -3725,15 +4678,24 @@
         }
       },
       "indexes": {
-        "site_analytics_project_site": {
-          "name": "site_analytics_project_site",
+        "site_analytics_project_idx": {
+          "name": "site_analytics_project_idx",
           "columns": [
             {
               "expression": "project_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "site_analytics_site_idx": {
+          "name": "site_analytics_site_idx",
+          "columns": [
             {
               "expression": "site_id",
               "isExpression": false,
@@ -3741,22 +4703,31 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "site_analytics_survival_rate_idx": {
-          "name": "site_analytics_survival_rate_idx",
+        "site_analytics_survival_rank_idx": {
+          "name": "site_analytics_survival_rank_idx",
           "columns": [
             {
-              "expression": "project_id",
+              "expression": "survival_rate_rank",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "site_analytics_performance_rank_idx": {
+          "name": "site_analytics_performance_rank_idx",
+          "columns": [
             {
-              "expression": "survival_rate",
+              "expression": "overall_performance_rank",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3794,7 +4765,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "site_analytics_site_id_sites_id_fk": {
@@ -3807,7 +4778,33 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "site_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "site_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "site_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "site_analytics_dominant_species_id_scientific_species_id_fk": {
+          "name": "site_analytics_dominant_species_id_scientific_species_id_fk",
+          "tableFrom": "site_analytics",
+          "tableTo": "scientific_species",
+          "columnsFrom": [
+            "dominant_species_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -3818,6 +4815,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "uid"
+          ]
+        },
+        "site_analytics_site_id_unique": {
+          "name": "site_analytics_site_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "site_id"
           ]
         }
       },
@@ -3851,7 +4855,7 @@
           "name": "filename",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "original_name": {
           "name": "original_name",
@@ -3973,7 +4977,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -4043,7 +5047,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": false,
-          "default": "'barren'"
+          "default": "'planting'"
         },
         "created_by_id": {
           "name": "created_by_id",
@@ -4077,8 +5081,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "planet_record": {
-          "name": "planet_record",
+        "migrated_site": {
+          "name": "migrated_site",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
@@ -4114,21 +5118,6 @@
           "isUnique": false,
           "concurrently": false,
           "method": "gist",
-          "with": {}
-        },
-        "sites_uid_idx": {
-          "name": "sites_uid_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
           "with": {}
         }
       },
@@ -4202,63 +5191,46 @@
           "primaryKey": false,
           "notNull": true
         },
-        "scientific_name": {
-          "name": "scientific_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "common_name": {
-          "name": "common_name",
-          "type": "varchar(400)",
+        "analytics_job_id": {
+          "name": "analytics_job_id",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "is_native": {
-          "name": "is_native",
-          "type": "boolean",
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false,
+          "default": "'1.0'"
         },
-        "total_planted": {
-          "name": "total_planted",
+        "total_trees": {
+          "name": "total_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "current_alive": {
-          "name": "current_alive",
+        "alive_trees": {
+          "name": "alive_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "current_dead": {
-          "name": "current_dead",
+        "dead_trees": {
+          "name": "dead_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
-        "current_unknown": {
-          "name": "current_unknown",
+        "sick_trees": {
+          "name": "sick_trees",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": false
         },
         "survival_rate": {
           "name": "survival_rate",
           "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "survival_rank": {
-          "name": "survival_rank",
-          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -4276,32 +5248,7 @@
         },
         "average_growth_rate": {
           "name": "average_growth_rate",
-          "type": "numeric(6, 3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "growth_rate_rank": {
-          "name": "growth_rate_rank",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_measurements": {
-          "name": "total_measurements",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_measurement_date": {
-          "name": "last_measurement_date",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "measurement_frequency": {
-          "name": "measurement_frequency",
-          "type": "numeric(5, 2)",
+          "type": "numeric(8, 3)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4317,19 +5264,119 @@
           "primaryKey": false,
           "notNull": false
         },
-        "recommended_species": {
-          "name": "recommended_species",
+        "survival_rank": {
+          "name": "survival_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "growth_rate_rank": {
+          "name": "growth_rate_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "health_score_rank": {
+          "name": "health_score_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "overall_performance_rank": {
+          "name": "overall_performance_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "performance_score": {
+          "name": "performance_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "best_performing_site_id": {
+          "name": "best_performing_site_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_performing_site_id": {
+          "name": "worst_performing_site_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sites_planted_in": {
+          "name": "sites_planted_in",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_planting_date": {
+          "name": "first_planting_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_planting_date": {
+          "name": "last_planting_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_age": {
+          "name": "average_age",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_measurements": {
+          "name": "total_measurements",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_measurement_date": {
+          "name": "last_measurement_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measurement_frequency": {
+          "name": "measurement_frequency",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_native": {
+          "name": "is_native",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
-        "risk_category": {
-          "name": "risk_category",
+        "is_endangered": {
+          "name": "is_endangered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_favourite": {
+          "name": "is_favourite",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recommendation_score": {
+          "name": "recommendation_score",
           "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'low'"
+          "notNull": false
+        },
+        "recommendation_notes": {
+          "name": "recommendation_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "calculated_at": {
           "name": "calculated_at",
@@ -4354,8 +5401,8 @@
         }
       },
       "indexes": {
-        "species_analytics_project_species": {
-          "name": "species_analytics_project_species",
+        "species_analytics_project_species_idx": {
+          "name": "species_analytics_project_species_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -4375,15 +5422,24 @@
           "method": "btree",
           "with": {}
         },
-        "species_analytics_survival_rank_idx": {
-          "name": "species_analytics_survival_rank_idx",
+        "species_analytics_project_idx": {
+          "name": "species_analytics_project_idx",
           "columns": [
             {
               "expression": "project_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "species_analytics_survival_rank_idx": {
+          "name": "species_analytics_survival_rank_idx",
+          "columns": [
             {
               "expression": "survival_rank",
               "isExpression": false,
@@ -4396,17 +5452,11 @@
           "method": "btree",
           "with": {}
         },
-        "species_analytics_growth_rank_idx": {
-          "name": "species_analytics_growth_rank_idx",
+        "species_analytics_performance_rank_idx": {
+          "name": "species_analytics_performance_rank_idx",
           "columns": [
             {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "growth_rate_rank",
+              "expression": "overall_performance_rank",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4444,7 +5494,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "species_analytics_scientific_species_id_scientific_species_id_fk": {
@@ -4459,160 +5509,51 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "species_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "species_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "species_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "species_analytics_best_performing_site_id_sites_id_fk": {
+          "name": "species_analytics_best_performing_site_id_sites_id_fk",
+          "tableFrom": "species_analytics",
+          "tableTo": "sites",
+          "columnsFrom": [
+            "best_performing_site_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "species_analytics_worst_performing_site_id_sites_id_fk": {
+          "name": "species_analytics_worst_performing_site_id_sites_id_fk",
+          "tableFrom": "species_analytics",
+          "tableTo": "sites",
+          "columnsFrom": [
+            "worst_performing_site_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "species_analytics_uid_unique": {
           "name": "species_analytics_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.species_images": {
-      "name": "species_images",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "species_id": {
-          "name": "species_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size": {
-          "name": "size",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "is_private": {
-          "name": "is_private",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uid_species_image_idx": {
-          "name": "uid_species_image_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "species_images_species_id_idx": {
-          "name": "species_images_species_id_idx",
-          "columns": [
-            {
-              "expression": "species_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "species_images_species_id_project_species_id_fk": {
-          "name": "species_images_species_id_project_species_id_fk",
-          "tableFrom": "species_images",
-          "tableTo": "project_species",
-          "columnsFrom": [
-            "species_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "species_images_uid_unique": {
-          "name": "species_images_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -4800,6 +5741,1256 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tree_records": {
+      "name": "tree_records",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tree_id": {
+          "name": "tree_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_by_id": {
+          "name": "recorded_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_type": {
+          "name": "record_type",
+          "type": "record_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width": {
+          "name": "width",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "health_score": {
+          "name": "health_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vitality_score": {
+          "name": "vitality_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "structural_integrity": {
+          "name": "structural_integrity",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "previous_status": {
+          "name": "previous_status",
+          "type": "tree_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_status": {
+          "name": "new_status",
+          "type": "tree_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_reason": {
+          "name": "status_reason",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "findings": {
+          "name": "findings",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "findings_severity": {
+          "name": "findings_severity",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "findings_comments": {
+          "name": "findings_comments",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weather_conditions": {
+          "name": "weather_conditions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "soil_conditions": {
+          "name": "soil_conditions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "surrounding_vegetation": {
+          "name": "surrounding_vegetation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pests_observed": {
+          "name": "pests_observed",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diseases_observed": {
+          "name": "diseases_observed",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "damage_observed": {
+          "name": "damage_observed",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "growth_rate": {
+          "name": "growth_rate",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "leaf_density": {
+          "name": "leaf_density",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fruiting_status": {
+          "name": "fruiting_status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recommended_actions": {
+          "name": "recommended_actions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "priority_level": {
+          "name": "priority_level",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_public": {
+          "name": "is_public",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "device_location": {
+          "name": "device_location",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "tree_records_tree_id_idx": {
+          "name": "tree_records_tree_id_idx",
+          "columns": [
+            {
+              "expression": "tree_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tree_records_recorded_by_idx": {
+          "name": "tree_records_recorded_by_idx",
+          "columns": [
+            {
+              "expression": "recorded_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tree_records_tree_id_trees_id_fk": {
+          "name": "tree_records_tree_id_trees_id_fk",
+          "tableFrom": "tree_records",
+          "tableTo": "trees",
+          "columnsFrom": [
+            "tree_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tree_records_recorded_by_id_users_id_fk": {
+          "name": "tree_records_recorded_by_id_users_id_fk",
+          "tableFrom": "tree_records",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recorded_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tree_records_uid_unique": {
+          "name": "tree_records_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.trees": {
+      "name": "trees",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "intervention_id": {
+          "name": "intervention_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intervention_species_id": {
+          "name": "intervention_species_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tag": {
+          "name": "tag",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "treeType": {
+          "name": "treeType",
+          "type": "tree_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'sample'"
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "altitude": {
+          "name": "altitude",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accuracy": {
+          "name": "accuracy",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_measured_height": {
+          "name": "last_measured_height",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_measured_width": {
+          "name": "last_measured_width",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "tree_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'alive'"
+        },
+        "status_reason": {
+          "name": "status_reason",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "planting_date": {
+          "name": "planting_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_measurement_date": {
+          "name": "last_measurement_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_measurement_date": {
+          "name": "next_measurement_date",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "trees_intervention_idx": {
+          "name": "trees_intervention_idx",
+          "columns": [
+            {
+              "expression": "intervention_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_intervention_species_idx": {
+          "name": "trees_intervention_species_idx",
+          "columns": [
+            {
+              "expression": "intervention_species_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_created_by_idx": {
+          "name": "trees_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_status_idx": {
+          "name": "trees_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_type_idx": {
+          "name": "trees_type_idx",
+          "columns": [
+            {
+              "expression": "treeType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_planting_date_idx": {
+          "name": "trees_planting_date_idx",
+          "columns": [
+            {
+              "expression": "planting_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_last_measurement_idx": {
+          "name": "trees_last_measurement_idx",
+          "columns": [
+            {
+              "expression": "last_measurement_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trees_location_gist_idx": {
+          "name": "trees_location_gist_idx",
+          "columns": [
+            {
+              "expression": "location",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trees_intervention_id_interventions_id_fk": {
+          "name": "trees_intervention_id_interventions_id_fk",
+          "tableFrom": "trees",
+          "tableTo": "interventions",
+          "columnsFrom": [
+            "intervention_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "trees_intervention_species_id_intervention_species_id_fk": {
+          "name": "trees_intervention_species_id_intervention_species_id_fk",
+          "tableFrom": "trees",
+          "tableTo": "intervention_species",
+          "columnsFrom": [
+            "intervention_species_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "trees_created_by_id_users_id_fk": {
+          "name": "trees_created_by_id_users_id_fk",
+          "tableFrom": "trees",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "trees_uid_unique": {
+          "name": "trees_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_activity": {
+      "name": "user_activity",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activity_type": {
+          "name": "activity_type",
+          "type": "activity_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entity_uid": {
+          "name": "entity_uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_type": {
+          "name": "device_type",
+          "type": "device_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_info": {
+          "name": "device_info",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "varchar(45)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "user_activity_user_idx": {
+          "name": "user_activity_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_activity_project_idx": {
+          "name": "user_activity_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_activity_type_idx": {
+          "name": "user_activity_type_idx",
+          "columns": [
+            {
+              "expression": "activity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_activity_device_idx": {
+          "name": "user_activity_device_idx",
+          "columns": [
+            {
+              "expression": "device_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_activity_created_at_idx": {
+          "name": "user_activity_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_activity_user_project_idx": {
+          "name": "user_activity_user_project_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_activity_user_id_users_id_fk": {
+          "name": "user_activity_user_id_users_id_fk",
+          "tableFrom": "user_activity",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "user_activity_project_id_projects_id_fk": {
+          "name": "user_activity_project_id_projects_id_fk",
+          "tableFrom": "user_activity",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_activity_uid_unique": {
+          "name": "user_activity_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_engagement_analytics": {
+      "name": "user_engagement_analytics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "analytics_job_id": {
+          "name": "analytics_job_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1.0'"
+        },
+        "total_activities": {
+          "name": "total_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_7_days": {
+          "name": "activities_last_7_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_30_days": {
+          "name": "activities_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activities_last_90_days": {
+          "name": "activities_last_90_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "highly_active_users": {
+          "name": "highly_active_users",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moderate_users": {
+          "name": "moderate_users",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "low_activity_users": {
+          "name": "low_activity_users",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inactive_users": {
+          "name": "inactive_users",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mobile_app_activities": {
+          "name": "mobile_app_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "web_app_activities": {
+          "name": "web_app_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tablet_activities": {
+          "name": "tablet_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "desktop_activities": {
+          "name": "desktop_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "api_activities": {
+          "name": "api_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_activities": {
+          "name": "import_activities",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mobile_usage_percentage": {
+          "name": "mobile_usage_percentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "web_usage_percentage": {
+          "name": "web_usage_percentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tablet_usage_percentage": {
+          "name": "tablet_usage_percentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trees_planted_count": {
+          "name": "trees_planted_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trees_measured_count": {
+          "name": "trees_measured_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_changes_count": {
+          "name": "status_changes_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interventions_created_count": {
+          "name": "interventions_created_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sites_created_count": {
+          "name": "sites_created_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "species_added_count": {
+          "name": "species_added_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "images_uploaded_count": {
+          "name": "images_uploaded_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_active_hour": {
+          "name": "most_active_hour",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_active_day_of_week": {
+          "name": "most_active_day_of_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "most_active_month": {
+          "name": "most_active_month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_collaboration_score": {
+          "name": "team_collaboration_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cross_member_interactions": {
+          "name": "cross_member_interactions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_response_time": {
+          "name": "average_response_time",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recent_activities": {
+          "name": "recent_activities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top_contributors": {
+          "name": "top_contributors",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_members_last_30_days": {
+          "name": "new_members_last_30_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_members_retention": {
+          "name": "active_members_retention",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "member_engagement_score": {
+          "name": "member_engagement_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calculated_at": {
+          "name": "calculated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "user_engagement_analytics_project_idx": {
+          "name": "user_engagement_analytics_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_engagement_analytics_calculated_at_idx": {
+          "name": "user_engagement_analytics_calculated_at_idx",
+          "columns": [
+            {
+              "expression": "calculated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_engagement_analytics_hour_idx": {
+          "name": "user_engagement_analytics_hour_idx",
+          "columns": [
+            {
+              "expression": "most_active_hour",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_engagement_analytics_day_idx": {
+          "name": "user_engagement_analytics_day_idx",
+          "columns": [
+            {
+              "expression": "most_active_day_of_week",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_engagement_analytics_project_id_projects_id_fk": {
+          "name": "user_engagement_analytics_project_id_projects_id_fk",
+          "tableFrom": "user_engagement_analytics",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "user_engagement_analytics_analytics_job_id_analytics_jobs_id_fk": {
+          "name": "user_engagement_analytics_analytics_job_id_analytics_jobs_id_fk",
+          "tableFrom": "user_engagement_analytics",
+          "tableTo": "analytics_jobs",
+          "columnsFrom": [
+            "analytics_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_engagement_analytics_uid_unique": {
+          "name": "user_engagement_analytics_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        },
+        "user_engagement_analytics_project_id_unique": {
+          "name": "user_engagement_analytics_project_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "project_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.user_migrations": {
       "name": "user_migrations",
       "schema": "",
@@ -4830,7 +7021,8 @@
         },
         "status": {
           "name": "status",
-          "type": "varchar(50)",
+          "type": "migration_status",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'in_progress'"
@@ -4842,29 +7034,11 @@
           "notNull": false,
           "default": "'{\"user\":false,\"projects\":false,\"sites\":false,\"species\":false,\"interventions\":false,\"images\":false}'::jsonb"
         },
-        "migration_started_at": {
-          "name": "migration_started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "migration_completed_at": {
           "name": "migration_completed_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "last_updated_at": {
-          "name": "last_updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(320)",
-          "primaryKey": false,
-          "notNull": true
         },
         "error_message": {
           "name": "error_message",
@@ -4894,17 +7068,23 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "now()"
+        },
+        "intervention_page_url": {
+          "name": "intervention_page_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -4978,19 +7158,13 @@
         },
         "auth0_id": {
           "name": "auth0_id",
-          "type": "varchar(500)",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
         },
         "email": {
           "name": "email",
           "type": "varchar(320)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "auth_name": {
-          "name": "auth_name",
-          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
         },
@@ -5044,18 +7218,26 @@
           "primaryKey": false,
           "notNull": false
         },
-        "support_pin": {
-          "name": "support_pin",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_private": {
           "name": "is_private",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "last_login_at": {
+          "name": "last_login_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
         },
         "bio": {
           "name": "bio",
@@ -5069,19 +7251,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'en'"
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "last_login_at": {
-          "name": "last_login_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -5109,61 +7278,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "planet_record": {
-          "name": "planet_record",
+        "existing_planet_user": {
+          "name": "existing_planet_user",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
           "default": false
         }
       },
-      "indexes": {
-        "users_email_idx": {
-          "name": "users_email_idx",
-          "columns": [
-            {
-              "expression": "email",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "users_auth0_id_idx": {
-          "name": "users_auth0_id_idx",
-          "columns": [
-            {
-              "expression": "auth0_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "users_uid_idx": {
-          "name": "users_uid_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -5202,6 +7325,23 @@
     }
   },
   "enums": {
+    "public.activity_type": {
+      "name": "activity_type",
+      "schema": "public",
+      "values": [
+        "tree_planted",
+        "tree_measured",
+        "tree_status_changed",
+        "intervention_created",
+        "intervention_updated",
+        "site_created",
+        "site_updated",
+        "species_added",
+        "image_uploaded",
+        "project_joined",
+        "project_updated"
+      ]
+    },
     "public.aggregation_period": {
       "name": "aggregation_period",
       "schema": "public",
@@ -5213,6 +7353,15 @@
         "yearly"
       ]
     },
+    "public.analytics_job_type": {
+      "name": "analytics_job_type",
+      "schema": "public",
+      "values": [
+        "on_demand",
+        "scheduled_monthly",
+        "manual_trigger"
+      ]
+    },
     "public.analytics_status": {
       "name": "analytics_status",
       "schema": "public",
@@ -5220,7 +7369,8 @@
         "processing",
         "completed",
         "failed",
-        "pending"
+        "pending",
+        "partial"
       ]
     },
     "public.capture_mode": {
@@ -5257,6 +7407,30 @@
         "gps",
         "manual",
         "estimated"
+      ]
+    },
+    "public.device_type": {
+      "name": "device_type",
+      "schema": "public",
+      "values": [
+        "mobile_app",
+        "web_app",
+        "tablet",
+        "desktop",
+        "api",
+        "import"
+      ]
+    },
+    "public.entity_type": {
+      "name": "entity_type",
+      "schema": "public",
+      "values": [
+        "users",
+        "projects",
+        "interventions",
+        "species",
+        "sites",
+        "images"
       ]
     },
     "public.image_type": {
@@ -5332,16 +7506,34 @@
         "discarded"
       ]
     },
+    "public.log_level": {
+      "name": "log_level",
+      "schema": "public",
+      "values": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "fatal"
+      ]
+    },
+    "public.migration_status": {
+      "name": "migration_status",
+      "schema": "public",
+      "values": [
+        "in_progress",
+        "completed",
+        "failed"
+      ]
+    },
     "public.project_role": {
       "name": "project_role",
       "schema": "public",
       "values": [
         "owner",
         "admin",
-        "manager",
         "contributor",
-        "observer",
-        "researcher"
+        "observer"
       ]
     },
     "public.record_type": {
@@ -5385,7 +7577,8 @@
         "alive",
         "dead",
         "unknown",
-        "removed"
+        "removed",
+        "sick"
       ]
     },
     "public.tree_enum": {
@@ -5393,7 +7586,18 @@
       "schema": "public",
       "values": [
         "single",
-        "sample"
+        "sample",
+        "plot"
+      ]
+    },
+    "public.user_activity_tier": {
+      "name": "user_activity_tier",
+      "schema": "public",
+      "values": [
+        "highly_active",
+        "moderate",
+        "low_activity",
+        "inactive"
       ]
     },
     "public.user_type": {

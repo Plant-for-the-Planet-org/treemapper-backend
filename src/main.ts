@@ -1,19 +1,29 @@
 // src/main.ts
 import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   try {
-    const app = await NestFactory.create(AppModule);
-    
+    const app = await NestFactory.create<NestFastifyApplication>(
+      AppModule,
+      new FastifyAdapter({
+        logger: true, // Enable Fastify's built-in logger
+        // Fastify options
+        bodyLimit: 10485760, // 10MB
+        caseSensitive: false,
+        ignoreTrailingSlash: true,
+      })
+    );
+
+
     // CORS Configuration - Move this to the very beginning
     app.enableCors({
       origin: [
@@ -25,8 +35,8 @@ async function bootstrap() {
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
       allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
+        'Content-Type',
+        'Authorization',
         'Accept',
         'Origin',
         'X-Requested-With',
@@ -39,9 +49,6 @@ async function bootstrap() {
       optionsSuccessStatus: 204,
     });
 
-    // Body parser limits
-    app.use(json({ limit: '10mb' }));
-    app.use(urlencoded({ extended: true, limit: '10mb' }));
 
     // API prefix
     app.setGlobalPrefix('api');
