@@ -15,12 +15,12 @@ import redisConfig from '../config/redis.config';
   providers: [
     CacheService,
     RedisCacheHealthService,
-    CacheInterceptor,
+    // CacheInterceptor,
   ],
   exports: [
     CacheService,
     RedisCacheHealthService,
-    CacheInterceptor,
+    // CacheInterceptor,
   ],
 })
 export class RedisCacheModule {}

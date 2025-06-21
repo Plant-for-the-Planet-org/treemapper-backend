@@ -23,8 +23,6 @@ export class RedisCacheHealthService extends HealthIndicator {
           ...stats,
         },
       });
-      console.log("Sd",result)
-
       if (health.status === 'healthy') {
         return result;
       }

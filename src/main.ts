@@ -6,6 +6,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -14,7 +15,7 @@ async function bootstrap() {
     const app = await NestFactory.create<NestFastifyApplication>(
       AppModule,
       new FastifyAdapter({
-        logger: process.env.NODE_ENV !== 'production',
+        logger: false,
         bodyLimit: 10485760, // 10MB
         caseSensitive: false,
         ignoreTrailingSlash: true,
@@ -42,7 +43,7 @@ async function bootstrap() {
     app.useGlobalInterceptors(new ResponseInterceptor());
 
     // TODO: Add JWT guard when auth is implemented
-    // app.useGlobalGuards(app.get(JwtAuthGuard));
+    app.useGlobalGuards(app.get(JwtAuthGuard));
 
     // Swagger setup (development only)
     if (process.env.NODE_ENV !== 'production') {
