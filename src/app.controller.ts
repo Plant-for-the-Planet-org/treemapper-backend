@@ -1,14 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Public } from './auth/public.decorator';
-import { CacheHealthService } from './cache/cache-health.service'
+import { RedisCacheHealthService } from './redis/redis-health.service';
 
 @Controller()
 
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly cacheHealthService: CacheHealthService
+    private readonly redisCacheHealthService: RedisCacheHealthService
   ) { }
 
   @Get('/health')
@@ -20,6 +20,6 @@ export class AppController {
   @Public()
   @Get('health/cache')
   async getCacheHealth() {
-    return await this.cacheHealthService.checkHealth();
+    return this.redisCacheHealthService.isHealthy("test");
   }
 }

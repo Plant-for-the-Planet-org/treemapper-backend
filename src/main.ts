@@ -21,7 +21,6 @@ async function bootstrap() {
       })
     );
 
-    // CORS Configuration
     app.enableCors({
       origin: process.env.NODE_ENV === 'production' 
         ? ['https://treemapper-dashboard-1944c398f284.herokuapp.com']
@@ -31,10 +30,8 @@ async function bootstrap() {
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
-    // API prefix
     app.setGlobalPrefix('api');
 
-    // Global pipes, filters, and interceptors
     app.useGlobalPipes(new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,

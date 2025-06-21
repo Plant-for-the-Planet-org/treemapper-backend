@@ -1,188 +1,453 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { CacheOptions, CacheHealthStatus, CacheStats } from './redis-cache.interface';
 
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private client: Redis;
-  private subscriber: Redis;
-  private publisher: Redis;
+export class CacheService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(CacheService.name);
+  private redis: Redis;
+  private stats: CacheStats = {
+    hits: 0,
+    misses: 0,
+    sets: 0,
+    deletes: 0,
+    errors: 0,
+  };
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService) { }
 
   async onModuleInit() {
-    const redisConfig = {
-      host: this.configService.get('redis.host'),
-      port: this.configService.get('redis.port'),
-      password: this.configService.get('redis.password'),
-      db: this.configService.get('redis.db'),
-      keyPrefix: this.configService.get('redis.keyPrefix'),
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
-      enableReadyCheck: true,
-      lazyConnect: true,
-    };
+    const redisConfig = this.configService.get('redis');
 
-    this.client = new Redis(redisConfig);
-    this.subscriber = new Redis(redisConfig);
-    this.publisher = new Redis(redisConfig);
+    this.redis = new Redis({
+      host: redisConfig.host,
+      port: redisConfig.port,
+      password: redisConfig.password,
+      db: redisConfig.db,
+      keyPrefix: `${redisConfig.keyPrefix}:`,
+      maxRetriesPerRequest: 2, // Reduce from 3
+      lazyConnect: redisConfig.lazyConnect,
+      connectTimeout: 10000, // 10 seconds
+      commandTimeout: 5000,  // 5 seconds
+      // Add connection pooling
+      family: 4,
+      keepAlive: 0, // 0 disables TCP keep-alive, or set to a positive number (ms) if needed
+    });
 
-    // Handle connection events
-    this.client.on('connect', () => console.log('Redis client connected'));
-    this.client.on('error', (err) => console.error('Redis client error:', err));
-    this.client.on('reconnecting', () => console.log('Redis client reconnecting'));
+    this.redis.on('connect', () => {
+      this.logger.log('Redis connected successfully');
+    });
+
+    this.redis.on('error', (error) => {
+      this.logger.error('Redis connection error:', error);
+      this.stats.errors++;
+    });
+
+    this.redis.on('ready', () => {
+      this.logger.log('Redis ready to accept commands');
+    });
+
+    this.redis.on('close', () => {
+      this.logger.warn('Redis connection closed');
+    });
+
+    try {
+      await this.redis.connect();
+    } catch (error) {
+      this.logger.error('Failed to connect to Redis:', error);
+    }
   }
 
   async onModuleDestroy() {
-    await Promise.all([
-      this.client?.quit(),
-      this.subscriber?.quit(),
-      this.publisher?.quit(),
-    ]);
-  }
-
-  // Basic operations
-  async set(key: string, value: any, ttl?: number): Promise<void> {
-    const serializedValue = JSON.stringify(value);
-    if (ttl) {
-      await this.client.setex(key, ttl, serializedValue);
-    } else {
-      await this.client.set(key, serializedValue);
+    if (this.redis) {
+      await this.redis.quit();
+      this.logger.log('Redis connection closed');
     }
   }
 
-  async get<T>(key: string): Promise<T | null> {
-    const value = await this.client.get(key);
-    return value ? JSON.parse(value) : null;
+  /**
+   * Generate cache key with UID
+   */
+  private generateKey(key: string, uid?: string): string {
+    return uid ? `${key}:${uid}` : key;
   }
 
-  async del(key: string): Promise<void> {
-    await this.client.del(key);
+  /**
+   * Get default TTL from config
+   */
+  private getDefaultTTL(): number {
+    return this.configService.get('redis.defaultTTL', 604800);
   }
 
-  async exists(key: string): Promise<boolean> {
-    const result = await this.client.exists(key);
-    return result === 1;
-  }
-
-  // Hash operations for complex objects
-  async hset(key: string, field: string, value: any): Promise<void> {
-    await this.client.hset(key, field, JSON.stringify(value));
-  }
-
-  async hget<T>(key: string, field: string): Promise<T | null> {
-    const value = await this.client.hget(key, field);
-    return value ? JSON.parse(value) : null;
-  }
-
-  async hgetall<T>(key: string): Promise<Record<string, T>> {
-    const result = await this.client.hgetall(key);
-    const parsed: Record<string, T> = {};
-    
-    for (const [field, value] of Object.entries(result)) {
-      parsed[field] = JSON.parse(value);
+  /**
+   * Serialize data for Redis storage
+   */
+  private serialize(data: any): string {
+    try {
+      return JSON.stringify(data);
+    } catch (error) {
+      this.logger.error('Serialization error:', error);
+      throw new Error('Failed to serialize data');
     }
-    
-    return parsed;
   }
 
-  async hdel(key: string, field: string): Promise<void> {
-    await this.client.hdel(key, field);
+  /**
+   * Deserialize data from Redis
+   */
+  private deserialize<T>(data: string): T {
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      this.logger.error('Deserialization error:', error);
+      throw new Error('Failed to deserialize data');
+    }
   }
 
-  // Set operations for collections
-  async sadd(key: string, ...members: string[]): Promise<void> {
-    await this.client.sadd(key, ...members);
+  /**
+   * PLACEHOLDER: Custom serialization for complex objects
+   * TODO: Implement your custom serialization logic here
+   */
+  private customSerialize(data: any): string {
+    // TODO: Add your custom serialization logic for complex objects
+    // Example: Handle Date objects, custom classes, etc.
+    this.logger.warn('Using default serialization - implement custom logic if needed');
+    return this.serialize(data);
   }
 
-  async smembers(key: string): Promise<string[]> {
-    return await this.client.smembers(key);
+  /**
+   * PLACEHOLDER: Custom deserialization for complex objects
+   * TODO: Implement your custom deserialization logic here
+   */
+  private customDeserialize<T>(data: string): T {
+    // TODO: Add your custom deserialization logic for complex objects
+    // Example: Reconstruct Date objects, custom classes, etc.
+    this.logger.warn('Using default deserialization - implement custom logic if needed');
+    return this.deserialize<T>(data);
   }
 
-  async srem(key: string, member: string): Promise<void> {
-    await this.client.srem(key, member);
+  // ========================
+  // BASIC OPERATIONS
+  // ========================
+
+  /**
+   * Get value from cache
+   */
+  async get<T>(key: string, options?: CacheOptions): Promise<T | null> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const data = await this.redis.get(cacheKey);
+
+      if (data === null) {
+        this.stats.misses++;
+        return null;
+      }
+
+      this.stats.hits++;
+      return this.customDeserialize<T>(data);
+    } catch (error) {
+      this.logger.error(`Cache GET error for key ${key}:`, error);
+      this.stats.errors++;
+      return null;
+    }
   }
 
-  // List operations for ordered data
-  async lpush(key: string, ...values: any[]): Promise<void> {
-    const serializedValues = values.map(v => JSON.stringify(v));
-    await this.client.lpush(key, ...serializedValues);
+  /**
+   * Set value in cache
+   */
+  async set<T>(key: string, value: T, options?: CacheOptions): Promise<boolean> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const serializedData = this.customSerialize(value);
+      const ttl = options?.ttl || this.getDefaultTTL();
+
+      const result = await this.redis.setex(cacheKey, ttl, serializedData);
+      this.stats.sets++;
+      return result === 'OK';
+    } catch (error) {
+      this.logger.error(`Cache SET error for key ${key}:`, error);
+      this.stats.errors++;
+      return false;
+    }
   }
 
-  async rpop<T>(key: string): Promise<T | null> {
-    const value = await this.client.rpop(key);
-    return value ? JSON.parse(value) : null;
+  /**
+   * Delete key from cache
+   */
+  async del(key: string, options?: CacheOptions): Promise<boolean> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const result = await this.redis.del(cacheKey);
+      this.stats.deletes++;
+      return result > 0;
+    } catch (error) {
+      this.logger.error(`Cache DELETE error for key ${key}:`, error);
+      this.stats.errors++;
+      return false;
+    }
   }
 
-  async lrange<T>(key: string, start: number, stop: number): Promise<T[]> {
-    const values = await this.client.lrange(key, start, stop);
-    return values.map(v => JSON.parse(v));
+  /**
+   * Check if key exists
+   */
+  async exists(key: string, options?: CacheOptions): Promise<boolean> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const result = await this.redis.exists(cacheKey);
+      return result > 0;
+    } catch (error) {
+      this.logger.error(`Cache EXISTS error for key ${key}:`, error);
+      this.stats.errors++;
+      return false;
+    }
   }
 
-  // Pub/Sub operations
-  async publish(channel: string, message: any): Promise<void> {
-    await this.publisher.publish(channel, JSON.stringify(message));
+  /**
+   * Set TTL for existing key
+   */
+  async expire(key: string, ttl: number, options?: CacheOptions): Promise<boolean> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const result = await this.redis.expire(cacheKey, ttl);
+      return result === 1;
+    } catch (error) {
+      this.logger.error(`Cache EXPIRE error for key ${key}:`, error);
+      this.stats.errors++;
+      return false;
+    }
   }
 
-  async subscribe(channel: string, callback: (message: any) => void): Promise<void> {
-    await this.subscriber.subscribe(channel);
-    this.subscriber.on('message', (receivedChannel, message) => {
-      if (receivedChannel === channel) {
-        callback(JSON.parse(message));
+  /**
+   * Get TTL for key
+   */
+  async ttl(key: string, options?: CacheOptions): Promise<number> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      return await this.redis.ttl(cacheKey);
+    } catch (error) {
+      this.logger.error(`Cache TTL error for key ${key}:`, error);
+      this.stats.errors++;
+      return -1;
+    }
+  }
+
+  // ========================
+  // ADVANCED OPERATIONS
+  // ========================
+
+  /**
+   * Get multiple keys
+   */
+  async mget<T>(keys: string[], options?: CacheOptions): Promise<(T | null)[]> {
+    try {
+      const cacheKeys = keys.map(key => this.generateKey(key, options?.uid));
+      const results = await this.redis.mget(...cacheKeys);
+
+      return results.map(result => {
+        if (result === null) {
+          this.stats.misses++;
+          return null;
+        }
+        this.stats.hits++;
+        return this.customDeserialize<T>(result);
+      });
+    } catch (error) {
+      this.logger.error('Cache MGET error:', error);
+      this.stats.errors++;
+      return keys.map(() => null);
+    }
+  }
+
+  /**
+   * Set multiple key-value pairs
+   */
+  async mset(keyValues: Record<string, any>, options?: CacheOptions): Promise<boolean> {
+    try {
+      const pipeline = this.redis.pipeline();
+      const ttl = options?.ttl || this.getDefaultTTL();
+
+      Object.entries(keyValues).forEach(([key, value]) => {
+        const cacheKey = this.generateKey(key, options?.uid);
+        const serializedData = this.customSerialize(value);
+        pipeline.setex(cacheKey, ttl, serializedData);
+      });
+
+      const results = await pipeline.exec();
+      this.stats.sets += Object.keys(keyValues).length;
+
+      return results?.every(([err, result]) => err === null && result === 'OK') || false;
+    } catch (error) {
+      this.logger.error('Cache MSET error:', error);
+      this.stats.errors++;
+      return false;
+    }
+  }
+
+  /**
+   * Delete multiple keys
+   */
+  async mdel(keys: string[], options?: CacheOptions): Promise<number> {
+    try {
+      const cacheKeys = keys.map(key => this.generateKey(key, options?.uid));
+      const result = await this.redis.del(...cacheKeys);
+      this.stats.deletes += result;
+      return result;
+    } catch (error) {
+      this.logger.error('Cache MDEL error:', error);
+      this.stats.errors++;
+      return 0;
+    }
+  }
+
+  /**
+   * Increment numeric value
+   */
+  async incr(key: string, options?: CacheOptions): Promise<number> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const result = await this.redis.incr(cacheKey);
+
+      // Set TTL if it's a new key
+      if (result === 1) {
+        const ttl = options?.ttl || this.getDefaultTTL();
+        await this.redis.expire(cacheKey, ttl);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Cache INCR error for key ${key}:`, error);
+      this.stats.errors++;
+      return 0;
+    }
+  }
+
+  /**
+   * Decrement numeric value
+   */
+  async decr(key: string, options?: CacheOptions): Promise<number> {
+    try {
+      const cacheKey = this.generateKey(key, options?.uid);
+      const result = await this.redis.decr(cacheKey);
+
+      // Set TTL if it's a new key
+      if (result === -1) {
+        const ttl = options?.ttl || this.getDefaultTTL();
+        await this.redis.expire(cacheKey, ttl);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Cache DECR error for key ${key}:`, error);
+      this.stats.errors++;
+      return 0;
+    }
+  }
+
+  /**
+   * Get keys by pattern
+   */
+  async keys(pattern: string): Promise<string[]> {
+    try {
+      return await this.redis.keys(pattern);
+    } catch (error) {
+      this.logger.error(`Cache KEYS error for pattern ${pattern}:`, error);
+      this.stats.errors++;
+      return [];
+    }
+  }
+
+  /**
+   * Flush all keys
+   */
+  async flushAll(): Promise<boolean> {
+    try {
+      const result = await this.redis.flushall();
+      return result === 'OK';
+    } catch (error) {
+      this.logger.error('Cache FLUSHALL error:', error);
+      this.stats.errors++;
+      return false;
+    }
+  }
+
+  // ========================
+  // HEALTH & MONITORING
+  // ========================
+
+  /**
+   * Get cache health status
+   */
+  async getHealth(): Promise<CacheHealthStatus> {
+    try {
+      const start = Date.now();
+      await this.redis.ping();
+      const latency = Date.now() - start;
+
+      const info = await this.redis.info('memory');
+      const memoryInfo = this.parseMemoryInfo(info);
+
+      return {
+        status: 'healthy',
+        message: 'Redis is healthy',
+        latency,
+        memory: memoryInfo,
+      };
+    } catch (error) {
+      this.logger.error('Redis health check failed:', error);
+      return {
+        status: 'unhealthy',
+        message: error.message || 'Redis health check failed',
+      };
+    }
+  }
+
+  /**
+   * Parse memory info from Redis INFO command
+   */
+  private parseMemoryInfo(info: string): any {
+    const lines = info.split('\r\n');
+    const memory = {};
+
+    lines.forEach(line => {
+      if (line.includes('used_memory_human:')) {
+        memory['used'] = line.split(':')[1];
+      }
+      if (line.includes('used_memory_peak_human:')) {
+        memory['peak'] = line.split(':')[1];
+      }
+      if (line.includes('mem_fragmentation_ratio:')) {
+        memory['fragmentation'] = line.split(':')[1];
       }
     });
+
+    return memory;
   }
 
-  // Pattern-based operations
-  async keys(pattern: string): Promise<string[]> {
-    return await this.client.keys(pattern);
+  /**
+   * Get cache statistics
+   */
+  getStats(): CacheStats {
+    return { ...this.stats };
   }
 
-  async deletePattern(pattern: string): Promise<void> {
-    const keys = await this.client.keys(pattern);
-    if (keys.length > 0) {
-      await this.client.del(...keys);
-    }
+  /**
+   * Reset cache statistics
+   */
+  resetStats(): void {
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      sets: 0,
+      deletes: 0,
+      errors: 0,
+    };
   }
 
-  // Atomic operations
-  async incr(key: string): Promise<number> {
-    return await this.client.incr(key);
-  }
-
-  async decr(key: string): Promise<number> {
-    return await this.client.decr(key);
-  }
-
-  async expire(key: string, seconds: number): Promise<void> {
-    await this.client.expire(key, seconds);
-  }
-
-  async ttl(key: string): Promise<number> {
-    return await this.client.ttl(key);
-  }
-
-  // Distributed locking
-  async acquireLock(key: string, ttl: number = 10): Promise<boolean> {
-    const lockKey = `lock:${key}`;
-    const identifier = Math.random().toString(36).substring(2, 15);
-    
-    const result = await this.client.set(lockKey, identifier, 'EX', ttl, 'NX');
-    return result === 'OK';
-  }
-
-  async releaseLock(key: string): Promise<void> {
-    const lockKey = `lock:${key}`;
-    await this.client.del(lockKey);
-  }
-
-  // Health check
-  async ping(): Promise<string> {
-    return await this.client.ping();
-  }
-
-  // Get client for advanced operations
-  getClient(): Redis {
-    return this.client;
+  /**
+   * Get cache hit ratio
+   */
+  getHitRatio(): number {
+    const total = this.stats.hits + this.stats.misses;
+    return total > 0 ? this.stats.hits / total : 0;
   }
 }
