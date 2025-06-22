@@ -21,9 +21,14 @@ async function bootstrap() {
         ignoreTrailingSlash: true,
       })
     );
+    app.use((req, res, next) => {
+      console.log(`${req.method} ${req.url}`);
+      next();
+    });
+
 
     app.enableCors({
-      origin: process.env.NODE_ENV === 'production' 
+      origin: process.env.NODE_ENV === 'production'
         ? ['https://treemapper-dashboard-1944c398f284.herokuapp.com']
         : ['http://localhost:3000', 'http://localhost:3001'],
       credentials: true,
@@ -38,7 +43,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
     }));
-    
+
     app.useGlobalFilters(new HttpExceptionFilter());
     app.useGlobalInterceptors(new ResponseInterceptor());
 
@@ -53,7 +58,7 @@ async function bootstrap() {
         .setVersion('1.0')
         .addBearerAuth()
         .build();
-      
+
       const document = SwaggerModule.createDocument(app, config);
       SwaggerModule.setup('api/docs', app, document);
       logger.log('📚 Swagger documentation available at /api/docs');

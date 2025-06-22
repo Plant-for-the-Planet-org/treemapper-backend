@@ -14,7 +14,8 @@ import {
   projectMembers,
   scientificSpecies,
   FlagReasonEntry,
-  trees
+  trees,
+  users
 } from '../database/schema/index';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -25,6 +26,7 @@ import { createProjectTitle, removeDuplicatesByScientificSpeciesId } from 'src/c
 import booleanValid from '@turf/boolean-valid';
 import { nodeKeyToRedisOptions } from 'ioredis/built/cluster/util';
 import { generateParentHID } from 'src/util/hidGenerator';
+import { CacheService } from 'src/cache/cache.service';
 
 
 
@@ -80,6 +82,7 @@ export class MigrationService {
     private httpService: HttpService,
     private usersetvice: UsersService,
     private projectService: ProjectsService,
+    private cacheService: CacheService,
   ) { }
 
 
@@ -91,7 +94,6 @@ export class MigrationService {
             Authorization: accessToken,
           },
           validateStatus: (status) => {
-            // Accept both 200 and 303 as valid responses
             return status === 200 || status === 303;
           },
         })
@@ -100,6 +102,7 @@ export class MigrationService {
       // If status is 303, return migrate: false
       if (response.status === 303) {
         await this.usersetvice.migrateSuccess(userId)
+        await this.drizzleService.db.update(users).set({ existingPlanetUser: false, migratedAt: new Date() }).where(eq(users.id, userId))
         return { migrationNeeded: false, planetId: '' };
       }
 
@@ -290,6 +293,9 @@ export class MigrationService {
 
       await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
       await this.completeMigration(userMigrationRecord.id);
+      this.usersetvice.resetUserCache(userId)
+      await this.drizzleService.db.update(users).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(users.id, userId))
+
       this.addLog(userMigrationRecord.id, 'info', 'Migration completed successfully', 'images');
     } catch (error) {
       await this.handleMigrationError(userId, userMigrationRecord?.id, error);
