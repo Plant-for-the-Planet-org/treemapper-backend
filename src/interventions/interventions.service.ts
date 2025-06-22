@@ -272,7 +272,7 @@ export class InterventionsService {
       .select()
       .from(interventions)
       .where(eq(interventions.projectId, membership.projectId))
-      .leftJoin(users, eq(interventions.userId, membership.userId))
+      // .leftJoin(users, eq(interventions.userId, membership.userId))
     return AllInterventions
   }
 }

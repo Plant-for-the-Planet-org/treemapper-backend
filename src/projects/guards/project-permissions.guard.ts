@@ -11,31 +11,31 @@ export class ProjectPermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // const roles = this.reflector.get<string[]>('projectRoles', context.getHandler());
-    // if (!roles) {
-    //   return true;
-    // }
+    const roles = this.reflector.get<string[]>('projectRoles', context.getHandler());
+    if (!roles) {
+      return true;
+    }
 
-    // const request = context.switchToHttp().getRequest();
-    // const userId = request.user?.id;
-    // const projectUid = request.params?.id
+    const request = context.switchToHttp().getRequest();
+    const userId = request.user?.id;
+    const projectUid = request.params?.id
 
-    // if (!userId || !projectUid) {
-    //   return false;
-    // }
+    if (!userId || !projectUid) {
+      return false;
+    }
 
-    // const membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
+    const membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
     
-    // if (!membership) {
-    //   throw new ForbiddenException('You do not have access to this project');
-    // }
+    if (!membership) {
+      throw new ForbiddenException('You do not have access to this project');
+    }
 
-    // const hasPermission = roles.includes(membership.role);
+    const hasPermission = roles.includes(membership.role);
     
-    // if (!hasPermission) {
-    //   throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
-    // }
-    // request.membership = membership;
+    if (!hasPermission) {
+      throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
+    }
+    request.membership = membership;
     return true;
   }
 }

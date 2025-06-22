@@ -10,6 +10,11 @@ import { MemoryCacheMoudle } from './cache/cache.module';
 import { MigrationModule } from './migrate/migrate.module.ts';
 import { ProjectsModule } from './projects/projects.module';
 import { SpeciesModule } from './species/species.module';
+import { EmailModule } from './email/email.module';
+import { NotificationModule } from './notification/notification.module';
+import { SitesModule } from './sites/sites.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { InterventionsModule } from './interventions/interventions.module';
 
 @Module({
   imports: [
@@ -23,7 +28,13 @@ import { SpeciesModule } from './species/species.module';
     MemoryCacheMoudle,
     MigrationModule,
     ProjectsModule,
-    SpeciesModule
+    SpeciesModule,
+    EmailModule,
+    NotificationModule,
+    SitesModule,
+    SpeciesModule,
+    AnalyticsModule,
+    InterventionsModule
   ],
   controllers: [AppController],
   providers: [AppService],
