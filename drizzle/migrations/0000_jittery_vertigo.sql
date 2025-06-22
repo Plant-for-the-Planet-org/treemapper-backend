@@ -173,21 +173,6 @@ CREATE TABLE "intervention_records" (
 	CONSTRAINT "intervention_records_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
-CREATE TABLE "intervention_species" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"uid" varchar(50) NOT NULL,
-	"intervention_id" integer NOT NULL,
-	"scientific_species_id" integer NOT NULL,
-	"species_name" varchar,
-	"is_unknown" boolean DEFAULT false,
-	"other_species_name" varchar,
-	"count" integer DEFAULT 1,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "intervention_species_uid_unique" UNIQUE("uid")
-);
---> statement-breakpoint
 CREATE TABLE "interventions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
@@ -216,8 +201,11 @@ CREATE TABLE "interventions" (
 	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
 	"deleted_at" timestamp with time zone,
 	"migrated_intervetion" boolean DEFAULT false,
+	"species" jsonb DEFAULT '[]'::jsonb,
 	CONSTRAINT "interventions_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "interventions_hid_unique" UNIQUE("hid"),
 	CONSTRAINT "interventions_idempotency_key_unique" UNIQUE("idempotency_key")
@@ -482,6 +470,8 @@ CREATE TABLE "projects" (
 	"migrated_project" boolean DEFAULT false,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
 	CONSTRAINT "projects_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "projects_slug_unique" UNIQUE("slug")
 );
@@ -584,6 +574,8 @@ CREATE TABLE "sites" (
 	"created_by_id" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
 	"deleted_at" timestamp with time zone,
 	"metadata" jsonb,
 	"migrated_site" boolean DEFAULT false,
@@ -652,51 +644,14 @@ CREATE TABLE "species_requests" (
 	CONSTRAINT "species_requests_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
-CREATE TABLE "tree_records" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"uid" varchar(50) NOT NULL,
-	"tree_id" integer NOT NULL,
-	"recorded_by_id" integer NOT NULL,
-	"record_type" "record_type" NOT NULL,
-	"recorded_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"image" text,
-	"height" double precision,
-	"width" double precision,
-	"health_score" integer,
-	"vitality_score" integer,
-	"structural_integrity" varchar(50),
-	"previous_status" "tree_status",
-	"new_status" "tree_status",
-	"status_reason" varchar(100),
-	"findings" text,
-	"findings_severity" varchar(50),
-	"findings_comments" text,
-	"notes" text,
-	"weather_conditions" jsonb,
-	"soil_conditions" jsonb,
-	"surrounding_vegetation" text,
-	"pests_observed" jsonb,
-	"diseases_observed" jsonb,
-	"damage_observed" jsonb,
-	"growth_rate" numeric(6, 3),
-	"leaf_density" varchar(50),
-	"fruiting_status" varchar(50),
-	"recommended_actions" jsonb,
-	"priority_level" varchar(20),
-	"is_public" boolean DEFAULT true NOT NULL,
-	"device_location" jsonb,
-	"metadata" jsonb,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "tree_records_uid_unique" UNIQUE("uid")
-);
---> statement-breakpoint
 CREATE TABLE "trees" (
 	"id" serial PRIMARY KEY NOT NULL,
+	"hid" varchar(16) NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"intervention_id" integer,
-	"intervention_species_id" integer,
+	"intervention_species_id" varchar(50),
+	"species_name" varchar,
+	"is_unknown" boolean DEFAULT false,
 	"created_by_id" integer NOT NULL,
 	"tag" varchar(100),
 	"treeType" "tree_enum" DEFAULT 'sample',
@@ -704,7 +659,7 @@ CREATE TABLE "trees" (
 	"longitude" double precision NOT NULL,
 	"altitude" numeric(8, 2),
 	"accuracy" numeric(6, 2),
-	"location" geometry(Geometry,4326) NOT NULL,
+	"location" geometry(Geometry,4326),
 	"last_measured_height" double precision,
 	"last_measured_width" double precision,
 	"status" "tree_status" DEFAULT 'alive' NOT NULL,
@@ -717,6 +672,10 @@ CREATE TABLE "trees" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"metadata" jsonb,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
+	"records" jsonb DEFAULT '[]'::jsonb,
+	CONSTRAINT "trees_hid_unique" UNIQUE("hid"),
 	CONSTRAINT "trees_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
@@ -801,6 +760,8 @@ CREATE TABLE "user_migrations" (
 	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
 	"intervention_page_url" text,
 	CONSTRAINT "user_migrations_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "user_migrations_planet_id_unique" UNIQUE("planet_id")
@@ -826,6 +787,8 @@ CREATE TABLE "users" (
 	"locale" varchar(10) DEFAULT 'en',
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
 	"deleted_at" timestamp with time zone,
 	"migrated_at" timestamp with time zone,
 	"existing_planet_user" boolean DEFAULT false,
@@ -845,8 +808,6 @@ ALTER TABLE "intervention_analytics" ADD CONSTRAINT "intervention_analytics_anal
 ALTER TABLE "intervention_images" ADD CONSTRAINT "intervention_images_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -885,10 +846,7 @@ ALTER TABLE "species_analytics" ADD CONSTRAINT "species_analytics_worst_performi
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_requested_by_id_users_id_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_recorded_by_id_users_id_fk" FOREIGN KEY ("recorded_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_species_id_intervention_species_id_fk" FOREIGN KEY ("intervention_species_id") REFERENCES "public"."intervention_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_activity" ADD CONSTRAINT "user_activity_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_activity" ADD CONSTRAINT "user_activity_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -913,7 +871,6 @@ CREATE INDEX "intervention_analytics_most_successful_idx" ON "intervention_analy
 CREATE INDEX "intervention_images_intervention_id_idx" ON "intervention_images" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_records_intervention_idx" ON "intervention_records" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_updated_by_idx" ON "intervention_records" USING btree ("updated_by");--> statement-breakpoint
-CREATE INDEX "interventions_intervention_id_idx" ON "intervention_species" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "interventions_project_idx" ON "interventions" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "interventions_project_site_idx" ON "interventions" USING btree ("project_site_id");--> statement-breakpoint
 CREATE INDEX "parent_idx" ON "interventions" USING btree ("uid");--> statement-breakpoint
@@ -972,10 +929,7 @@ CREATE INDEX "species_analytics_survival_rank_idx" ON "species_analytics" USING 
 CREATE INDEX "species_analytics_performance_rank_idx" ON "species_analytics" USING btree ("overall_performance_rank");--> statement-breakpoint
 CREATE INDEX "species_analytics_calculated_at_idx" ON "species_analytics" USING btree ("calculated_at");--> statement-breakpoint
 CREATE INDEX "species_requests_requested_by_idx" ON "species_requests" USING btree ("requested_by_id");--> statement-breakpoint
-CREATE INDEX "tree_records_tree_id_idx" ON "tree_records" USING btree ("tree_id");--> statement-breakpoint
-CREATE INDEX "tree_records_recorded_by_idx" ON "tree_records" USING btree ("recorded_by_id");--> statement-breakpoint
 CREATE INDEX "trees_intervention_idx" ON "trees" USING btree ("intervention_id");--> statement-breakpoint
-CREATE INDEX "trees_intervention_species_idx" ON "trees" USING btree ("intervention_species_id");--> statement-breakpoint
 CREATE INDEX "trees_created_by_idx" ON "trees" USING btree ("created_by_id");--> statement-breakpoint
 CREATE INDEX "trees_status_idx" ON "trees" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "trees_type_idx" ON "trees" USING btree ("treeType");--> statement-breakpoint

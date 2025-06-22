@@ -7,6 +7,10 @@ import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MemoryCacheMoudle } from './cache/cache.module';
+import { MigrationModule } from './migrate/migrate.module.ts';
+import { ProjectsModule } from './projects/projects.module';
+import { SpeciesModule } from './species/species.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -16,7 +20,10 @@ import { MemoryCacheMoudle } from './cache/cache.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    MemoryCacheMoudle
+    MemoryCacheMoudle,
+    MigrationModule,
+    ProjectsModule,
+    SpeciesModule
   ],
   controllers: [AppController],
   providers: [AppService],

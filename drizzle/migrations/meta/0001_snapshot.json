@@ -1,6 +1,6 @@
 {
-  "id": "8c88b66e-1ef8-42a1-b8a4-88598ee1a6ed",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "c4fa58d3-fb55-47f6-9611-9ec220a2b35a",
+  "prevId": "8c88b66e-1ef8-42a1-b8a4-88598ee1a6ed",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5724,13 +5724,13 @@
           "name": "latitude",
           "type": "double precision",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "longitude": {
           "name": "longitude",
           "type": "double precision",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "altitude": {
           "name": "altitude",

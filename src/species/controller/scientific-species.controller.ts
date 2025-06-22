@@ -15,10 +15,10 @@ import { SearchSpeciesQueryDto } from '../dto/search-species-query.dto';
 export class ScientificSpeciesController {
   constructor(private readonly scientificSpeciesService: ScientificSpeciesService) {}
 
-  // @Post('bulk-upload')
-  // async bulkUpload(@Body() bulkUploadDto: BulkUploadScientificSpeciesDto) {
-  //   return this.scientificSpeciesService.bulkUpload(bulkUploadDto);
-  // }
+  @Post('bulk-upload')
+  async bulkUpload(@Body() bulkUploadDto: BulkUploadScientificSpeciesDto) {
+    return this.scientificSpeciesService.bulkUpload(bulkUploadDto);
+  }
 
   // @Get()
   // async getAll(@Query() filterDto: ScientificSpeciesFilterDto) {
