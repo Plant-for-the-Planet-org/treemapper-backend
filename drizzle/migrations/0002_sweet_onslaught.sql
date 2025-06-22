@@ -1,0 +1,1 @@
+ALTER TABLE "trees" ALTER COLUMN "intervention_species_id" SET DATA TYPE varchar(255);

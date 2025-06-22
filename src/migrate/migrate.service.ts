@@ -24,6 +24,7 @@ import { ProjectsService } from 'src/projects/projects.service';
 import { createProjectTitle, removeDuplicatesByScientificSpeciesId } from 'src/common/utils/projectName.util';
 import booleanValid from '@turf/boolean-valid';
 import { nodeKeyToRedisOptions } from 'ioredis/built/cluster/util';
+import { generateParentHID } from 'src/util/hidGenerator';
 
 
 
@@ -277,33 +278,19 @@ export class MigrationService {
       }
 
 
-      // if (stop) {
-      //   console.log('Issue in  intervention migration');
-      //   await this.logMigration(userMigrationRecord.id, 'error', 'Migration stopped for species', 'migration');
-      //   return
-      // }
-      // console.log('Intervention  migrated');
+      if (stop) {
+        console.log('Issue in  intervention migration');
+        this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for species', 'interventions');
+        return
+      }
+      console.log('Intervention  migrated');
 
 
 
 
-      // // // // Step 5: Handle Images (placeholder for S3 copy)
-      // // // await this.handleImageMigration(uid, userMigrationRecord.id);
-      // // await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
-      // // await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
-
-
-      // //Test
-      // // await this.updateMigrationProgress(userMigrationRecord.id, 'sites', true, false);
-      // // await this.updateMigrationProgress(userMigrationRecord.id, 'species', true, false);
-      // // await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
-
-
-      // // Mark migration as complete
-      // await this.completeMigration(userMigrationRecord.id);
-
-      // await this.logMigration(userMigrationRecord.id, 'info', 'Migration completed successfully', 'migration');
-
+      await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
+      await this.completeMigration(userMigrationRecord.id);
+      this.addLog(userMigrationRecord.id, 'info', 'Migration completed successfully', 'images');
     } catch (error) {
       await this.handleMigrationError(userId, userMigrationRecord?.id, error);
       throw error;
@@ -954,13 +941,13 @@ export class MigrationService {
       );
 
       const filteredData = transformedData.filter(el => el.scientificSpeciesId)
-      const result = await this.drizzleService.db.transaction(async (tx) => {
-        const insertedSpecies = await tx
-          .insert(projectSpecies)
-          .values(filteredData)
-          .returning();
-        return insertedSpecies;
-      })
+      console.log("OPIOP", JSON.stringify(filteredData, null, 2))
+      const result = await this.drizzleService.db
+        .insert(projectSpecies)
+        .values(filteredData)
+        .onConflictDoNothing({
+          target: [projectSpecies.projectId, projectSpecies.scientificSpeciesId]
+        });
       if (result) {
         this.addLog(migrationId, 'info', `Species migration done`, 'species');
         await this.updateMigrationProgress(migrationId, 'species', true, false);
@@ -970,6 +957,7 @@ export class MigrationService {
       await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
     } catch (error) {
+      console.log("SDC", error)
       this.addLog(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species');
       await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
@@ -1010,18 +998,18 @@ export class MigrationService {
   private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
     try {
       console.log("Started Intervetnion  Migration")
-      this.addLog(uid, 'info', 'Starting User intervention migration', 'interventions');
+      this.addLog(migrationId, 'info', 'Starting User intervention migration', 'interventions');
       const { projectMapping, personalProjectId } = await this.buildProjectMapping(uid);
       const { siteMapping } = await this.buildSiteMapping(uid);
       const needToStop = await this.migrateInterventionWithSampleTrees(uid, projectMapping, authToken, migrationId, personalProjectId, siteMapping)
       if (needToStop) {
         throw 'needToStop activated'
       }
-      this.addLog(uid, 'info', `Interventions migration completed`, 'interventions');
+      this.addLog(migrationId, 'info', `Interventions migration completed`, 'interventions');
       await this.updateMigrationProgress(migrationId, 'interventions', true, false);
       return false
     } catch (error) {
-      this.addLog(uid, 'error', `Interventions migration failed`, 'interventions');
+      this.addLog(migrationId, 'error', `Interventions migration failed`, 'interventions');
       await this.updateMigrationProgress(migrationId, 'interventions', false, true);
       return true
     }
@@ -1076,11 +1064,11 @@ export class MigrationService {
     personalProjectId: number,
     siteMapping: Map<string, number>,
   ) {
-    const batchSize = 1;
+    const batchSize = 100;
     let currentPage = 1;
     let hasMore = true;
     let totalProcessed = 0;
-    let lastPage: number | null = 10;
+    let lastPage: number | null = null;
     console.log("Started Intervetnion  currentPage", currentPage)
     while (hasMore) {
       // Check if we already know the last page and we've exceeded it
@@ -1114,17 +1102,16 @@ export class MigrationService {
       const oldInterventions = interventionResponse.data;
 
       // Extract last page info from _links if available
-      // if (!lastPage && oldInterventions._links?.last) {
-      //   const lastPageMatch = oldInterventions._links.last.match(/page=(\d+)/);
-      //   if (lastPageMatch) {
-      //     lastPage = parseInt(lastPageMatch[1]);
-      //     console.log(`Detected last page: ${lastPage}`);
-      //   }
-      // }
+      if (!lastPage && oldInterventions._links?.last) {
+        const lastPageMatch = oldInterventions._links.last.match(/page=(\d+)/);
+        if (lastPageMatch) {
+          lastPage = parseInt(lastPageMatch[1]);
+          console.log(`Detected last page: ${lastPage}`);
+        }
+      }
 
       // Check if we have more data to process
       const itemsCount = oldInterventions.items?.length || 0;
-      const totalItems = oldInterventions.total || 0;
 
       // Determine if there are more pages using multiple checks
       hasMore = oldInterventions._links?.next ? true : false;
@@ -1207,7 +1194,7 @@ export class MigrationService {
           this.addLog(migrationId, 'error', `Failed to add intervention with id ${inv.uid}`, 'interventions')
         } else {
           const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: e.id }))
-          console.log("SKLDcj",treeMappedData)
+          console.log("SKLDcj", treeMappedData)
           try {
             await this.drizzleService.db
               .insert(trees)
@@ -1282,7 +1269,7 @@ export class MigrationService {
           error: null
         });
       } catch (error) {
-        console.log("SDC",error)
+        console.log("SDC", error)
         this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
         interventionIds.push({
           id: null,
@@ -1304,11 +1291,11 @@ export class MigrationService {
     let flag = false
     let flagReason: FlagReasonEntry[] = []
     let locationValue;
-    const sampleTreeCount = parentData.sampleTreeCount
     const parentGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
     if (parentGeometry.isValid) {
       locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(parentGeometry.validatedGeoJSON)}), 4326)`
     } else {
+      console.log("SDc", parentGeometry)
       flag = true,
         flagReason = [{
           uid: generateUid('flag'),
@@ -1320,7 +1307,6 @@ export class MigrationService {
           createdAt: new Date()
         }]
     }
-    const geometryType = parentData.geometry.type
 
     const interventionSampleTree: any = []
 
@@ -1386,29 +1372,14 @@ export class MigrationService {
     parentFinalData['flagReason'] = flagReason
     parentFinalData['species'] = interventionSpecies
 
-    const trees: any = [];
     if (parentData.type === "single-tree-registration") {
       let treeFinalData = {}
       let singleTreeflag = false
       let singleTreeFlagreason: any = []
-      const pointJSON = this.createPointGeoJSON(parentData.latitude, parentData.longitude)
       let singleTreeLocation;
-      if (!pointJSON.error) {
-        const singleTreeGeometry = this.getGeoJSONForPostGIS(pointJSON.validatedGeoJSON);
-        if (singleTreeGeometry.isValid) {
-          singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
-        } else {
-          singleTreeflag = true
-          singleTreeFlagreason.push({
-            uid: generateUid('flag'),
-            type: 'geolocation',
-            level: 'high',
-            title: 'Location need fix',
-            message: 'Please update your tree location that is accepted by the system. ',
-            updatedAt: new Date(),
-            createdAt: new Date()
-          })
-        }
+      const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
+      if (singleTreeGeometry.isValid) {
+        singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
       } else {
         singleTreeflag = true
         singleTreeFlagreason.push({
@@ -1416,14 +1387,14 @@ export class MigrationService {
           type: 'geolocation',
           level: 'high',
           title: 'Location need fix',
-          message: 'Please update your ptreeroject location that is accepted by the system. ',
+          message: 'Please update your tree location that is accepted by the system. ',
           updatedAt: new Date(),
           createdAt: new Date()
         })
       }
 
-      if (parentData.measurement && parentData.measurement.height) {
-        treeFinalData['lastMeasuredHeight'] = parentData.measurement.height
+      if (parentData.measurements && parentData.measurements.height) {
+        treeFinalData['lastMeasuredHeight'] = parentData.measurements.height
       } else {
         singleTreeflag = true
         singleTreeFlagreason.push({
@@ -1439,8 +1410,8 @@ export class MigrationService {
 
       }
 
-      if (parentData.measurement && parentData.measurement.width) {
-        treeFinalData['lastMeasuredHeight'] = parentData.measurement.width
+      if (parentData.measurements && parentData.measurements.width) {
+        treeFinalData['lastMeasuredHeight'] = parentData.measurements.width
       } else {
         singleTreeflag = true
         singleTreeFlagreason.push({
@@ -1464,22 +1435,20 @@ export class MigrationService {
         treeFinalData['isUnknown'] = true
       }
 
-
-      treeFinalData['hid'] = generateUid('hid')
+      let newHID = generateParentHID();
+      treeFinalData['hid'] = newHID
       treeFinalData['uid'] = generateUid('tree')
       treeFinalData['createdById'] = userId
       treeFinalData['interventionSpeciesId'] = interventionSpecies[0].uid
       treeFinalData['tag'] = parentData.tag
       treeFinalData['treeType'] = 'single'
-      treeFinalData['latitude'] = parentData.latitude
-      treeFinalData['longitude'] = parentData.longitude
       treeFinalData['location'] = singleTreeLocation
       treeFinalData['status'] = parentData.status || 'alive'
       treeFinalData['statusReason'] = parentData.statusReason || null
-      treeFinalData['plantingDate'] = parentData.planting_date || 'alive'
+      treeFinalData['plantingDate'] = parentData.planting_date || parentData.interventionStartDate || parentData.registrationDate || new Date()
       treeFinalData['flag'] = singleTreeflag
       treeFinalData['flagReason'] = singleTreeFlagreason
-      trees.push(treeFinalData)
+      interventionSampleTree.push(treeFinalData)
     }
     let transofrmedSample = []
     if (parentData.sampleInterventions && parentData.sampleInterventions.length > 0) {
@@ -1664,7 +1633,15 @@ export class MigrationService {
       };
     }
   }
-
+  private async completeMigration(migrationId: number): Promise<void> {
+    await this.drizzleService.db
+      .update(userMigrations)
+      .set({
+        status: 'completed',
+        migrationCompletedAt: new Date()
+      })
+      .where(eq(userMigrations.id, migrationId));
+  }
 }
 
 
@@ -1685,15 +1662,7 @@ export class MigrationService {
 
 
 
-// private async completeMigration(migrationId: number): Promise<void> {
-//   await this.drizzleService.db
-//     .update(userMigrations)
-//     .set({
-//       status: 'completed',
-//       migrationCompletedAt: new Date()
-//     })
-//     .where(eq(userMigrations.id, migrationId));
-// }
+
 
 
 

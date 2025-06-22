@@ -625,7 +625,7 @@ export const trees = pgTable('trees', {
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').references(() => interventions.id),
-  interventionSpeciesId: varchar('intervention_species_id', { length: 50 }),
+  interventionSpeciesId: varchar('intervention_species_id', { length: 255 }),
   speciesName: varchar('species_name'),
   isUnknown: boolean('is_unknown').default(false),
   createdById: integer('created_by_id').notNull().references(() => users.id),

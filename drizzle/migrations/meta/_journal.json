@@ -15,6 +15,13 @@
       "when": 1750567106522,
       "tag": "0001_late_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1750574694311,
+      "tag": "0002_sweet_onslaught",
+      "breakpoints": true
     }
   ]
 }
