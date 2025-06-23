@@ -308,7 +308,7 @@ export class InterventionsService {
 
     // Build where conditions
     const whereConditions = [
-      eq(interventions.projectId, 15),
+      eq(interventions.projectId, membership.projectId),
       // Only include non-deleted interventions
       isNull(interventions.deletedAt)
     ];

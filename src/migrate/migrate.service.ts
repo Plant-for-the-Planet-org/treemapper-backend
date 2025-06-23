@@ -1452,7 +1452,7 @@ export class MigrationService {
       let treeFinalData = {}
       let singleTreeflag = false
       let singleTreeFlagreason: any = []
-      let singleTreeLocation:any=null;
+      let singleTreeLocation: any = null;
       const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
       if (singleTreeGeometry.isValid) {
         singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
@@ -1619,7 +1619,7 @@ export class MigrationService {
         treeFinalData['createdById'] = userId
         treeFinalData['tag'] = sampleIntervention.tag
         treeFinalData['treeType'] = 'sample'
-        treeFinalData['interventionSpeciesId'] = invSpeciesId.uid
+        treeFinalData['interventionSpeciesId'] = invSpeciesId && invSpeciesId.uid ? invSpeciesId.uid : null
         treeFinalData['location'] = singleTreeLocation
         treeFinalData['status'] = sampleIntervention.status || 'alive'
         treeFinalData['statusReason'] = sampleIntervention.statusReason || null

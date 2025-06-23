@@ -59,8 +59,8 @@ export class InterventionsController {
   }
 
   @Get('/projects/:id')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
   async findAllintervention(
     @Membership() membership: any
   ): Promise<PaginatedInterventionsResponse> {
