@@ -1,13 +1,16 @@
 // src/modules/interventions/interventions.service.ts
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
-import { and, eq, desc, asc, like, gte, lte, inArray, sql, count } from 'drizzle-orm';
+import { and, eq, desc, asc, like, gte, lte, inArray, sql, count, isNull, or } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import {
   interventions,
   scientificSpecies,
   projects,
   sites,
-  users
+  users,
+  treeRecords,
+  trees,
+  interventionSpecies
 } from '../database/schema/index';
 import {
   CreateInterventionDto,
@@ -24,6 +27,28 @@ import { uuid } from 'drizzle-orm/pg-core';
 import { generateIdempotencyKey } from 'src/util/idempotencyKeyGenerator';
 import { interventionConfigurationSeedData } from 'src/database/schema/interventionConfig';
 import { int } from 'drizzle-orm/mysql-core';
+
+
+type InterventionStatus = "planned" | "active" | "completed" | "failed" | "on_hold" | "cancelled";
+
+interface FindAllInterventionsParams {
+  page?: number;
+  limit?: number;
+  status?: InterventionStatus;
+  siteId?: number;
+}
+
+export interface PaginatedInterventionsResponse {
+  data: any[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
 
 export enum CaptureStatus {
   COMPLETE = 'complete',
@@ -267,12 +292,242 @@ export class InterventionsService {
     }
   }
 
-  async findAll(membership: ProjectGuardResponse): Promise<any> {
-    const AllInterventions = await this.drizzleService.db
-      .select()
+  async findAll(
+    membership: ProjectGuardResponse,
+    params: FindAllInterventionsParams = {}
+  ): Promise<PaginatedInterventionsResponse> {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      siteId
+    } = params;
+
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Build where conditions
+    const whereConditions = [
+      eq(interventions.projectId, 15),
+      // Only include non-deleted interventions
+      isNull(interventions.deletedAt)
+    ];
+
+    // Add status filter if provided
+    if (status) {
+      whereConditions.push(eq(interventions.interventionStatus, status));
+    }
+
+    // Add site filter if provided (if no siteId, it includes all sites)
+    if (siteId) {
+      whereConditions.push(eq(interventions.projectSiteId, siteId));
+    }
+
+    // Get total count for pagination
+    const totalResult = await this.drizzleService.db
+      .select({
+        count: sql<number>`COUNT(*)::int`
+      })
       .from(interventions)
-      .where(eq(interventions.projectId, membership.projectId))
-      // .leftJoin(users, eq(interventions.userId, membership.userId))
-    return AllInterventions
+      .where(and(...whereConditions));
+
+    const total = totalResult[0]?.count || 0;
+
+    // Get paginated interventions with basic info first
+    const allInterventions = await this.drizzleService.db
+      .select({
+        id: interventions.id,
+        uid: interventions.uid,
+        hid: interventions.hid,
+        type: interventions.type,
+        interventionStatus: interventions.interventionStatus,
+        originalGeometry: interventions.originalGeometry,
+        treeCount: interventions.treeCount,
+        registrationDate: interventions.registrationDate,
+        interventionStartDate: interventions.interventionStartDate,
+        interventionEndDate: interventions.interventionEndDate,
+        description: interventions.description,
+        projectSiteId: interventions.projectSiteId,
+        captureMode: interventions.captureMode,
+        captureStatus: interventions.captureStatus,
+        isPrivate: interventions.isPrivate,
+        createdAt: interventions.createdAt,
+        updatedAt: interventions.updatedAt,
+        // Add user info
+        user: {
+          uid: users.uid,
+          displayName: users.displayName,
+          firstname: users.firstname,
+          lastname: users.lastname,
+          image: users.image
+        },
+        // Add site info if exists
+        site: {
+          uid: sites.uid,
+          name: sites.name,
+          status: sites.status
+        }
+      })
+      .from(interventions)
+      .leftJoin(users, eq(interventions.userId, users.id))
+      .leftJoin(sites, eq(interventions.projectSiteId, sites.id))
+      .where(and(...whereConditions))
+      .orderBy(desc(interventions.registrationDate))
+      .limit(limit)
+      .offset(offset);
+
+    // Get intervention IDs for fetching related data
+    const interventionIds = allInterventions.map(intervention => intervention.id);
+
+    // Fetch intervention species for all interventions
+    const interventionSpeciesData = interventionIds.length > 0 ? await this.drizzleService.db
+      .select({
+        interventionId: interventionSpecies.interventionId,
+        uid: interventionSpecies.uid,
+        scientificSpeciesId: interventionSpecies.scientificSpeciesId,
+        scientificSpeciesUid: interventionSpecies.scientificSpeciesUid,
+        speciesName: interventionSpecies.speciesName,
+        isUnknown: interventionSpecies.isUnknown,
+        otherSpeciesName: interventionSpecies.otherSpeciesName,
+        count: interventionSpecies.count,
+        createdAt: interventionSpecies.createdAt,
+        updatedAt: interventionSpecies.updatedAt,
+        // Include scientific species details
+        scientificSpecies: {
+          uid: scientificSpecies.uid,
+          scientificName: scientificSpecies.scientificName,
+          commonName: scientificSpecies.commonName,
+          family: scientificSpecies.family,
+          genus: scientificSpecies.genus
+        }
+      })
+      .from(interventionSpecies)
+      .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
+      .where(
+        and(
+          inArray(interventionSpecies.interventionId, interventionIds),
+          isNull(interventionSpecies.deletedAt),
+          isNull(scientificSpecies.deletedAt)
+        )
+      ) : [];
+
+    // Fetch trees and their records for all interventions
+    const treesWithRecords = interventionIds.length > 0 ? await this.drizzleService.db
+      .select({
+        interventionId: trees.interventionId,
+        tree: {
+          id: trees.id,
+          uid: trees.uid,
+          hid: trees.hid,
+          tag: trees.tag,
+          treeType: trees.treeType,
+          latitude: trees.latitude,
+          longitude: trees.longitude,
+          status: trees.status,
+          statusReason: trees.statusReason,
+          plantingDate: trees.plantingDate,
+          lastMeasuredHeight: trees.lastMeasuredHeight,
+          lastMeasuredWidth: trees.lastMeasuredWidth,
+          lastMeasurementDate: trees.lastMeasurementDate,
+          nextMeasurementDate: trees.nextMeasurementDate,
+          createdAt: trees.createdAt,
+          updatedAt: trees.updatedAt
+        },
+        treeRecord: {
+          uid: treeRecords.uid,
+          recordType: treeRecords.recordType,
+          recordedAt: treeRecords.recordedAt,
+          height: treeRecords.height,
+          width: treeRecords.width,
+          healthScore: treeRecords.healthScore,
+          vitalityScore: treeRecords.vitalityScore,
+          structuralIntegrity: treeRecords.structuralIntegrity,
+          previousStatus: treeRecords.previousStatus,
+          newStatus: treeRecords.newStatus,
+          statusReason: treeRecords.statusReason,
+          findings: treeRecords.findings,
+          findingsSeverity: treeRecords.findingsSeverity,
+          notes: treeRecords.notes,
+          isPublic: treeRecords.isPublic,
+          createdAt: treeRecords.createdAt
+        },
+        recordedBy: {
+          uid: users.uid,
+          displayName: users.displayName,
+          firstname: users.firstname,
+          lastname: users.lastname
+        }
+      })
+      .from(trees)
+      .leftJoin(treeRecords, eq(trees.id, treeRecords.treeId))
+      .leftJoin(users, eq(treeRecords.recordedById, users.id))
+      .where(
+        and(
+          inArray(trees.interventionId, interventionIds),
+          isNull(trees.deletedAt),
+          or(
+            isNull(treeRecords.deletedAt),
+            isNull(treeRecords.uid) // Handle case where no records exist
+          )
+        )
+      )
+      .orderBy(trees.id, desc(treeRecords.recordedAt)) : [];
+
+    // Group and structure the data
+    const interventionsWithRelatedData = allInterventions.map(intervention => {
+      // Group species by intervention
+      const species = interventionSpeciesData.filter(
+        s => s.interventionId === intervention.id
+      );
+
+      // Group trees and their records by intervention
+      const treesData = treesWithRecords.filter(
+        t => t.interventionId === intervention.id
+      );
+
+      // Structure trees with their records
+      const treesMap = new Map();
+      treesData.forEach(item => {
+        if (!treesMap.has(item.tree.id)) {
+          treesMap.set(item.tree.id, {
+            ...item.tree,
+            records: []
+          });
+        }
+
+        // Only add record if it exists and has a uid
+        if (item.treeRecord?.uid) {
+          treesMap.get(item.tree.id).records.push({
+            ...item.treeRecord,
+            recordedBy: item.recordedBy
+          });
+        }
+      });
+
+      const trees = Array.from(treesMap.values());
+
+      return {
+        ...intervention,
+        species,
+        trees
+      };
+    });
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / limit);
+    const hasNext = page < totalPages;
+    const hasPrev = page > 1;
+
+    return {
+      data: interventionsWithRelatedData,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext,
+        hasPrev
+      }
+    };
   }
 }

@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1750639949727,
-      "tag": "0000_gray_cyclops",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1750643727857,
-      "tag": "0001_graceful_valkyrie",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1750644621451,
-      "tag": "0002_wide_the_spike",
+      "when": 1750661649078,
+      "tag": "0000_smooth_forgotten_one",
       "breakpoints": true
     }
   ]

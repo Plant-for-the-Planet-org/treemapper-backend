@@ -614,6 +614,7 @@ export const interventions = pgTable('interventions', {
   parentIdx: index('parent_idx').on(table.uid),
   userIdx: index('interventions_user_idx').on(table.userId),
   typeIdx: index('interventions_type_idx').on(table.type),
+  interventionStartDateIdx: index('interventions_start_date_idx').on(table.interventionStartDate),
 }));
 
 export const interventionSpecies = pgTable('intervention_species', {

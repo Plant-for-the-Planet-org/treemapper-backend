@@ -14,7 +14,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard';
 import { ProjectRoles } from '../projects/decorators/project-roles.decorator';
-import { AnalyticsService } from './analytics.service';
+import { AnalyticsService, TreesPlantedResult, RecentAdditionsResponse } from './analytics.service';
 import {
   AnalyticsQueryDto,
   SpeciesAnalyticsQueryDto,
@@ -27,11 +27,49 @@ import {
   CsvExportDataResponse,
 } from './dto/analytics.dto';
 import { Membership } from 'src/projects/decorators/membership.decorator';
+import { ProjectGuardResponse } from 'src/projects/projects.service';
+
+export enum TimeInterval {
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+  MONTHLY = 'monthly',
+}
+
 
 @Controller('analytics')
 @UseGuards(JwtAuthGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) { }
+
+  @Get('trees-planted-overview/:id')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  async getTreesPlantedOverview(
+    // @Membership() membership: ProjectGuardResponse,
+    @Query('interval') interval: TimeInterval = TimeInterval.MONTHLY,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ): Promise<TreesPlantedResult[]> {
+    return this.analyticsService.getTreesPlantedOverTime({
+      projectId: 15,
+      interval,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    });
+  }
+
+
+  @Get('project-kpis')
+  async getProjectKPIs(
+  ) {
+    return this.analyticsService.getProjectKPIs(15);
+  }
+
+  @Get('recent-additions')
+  async getRecentAdditions(
+  ): Promise<RecentAdditionsResponse> {
+    return this.analyticsService.getRecentAdditions(15);
+  }
 
   // @Post('projects/:id/refresh')
   // @ProjectRoles('owner', 'admin')

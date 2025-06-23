@@ -1,5 +1,5 @@
 {
-  "id": "c721dd5c-d7d0-4adc-9079-81371a213999",
+  "id": "632a15af-7273-4184-a81c-3fe9f8be94d1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -460,6 +460,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "scientific_species_uid": {
+          "name": "scientific_species_uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "species_name": {
           "name": "species_name",
           "type": "varchar",
@@ -838,6 +844,21 @@
           "columns": [
             {
               "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interventions_start_date_idx": {
+          "name": "interventions_start_date_idx",
+          "columns": [
+            {
+              "expression": "intervention_start_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

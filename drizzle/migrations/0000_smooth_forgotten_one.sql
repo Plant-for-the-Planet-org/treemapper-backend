@@ -74,6 +74,7 @@ CREATE TABLE "intervention_species" (
 	"uid" varchar(50) NOT NULL,
 	"intervention_id" integer NOT NULL,
 	"scientific_species_id" integer,
+	"scientific_species_uid" varchar(50),
 	"species_name" varchar,
 	"is_unknown" boolean DEFAULT false,
 	"other_species_name" varchar,
@@ -551,6 +552,7 @@ CREATE INDEX "interventions_project_site_idx" ON "interventions" USING btree ("p
 CREATE INDEX "parent_idx" ON "interventions" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "interventions_user_idx" ON "interventions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "interventions_type_idx" ON "interventions" USING btree ("type");--> statement-breakpoint
+CREATE INDEX "interventions_start_date_idx" ON "interventions" USING btree ("intervention_start_date");--> statement-breakpoint
 CREATE INDEX "user_migration_id_idx" ON "migration_logs" USING btree ("user_migration_id");--> statement-breakpoint
 CREATE INDEX "notifications_user_id_idx" ON "notifications" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "notifications_type_idx" ON "notifications" USING btree ("type");--> statement-breakpoint

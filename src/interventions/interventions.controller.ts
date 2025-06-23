@@ -27,7 +27,7 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import { InterventionsService } from './interventions.service';
+import { InterventionsService, PaginatedInterventionsResponse } from './interventions.service';
 import {
   CreateInterventionDto,
   UpdateInterventionDto,
@@ -59,11 +59,11 @@ export class InterventionsController {
   }
 
   @Get('/projects/:id')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
   async findAllintervention(
     @Membership() membership: any
-  ): Promise<InterventionResponseDto> {
+  ): Promise<PaginatedInterventionsResponse> {
     return this.interventionsService.findAll(membership);
   }
 
