@@ -54,110 +54,110 @@ export class SpeciesRequestService {
     return newRequest[0];
   }
 
-  // async getRequests(filterDto: SpeciesRequestFilterDto) {
-  //   const { page = 1, limit = 10, search, status } = filterDto;
-  //   const offset = (page - 1) * limit;
+  async getRequests(filterDto: SpeciesRequestFilterDto) {
+    const { page = 1, limit = 10, search, status } = filterDto;
+    const offset = (page - 1) * limit;
 
-  //   let whereConditions: any[] = [];
+    let whereConditions: any[] = [];
 
-  //   if (status) {
-  //     whereConditions.push(eq(speciesRequests.status, status));
-  //   }
+    if (status) {
+      whereConditions.push(eq(speciesRequests.status, status));
+    }
 
-  //   if (search) {
-  //     whereConditions.push(
-  //       or(
-  //         ilike(speciesRequests.scientificName, `%${search}%`),
-  //         ilike(speciesRequests.commonName, `%${search}%`),
-  //       ),
-  //     );
-  //   }
+    if (search) {
+      whereConditions.push(
+        or(
+          ilike(speciesRequests.scientificName, `%${search}%`),
+          ilike(speciesRequests.commonName, `%${search}%`),
+        ),
+      );
+    }
 
-  //   const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+    const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
-  //   const [data, totalResult] = await Promise.all([
-  //     this.drizzle.db
-  //       .select({
-  //         id: speciesRequests.id,
-  //         uid: speciesRequests.uid,
-  //         scientificName: speciesRequests.scientificName,
-  //         commonName: speciesRequests.commonName,
-  //         description: speciesRequests.description,
-  //         requestReason: speciesRequests.requestReason,
-  //         gbifId: speciesRequests.gbifId,
-  //         status: speciesRequests.status,
-  //         adminNotes: speciesRequests.adminNotes,
-  //         reviewedAt: speciesRequests.reviewedAt,
-  //         createdAt: speciesRequests.createdAt,
-  //         requestedBy: {
-  //           id: users.id,
-  //           name: users.name,
-  //           email: users.email,
-  //         },
-  //         project: {
-  //           id: projects.id,
-  //           projectName: projects.projectName,
-  //         },
-  //       })
-  //       .from(speciesRequests)
-  //       .leftJoin(users, eq(speciesRequests.requestedById, users.id))
-  //       .leftJoin(projects, eq(speciesRequests.projectId, projects.id))
-  //       .where(whereClause)
-  //       .orderBy(desc(speciesRequests.createdAt))
-  //       .limit(limit)
-  //       .offset(offset),
+    const [data, totalResult] = await Promise.all([
+      this.drizzle.db
+        .select({
+          id: speciesRequests.id,
+          uid: speciesRequests.uid,
+          scientificName: speciesRequests.scientificName,
+          commonName: speciesRequests.commonName,
+          description: speciesRequests.description,
+          requestReason: speciesRequests.requestReason,
+          gbifId: speciesRequests.gbifId,
+          status: speciesRequests.status,
+          adminNotes: speciesRequests.adminNotes,
+          reviewedAt: speciesRequests.reviewedAt,
+          createdAt: speciesRequests.createdAt,
+          requestedBy: {
+            id: users.id,
+            name: users.displayName,
+            email: users.email,
+          },
+          project: {
+            id: projects.id,
+            projectName: projects.projectName,
+          },
+        })
+        .from(speciesRequests)
+        .leftJoin(users, eq(speciesRequests.requestedById, users.id))
+        .leftJoin(projects, eq(speciesRequests.projectId, projects.id))
+        .where(whereClause)
+        .orderBy(desc(speciesRequests.createdAt))
+        .limit(limit)
+        .offset(offset),
 
-  //     this.drizzle.db
-  //       .select({ count: sql<number>`count(*)` })
-  //       .from(speciesRequests)
-  //       .where(whereClause),
-  //   ]);
+      this.drizzle.db
+        .select({ count: sql<number>`count(*)` })
+        .from(speciesRequests)
+        .where(whereClause),
+    ]);
 
-  //   const total = totalResult[0]?.count || 0;
+    const total = totalResult[0]?.count || 0;
 
-  //   return {
-  //     data,
-  //     total,
-  //     page,
-  //     limit,
-  //     totalPages: Math.ceil(total / limit),
-  //   };
-  // }
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 
-  // async getRequestById(id: number) {
-  //   const request = await this.drizzle.db
-  //     .select({
-  //       id: speciesRequests.id,
-  //       uid: speciesRequests.uid,
-  //       scientificName: speciesRequests.scientificName,
-  //       commonName: speciesRequests.commonName,
-  //       description: speciesRequests.description,
-  //       requestReason: speciesRequests.requestReason,
-  //       gbifId: speciesRequests.gbifId,
-  //       status: speciesRequests.status,
-  //       adminNotes: speciesRequests.adminNotes,
-  //       reviewedAt: speciesRequests.reviewedAt,
-  //       createdAt: speciesRequests.createdAt,
-  //       requestedBy: {
-  //         id: users.id,
-  //         name: users.name,
-  //         email: users.email,
-  //       },
-  //       project: {
-  //         id: projects.id,
-  //         projectName: projects.projectName,
-  //       },
-  //     })
-  //     .from(speciesRequests)
-  //     .leftJoin(users, eq(speciesRequests.requestedById, users.id))
-  //     .leftJoin(projects, eq(speciesRequests.projectId, projects.id))
-  //     .where(eq(speciesRequests.id, id))
-  //     .limit(1);
+  async getRequestById(id: number) {
+    const request = await this.drizzle.db
+      .select({
+        id: speciesRequests.id,
+        uid: speciesRequests.uid,
+        scientificName: speciesRequests.scientificName,
+        commonName: speciesRequests.commonName,
+        description: speciesRequests.description,
+        requestReason: speciesRequests.requestReason,
+        gbifId: speciesRequests.gbifId,
+        status: speciesRequests.status,
+        adminNotes: speciesRequests.adminNotes,
+        reviewedAt: speciesRequests.reviewedAt,
+        createdAt: speciesRequests.createdAt,
+        requestedBy: {
+          id: users.id,
+          name: users.displayName,
+          email: users.email,
+        },
+        project: {
+          id: projects.id,
+          projectName: projects.projectName,
+        },
+      })
+      .from(speciesRequests)
+      .leftJoin(users, eq(speciesRequests.requestedById, users.id))
+      .leftJoin(projects, eq(speciesRequests.projectId, projects.id))
+      .where(eq(speciesRequests.id, id))
+      .limit(1);
 
-  //   if (!request.length) {
-  //     throw new NotFoundException('Species request not found');
-  //   }
+    if (!request.length) {
+      throw new NotFoundException('Species request not found');
+    }
 
-  //   return request[0];
-  // }
+    return request[0];
+  }
 }

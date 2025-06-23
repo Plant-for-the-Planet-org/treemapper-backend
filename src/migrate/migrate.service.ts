@@ -15,7 +15,8 @@ import {
   scientificSpecies,
   FlagReasonEntry,
   trees,
-  users
+  users,
+  interventionSpecies
 } from '../database/schema/index';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -24,9 +25,9 @@ import { UsersService } from 'src/users/users.service';
 import { ProjectsService } from 'src/projects/projects.service';
 import { createProjectTitle, removeDuplicatesByScientificSpeciesId } from 'src/common/utils/projectName.util';
 import booleanValid from '@turf/boolean-valid';
-import { nodeKeyToRedisOptions } from 'ioredis/built/cluster/util';
 import { generateParentHID } from 'src/util/hidGenerator';
-import { CacheService } from 'src/cache/cache.service';
+import { NotificationService } from 'src/notification/notification.service';
+import { NotificationType } from 'src/notification/dto/notification.dto';
 
 
 
@@ -82,7 +83,7 @@ export class MigrationService {
     private httpService: HttpService,
     private usersetvice: UsersService,
     private projectService: ProjectsService,
-    private cacheService: CacheService,
+    private notificationService: NotificationService,
   ) { }
 
 
@@ -295,7 +296,12 @@ export class MigrationService {
       await this.completeMigration(userMigrationRecord.id);
       this.usersetvice.resetUserCache(userId)
       await this.drizzleService.db.update(users).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(users.id, userId))
-
+      this.notificationService.createNotification({
+        userId: userId,
+        type: NotificationType.SYSTEM_UPDATE,
+        title: 'Migration Completed',
+        message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plane.org'
+      })
       this.addLog(userMigrationRecord.id, 'info', 'Migration completed successfully', 'images');
     } catch (error) {
       await this.handleMigrationError(userId, userMigrationRecord?.id, error);
@@ -600,28 +606,23 @@ export class MigrationService {
     try {
       this.addLog(migrationId, 'info', 'Starting projects migration', 'projects');
       const projectsResponse = await this.makeApiCall(`/app/profile/projects?_scope=extended`, authToken);
-      console.log("Response", projectsResponse)
       if (!projectsResponse || projectsResponse === null) {
         this.addLog(migrationId, 'error', `Project migration failed. No response recieved`, 'projects');
         await this.updateMigrationProgress(migrationId, 'projects', false, true);
         return true;
       }
       const oldProjects = projectsResponse.data;
-      console.log("step 1")
 
       let stop = false;
       for (const oldProject of oldProjects) {
         if (stop) {
-          console.log("step 2")
 
           this.addLog(migrationId, 'error', `Project loop stopped`, 'projects');
           return true
         }
         try {
-          console.log("step 3")
 
           const transformedProject = this.transformProjectData(oldProject, userId);
-          console.log("step 5")
 
           const existingProject = await this.drizzleService.db
             .select()
@@ -630,10 +631,8 @@ export class MigrationService {
             .limit(1);
 
           if (existingProject.length > 0) {
-            console.log("step 6")
             this.addLog(migrationId, 'warning', `Project already exist`, 'projects', JSON.stringify(transformedProject));
           } else {
-            console.log("step 7")
             await this.drizzleService.db.transaction(async (tx) => {
               try {
                 const projectResult = await tx
@@ -667,15 +666,12 @@ export class MigrationService {
                 );
                 stop = false;
               } catch (error) {
-                console.log("step 8", error)
                 this.addLog(migrationId, 'error', `Projects migration failed: At 12837`, 'projects', JSON.stringify(error.stack));
                 await this.updateMigrationProgress(migrationId, 'projects', false, true);
                 stop = true
               }
             })
           }
-          console.log("step 89")
-
           this.addLog(migrationId, 'info', `Project with id:${transformedProject.uid} migrated.Moving to next project`, 'projects');
         } catch (error) {
           this.addLog(migrationId, 'error', `Project migration failed for project at catch block`, 'projects', JSON.stringify(oldProject));
@@ -686,8 +682,6 @@ export class MigrationService {
       this.addLog(migrationId, 'info', `All projects migrated`, 'projects', 'null');
       return false
     } catch (error) {
-      console.log("step 10")
-
       this.addLog(migrationId, 'error', `Projects migration failed: ${error.message}`, 'projects', JSON.stringify(error.stack));
       this.updateMigrationProgress(migrationId, 'projects', false, true);
       return true;
@@ -695,8 +689,6 @@ export class MigrationService {
   }
 
   private transformProjectData(oldProjectData: any, userId: number): any {
-    console.log("step 4")
-
     const projectData = oldProjectData.properties
     const geometry = oldProjectData.geometry;
     const getTarget = (unitsTargeted, countTarget) => {
@@ -881,7 +873,6 @@ export class MigrationService {
 
         this.addLog(migrationId, 'info', `Sites with siteID:${site.id} in project:${projectData.id} migrated`, 'sites');
       } catch (error) {
-        console.log("Error aty", error)
         this.addLog(migrationId, 'error', `Failed to insert site ${site.id} from project ${projectData.slug}: `, 'sites', JSON.stringify(site));
         stopProcess = true;
       }
@@ -947,7 +938,6 @@ export class MigrationService {
       );
 
       const filteredData = transformedData.filter(el => el.scientificSpeciesId)
-      console.log("OPIOP", JSON.stringify(filteredData, null, 2))
       const result = await this.drizzleService.db
         .insert(projectSpecies)
         .values(filteredData)
@@ -963,7 +953,6 @@ export class MigrationService {
       await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
     } catch (error) {
-      console.log("SDC", error)
       this.addLog(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species');
       await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
@@ -1062,6 +1051,25 @@ export class MigrationService {
   }
 
 
+  private async buildSpeciesMapping(uids: string[]): Promise<{ speciesMapping: Map<string, number> }> {
+    const speciesMapping = new Map<string, number>();
+    // Get all migrated projects for this user
+    const migratedProjects = await this.drizzleService.db
+      .select({
+        id: scientificSpecies.id,
+        oldUuid: scientificSpecies.uid,
+      })
+      .from(scientificSpecies)
+      .where(inArray(scientificSpecies.uid, uids));
+    // Build the mapping
+    for (const project of migratedProjects) {
+      speciesMapping.set(project.oldUuid, project.id);
+    }
+    return { speciesMapping };
+  }
+
+
+
   private async migrateInterventionWithSampleTrees(
     userId: number,
     projectMapping: Map<string, number>,
@@ -1077,13 +1085,11 @@ export class MigrationService {
     let lastPage: number | null = null;
     console.log("Started Intervetnion  currentPage", currentPage)
     while (hasMore) {
-      // Check if we already know the last page and we've exceeded it
       if (lastPage && currentPage > lastPage) {
         console.log(`Reached last page (${lastPage}). Stopping migration.`);
         break;
       }
 
-      // Calculate correct page number based on batch size
       const interventionResponse = await this.makeApiCall(
         `/treemapper/interventions?limit=${batchSize}&_scope=extended&page=${currentPage}`,
         authToken
@@ -1092,13 +1098,11 @@ export class MigrationService {
 
 
       if (!interventionResponse || interventionResponse === null) {
-        // Check if this is a pagination error (page exceeded)
         if (lastPage && currentPage > lastPage) {
           console.log(`Migration completed. Processed all ${lastPage} pages.`);
           break;
         }
 
-        // If it's the first page or an unexpected error
         this.addLog(migrationId, 'error', `interventions migration failed. No response`, 'interventions');
         await this.updateMigrationProgress(migrationId, 'interventions', false, false);
         return true;
@@ -1106,7 +1110,9 @@ export class MigrationService {
 
       console.log(`Processing page ${currentPage}`);
       const oldInterventions = interventionResponse.data;
-
+      if (oldInterventions && oldInterventions.length === 0) {
+        return false
+      }
       // Extract last page info from _links if available
       if (!lastPage && oldInterventions._links?.last) {
         const lastPageMatch = oldInterventions._links.last.match(/page=(\d+)/);
@@ -1137,6 +1143,7 @@ export class MigrationService {
       // Process in transaction
       const parentIntervention: any[] = [];
       const interventionoParentRelatedData = {};
+      const interventionoParentSpeciesRelatedData = {};
 
 
       for (const oldIntervention of oldInterventions.items) {
@@ -1160,7 +1167,7 @@ export class MigrationService {
           }
         }
 
-        const { parentFinalData, treeData } = await this.transformParentIntervention(
+        const { parentFinalData, treeData, interventionSpecies } = await this.transformParentIntervention(
           oldIntervention,
           newProjectId,
           userId,
@@ -1168,6 +1175,7 @@ export class MigrationService {
         );
         parentIntervention.push(parentFinalData)
         interventionoParentRelatedData[`${parentFinalData.uid}`] = treeData
+        interventionoParentSpeciesRelatedData[`${parentFinalData.uid}`] = interventionSpecies
       }
 
       console.log(`Inserting ${parentIntervention.length} interventions`);
@@ -1199,8 +1207,7 @@ export class MigrationService {
         if (inv.error) {
           this.addLog(migrationId, 'error', `Failed to add intervention with id ${inv.uid}`, 'interventions')
         } else {
-          const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: e.id }))
-          console.log("SKLDcj", treeMappedData)
+          const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
           try {
             await this.drizzleService.db
               .insert(trees)
@@ -1208,6 +1215,14 @@ export class MigrationService {
               .returning({ id: trees.id, uid: trees.uid });
           } catch (error) {
             await this.insertTreeChunkIndividually(treeMappedData, migrationId);
+          }
+          const treeSpeciesData = interventionoParentSpeciesRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
+          try {
+            await this.drizzleService.db
+              .insert(interventionSpecies)
+              .values(treeSpeciesData)
+          } catch (error) {
+            await this.insertInteventionsSpceisInd(treeSpeciesData, migrationId);
           }
         }
       });
@@ -1288,20 +1303,48 @@ export class MigrationService {
     return interventionIds;
   }
 
+  private async insertInteventionsSpceisInd(chunk: any[], migrationId) {
+    const interventionIds: any = []
+    for (let j = 0; j < chunk.length; j++) {
+      try {
+        const result = await this.drizzleService.db
+          .insert(interventionSpecies)
+          .values(chunk[j])
+          .returning();
+
+        interventionIds.push({
+          id: result[0].id,
+          uid: chunk[j].uid,
+          success: true,
+          error: null
+        });
+      } catch (error) {
+        this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
+        interventionIds.push({
+          id: null,
+          uid: chunk[j].uid,
+          success: false,
+          error: JSON.stringify(error)
+        });
+      }
+    }
+    return interventionIds;
+  }
+
+
 
   private async transformParentIntervention(parentData: any, newProjectId: number, userId: number, siteId: any) {
     let parentFinalData: any = {}
     let interventionSpecies: any = []
-    let plantLocationDate = parentData.interventionStartDate || parentData.plantDate || parentData.registrationDate
+    const interventionSampleTree: any = []
     let treesPlanted = 0; //todo
     let flag = false
     let flagReason: FlagReasonEntry[] = []
-    let locationValue;
+    let locationValue: any = null;
     const parentGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
     if (parentGeometry.isValid) {
       locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(parentGeometry.validatedGeoJSON)}), 4326)`
     } else {
-      console.log("SDc", parentGeometry)
       flag = true,
         flagReason = [{
           uid: generateUid('flag'),
@@ -1314,17 +1357,17 @@ export class MigrationService {
         }]
     }
 
-    const interventionSampleTree: any = []
-
     for (let index = 0; index < parentData.plantedSpecies.length; index++) {
       const el = parentData.plantedSpecies[index];
       treesPlanted = + el.treeCount
       interventionSpecies.push({
-        "uid": el.id,
+        "uid": generateUid("invspc"),
         "speciesName": el.scientificName || null,
         "createdAt": el.created ? new Date(el.created) : new Date(),
-        "scientificSpeciesId": el.scientificSpecies || null,
-        "isUnknown": el.otherSpecies ? true : false,
+        "scientificSpeciesId": 0,
+        "scientificSpeciesUid": el.scientificSpecies,
+        "interventionId": 0,
+        "isUnknown": false,
         "otherSpeciesName": el.otherSpecies,
         "count": el.treeCount,
       })
@@ -1335,10 +1378,12 @@ export class MigrationService {
       interventionSpecies.push({
         "uid": generateUid("invspc"),
         "speciesName": parentData.scientificName || null,
-        "createdAt": plantLocationDate || new Date(),
-        "scientificSpeciesId": parentData.scientificSpecies || null,
+        "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
+        "scientificSpeciesId": 0,
+        "scientificSpeciesUid": parentData.scientificSpecies,
         "isUnknown": parentData.otherSpecies ? true : false,
         "otherSpeciesName": parentData.otherSpecies || 'Unknown',
+        "interventionId": 0,
         "count": 1,
       })
     }
@@ -1348,14 +1393,40 @@ export class MigrationService {
       interventionSpecies.push({
         "uid": generateUid("invspc"),
         "speciesName": null,
-        "createdAt": plantLocationDate || new Date(),
+        "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
         "scientificSpeciesId": null,
-        "isUnknown": parentData.otherSpecies ? true : false,
+        "scientificSpeciesUid": null,
+        "isUnknown": true,
+        "interventionId": 0,
         "otherSpeciesName": parentData.otherSpecies || 'Unknown',
         "count": 1,
       })
     }
-
+    const removedUnknown = interventionSpecies.filter(el => !el.isUnknown).map(el => el.scientificSpeciesUid)
+    const speciesMapping = await this.buildSpeciesMapping(removedUnknown)
+    const finalInterventionSpeciesMapping = interventionSpecies.map(el => {
+      if (el.isUnknown) {
+        return el
+      }
+      const speciesId = speciesMapping.speciesMapping.get(el.scientificSpeciesUid)
+      if (!speciesId) {
+        flag = true
+        flagReason.push({
+          uid: generateUid('flag'),
+          type: 'spcies',
+          level: 'high',
+          title: 'Species has some issue',
+          message: 'Please check the spcies data integrity',
+          updatedAt: new Date(),
+          createdAt: new Date()
+        })
+        return el;
+      }
+      return {
+        ...el,
+        scientificSpeciesId: speciesId
+      }
+    })
     parentFinalData['hid'] = parentData.hid
     parentFinalData['uid'] = parentData.id
     parentFinalData['userId'] = userId
@@ -1376,13 +1447,12 @@ export class MigrationService {
     parentFinalData['metadata'] = parentData.metadata
     parentFinalData['flag'] = flag
     parentFinalData['flagReason'] = flagReason
-    parentFinalData['species'] = interventionSpecies
 
     if (parentData.type === "single-tree-registration") {
       let treeFinalData = {}
       let singleTreeflag = false
       let singleTreeFlagreason: any = []
-      let singleTreeLocation;
+      let singleTreeLocation:any=null;
       const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
       if (singleTreeGeometry.isValid) {
         singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
@@ -1464,7 +1534,7 @@ export class MigrationService {
     return {
       parentFinalData,
       treeData: interventionSampleTree,
-      interventionSpecies
+      interventionSpecies: finalInterventionSpeciesMapping
     }
   }
 
@@ -1482,7 +1552,7 @@ export class MigrationService {
           invSpeciesId = allSpecies.find(el => el.isUnknown === true)
         }
         if (sampleIntervention.scientificSpecies) {
-          invSpeciesId = allSpecies.find(el => el.scientificSpeciesId === sampleIntervention.scientificSpecies)
+          invSpeciesId = allSpecies.find(el => el.scientificSpeciesUid === sampleIntervention.scientificSpecies)
         }
         let singleTreeLocation;
         const singleTreeGeometry = this.getGeoJSONForPostGIS(sampleIntervention.geometry);
@@ -1561,84 +1631,11 @@ export class MigrationService {
       }
       return allTranformedSampleTrees
     } catch (error) {
-      console.log("sdc", error)
+      console.log("main catch", error)
       return []
     }
   }
 
-  private createPointGeoJSON(latitude: number, longitude: number): CreatePointGeoJSONResult {
-    // Validate inputs exist
-    if (latitude === undefined || latitude === null) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Latitude is required'
-      };
-    }
-
-    if (longitude === undefined || longitude === null) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Longitude is required'
-      };
-    }
-
-    // Validate inputs are numbers
-    if (typeof latitude !== 'number' || isNaN(latitude)) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Latitude must be a valid number'
-      };
-    }
-
-    if (typeof longitude !== 'number' || isNaN(longitude)) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Longitude must be a valid number'
-      };
-    }
-
-    // Validate coordinate ranges
-    if (latitude < -90 || latitude > 90) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Latitude must be between -90 and 90 degrees'
-      };
-    }
-
-    if (longitude < -180 || longitude > 180) {
-      return {
-        validatedGeoJSON: null,
-        error: 'Longitude must be between -180 and 180 degrees'
-      };
-    }
-
-    // Create Point GeoJSON
-    const pointGeoJSON: GeoJSON.Point = {
-      type: 'Point',
-      coordinates: [longitude, latitude] // Note: GeoJSON uses [longitude, latitude] order
-    };
-
-    try {
-      // Validate using Turf (optional, since we've already validated the structure)
-      if (!booleanValid(pointGeoJSON as any)) {
-        return {
-          validatedGeoJSON: null,
-          error: 'Generated GeoJSON failed validation'
-        };
-      }
-
-      return {
-        validatedGeoJSON: pointGeoJSON,
-        error: null
-      };
-
-    } catch (error) {
-      return {
-        validatedGeoJSON: null,
-        error: `GeoJSON creation failed: ${error.message}`
-      };
-    }
-  }
   private async completeMigration(migrationId: number): Promise<void> {
     await this.drizzleService.db
       .update(userMigrations)

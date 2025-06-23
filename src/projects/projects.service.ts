@@ -12,6 +12,8 @@ import { EmailService } from '../email/email.service';
 import { v4 as uuidv4 } from 'uuid';
 import { generateUid } from 'src/util/uidGenerator';
 import { User } from 'src/users/entities/user.entity';
+import { NotificationType } from 'src/notification/dto/notification.dto';
+import { NotificationService } from 'src/notification/notification.service';
 
 export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
 
@@ -80,6 +82,7 @@ export class ProjectsService {
   constructor(
     private drizzleService: DrizzleService,
     private emailService: EmailService,
+    private notificationService: NotificationService,
   ) { }
 
   private getGeoJSONForPostGIS(locationInput: any): any {
@@ -160,7 +163,6 @@ export class ProjectsService {
         const [project] = await tx
           .insert(projects)
           .values({
-            // Only include fields that exist in your Drizzle schema for 'projects'
             uid: createProjectDto.uid ?? generateUid('prj'),
             createdById: userId,
             slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
@@ -175,20 +177,25 @@ export class ProjectsService {
           })
           .returning();
 
-        // Add creator as project owner
-        // await tx
-        //   .insert(projectMembers)
-        //   .values({
-        //     projectId: project.id,
-        //     uid: generateUid('mem'),
-        //     userId: userId,
-        //     role: 'owner',
-        //     joinedAt: new Date(),
-        //   });
+        await tx
+          .insert(projectMembers)
+          .values({
+            projectId: project.id,
+            uid: generateUid('mem'),
+            userId: userId,
+            projectRole: 'owner',
+            joinedAt: new Date(),
+          });
 
         return project;
       });
-
+      console.log("IOSCJD", result)
+      this.notificationService.createNotification({
+        userId: userId,
+        type: NotificationType.PROJECT_UPDATE,
+        title: 'New Project created',
+        message: `New Project with name ${createProjectDto.projectName} created.`
+      })
       return {
         message: 'Project created successfully',
         statusCode: 201,
@@ -248,7 +255,12 @@ export class ProjectsService {
             joinedAt: new Date(),
             invitedAt: new Date()
           });
-
+        this.notificationService.createNotification({
+          userId: userId,
+          type: NotificationType.PROJECT_UPDATE,
+          title: 'New Personal Project created',
+          message: `New Personal Project with name ${createProjectDto.projectName} created.`
+        })
         return project;
       });
 

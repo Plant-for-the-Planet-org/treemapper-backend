@@ -287,7 +287,6 @@ export const users = pgTable('users', {
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
-
   existingPlanetUser: boolean('existing_planet_user').default(false)
 });
 
@@ -608,14 +607,30 @@ export const interventions = pgTable('interventions', {
   flag: boolean('flag').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  migrated_intervention: boolean('migrated_intervetion').default(false),
-  species: jsonb('species').$type<InterventionSpeciesEntry[]>().default([]),
+  migratedIntervention: boolean('migrated_intervention').default(false),
 }, (table) => ({
   projectIdx: index('interventions_project_idx').on(table.projectId),
   projectSiteIdx: index('interventions_project_site_idx').on(table.projectSiteId),
   parentIdx: index('parent_idx').on(table.uid),
   userIdx: index('interventions_user_idx').on(table.userId),
   typeIdx: index('interventions_type_idx').on(table.type),
+}));
+
+export const interventionSpecies = pgTable('intervention_species', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  interventionId: integer('intervention_id').notNull().references(() => interventions.id),
+  scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id),
+  scientificSpeciesUid: varchar('scientific_species_uid', { length: 50 }),
+  speciesName: varchar('species_name'),
+  isUnknown: boolean('is_unknown').default(false),
+  otherSpeciesName: varchar('other_species_name'),
+  count: integer('count').default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  interventionIdx: index('interventions_intervention_id_idx').on(table.interventionId)
 }));
 
 
@@ -625,7 +640,7 @@ export const trees = pgTable('trees', {
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').references(() => interventions.id),
-  interventionSpeciesId: varchar('intervention_species_id', { length: 255 }),
+  interventionSpeciesId: varchar('intervention_species_id'),
   speciesName: varchar('species_name'),
   isUnknown: boolean('is_unknown').default(false),
   createdById: integer('created_by_id').notNull().references(() => users.id),
@@ -650,7 +665,6 @@ export const trees = pgTable('trees', {
   metadata: jsonb('metadata'),
   flag: boolean('flag').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
-  records: jsonb('records').$type<TreeRecordEntry[]>().default([]),
 }, (table) => ({
   interventionIdx: index('trees_intervention_idx').on(table.interventionId),
   createdByIdx: index('trees_created_by_idx').on(table.createdById),
@@ -660,6 +674,49 @@ export const trees = pgTable('trees', {
   lastMeasurementIdx: index('trees_last_measurement_idx').on(table.lastMeasurementDate),
   locationIdx: index('trees_location_gist_idx').using('gist', table.location),
 }));
+
+export const treeRecords = pgTable('tree_records', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  treeId: integer('tree_id').notNull().references(() => trees.id, { onDelete: 'cascade' }),
+  recordedById: integer('recorded_by_id').notNull().references(() => users.id),
+  recordType: recordTypeEnum('record_type').notNull(),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+  image: text('image'),
+  height: doublePrecision('height'),
+  width: doublePrecision('width'),
+  healthScore: integer('health_score'),
+  vitalityScore: integer('vitality_score'),
+  structuralIntegrity: varchar('structural_integrity', { length: 50 }),
+  previousStatus: treeStatusEnum('previous_status'),
+  newStatus: treeStatusEnum('new_status'),
+  statusReason: varchar('status_reason', { length: 100 }),
+  findings: text('findings'),
+  findingsSeverity: varchar('findings_severity', { length: 50 }), // Low, Medium, High, Critical
+  findingsComments: text('findings_comments'),
+  notes: text('notes'),
+  weatherConditions: jsonb('weather_conditions'),
+  soilConditions: jsonb('soil_conditions'),
+  surroundingVegetation: text('surrounding_vegetation'),
+  pestsObserved: jsonb('pests_observed'),
+  diseasesObserved: jsonb('diseases_observed'),
+  damageObserved: jsonb('damage_observed'),
+  growthRate: decimal('growth_rate', { precision: 6, scale: 3 }),
+  leafDensity: varchar('leaf_density', { length: 50 }),
+  fruitingStatus: varchar('fruiting_status', { length: 50 }),
+  recommendedActions: jsonb('recommended_actions'),
+  priorityLevel: varchar('priority_level', { length: 20 }),
+  isPublic: boolean('is_public').default(true).notNull(),
+  deviceLocation: jsonb('device_location'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  treeIdIdx: index('tree_records_tree_id_idx').on(table.treeId),
+  recordedByIdx: index('tree_records_recorded_by_idx').on(table.recordedById)
+}));
+
 
 
 export const interventionRecords = pgTable('intervention_records', {
@@ -697,538 +754,7 @@ export const interventionImages = pgTable('intervention_images', {
   interventionIdx: index('intervention_images_intervention_id_idx').on(table.interventionId)
 }));
 
-// ============================================================================
-// USER ACTIVITY TABLE (NEW)
-// ============================================================================
 
-export const userActivity = pgTable('user_activity', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  userId: integer('user_id').notNull().references(() => users.id),
-  projectId: integer('project_id').references(() => projects.id),
-  activityType: activityTypeEnum('activity_type').notNull(),
-  entityType: varchar('entity_type', { length: 50 }),
-  entityId: varchar('entity_id', { length: 50 }),
-  entityUid: varchar('entity_uid', { length: 50 }),
-  deviceType: deviceTypeEnum('device_type').notNull(),
-  deviceInfo: jsonb('device_info'), // OS, browser, app version, etc.
-  location: geometryWithGeoJSON(4326)('location'),
-  ipAddress: varchar('ip_address', { length: 45 }),
-  userAgent: text('user_agent'),
-  metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  userIdx: index('user_activity_user_idx').on(table.userId),
-  projectIdx: index('user_activity_project_idx').on(table.projectId),
-  activityTypeIdx: index('user_activity_type_idx').on(table.activityType),
-  deviceTypeIdx: index('user_activity_device_idx').on(table.deviceType),
-  createdAtIdx: index('user_activity_created_at_idx').on(table.createdAt),
-  userProjectIdx: index('user_activity_user_project_idx').on(table.userId, table.projectId),
-}));
-
-// ============================================================================
-// ANALYTICS JOBS TABLE
-// ============================================================================
-
-export const analyticsJobs = pgTable('analytics_jobs', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id),
-  triggeredById: integer('triggered_by_id').references(() => users.id),
-  jobType: analyticsJobTypeEnum('job_type').notNull(),
-  status: analyticsStatusEnum('status').default('pending').notNull(),
-  progress: integer('progress').default(0), // 0-100
-  currentStep: varchar('current_step', { length: 100 }),
-  totalSteps: integer('total_steps'),
-  startedAt: timestamp('started_at', { withTimezone: true }),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  errorMessage: text('error_message'),
-  processingTime: integer('processing_time'), // seconds
-  memoryUsage: bigint('memory_usage', { mode: 'number' }), // bytes
-  version: varchar('version', { length: 20 }).default('1.0'),
-  metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('analytics_jobs_project_idx').on(table.projectId),
-  statusIdx: index('analytics_jobs_status_idx').on(table.status),
-  triggeredByIdx: index('analytics_jobs_triggered_by_idx').on(table.triggeredById),
-  jobTypeIdx: index('analytics_jobs_type_idx').on(table.jobType),
-  createdAtIdx: index('analytics_jobs_created_at_idx').on(table.createdAt),
-}));
-
-// ============================================================================
-// PROJECT ANALYTICS TABLE
-// ============================================================================
-
-export const projectAnalytics = pgTable('project_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id).unique(),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Core Tree Metrics
-  totalTrees: integer('total_trees'),
-  aliveTrees: integer('alive_trees'),
-  deadTrees: integer('dead_trees'),
-  sickTrees: integer('sick_trees'),
-  unknownStatusTrees: integer('unknown_status_trees'),
-  removedTrees: integer('removed_trees'),
-  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }), // percentage
-
-  // Growth Metrics
-  averageHeight: decimal('average_height', { precision: 8, scale: 2 }),
-  averageWidth: decimal('average_width', { precision: 8, scale: 2 }),
-  averageHealthScore: decimal('average_health_score', { precision: 5, scale: 2 }),
-  averageVitalityScore: decimal('average_vitality_score', { precision: 5, scale: 2 }),
-  totalGrowthRate: decimal('total_growth_rate', { precision: 8, scale: 3 }),
-
-  // Species Metrics
-  totalSpecies: integer('total_species'),
-  nativeSpeciesCount: integer('native_species_count'),
-  endangeredSpeciesCount: integer('endangered_species_count'),
-  speciesDiversityIndex: decimal('species_diversity_index', { precision: 6, scale: 3 }),
-
-  // Site Metrics
-  totalSites: integer('total_sites'),
-  activeSites: integer('active_sites'),
-  totalArea: decimal('total_area', { precision: 12, scale: 2 }), // square meters
-  treeDensity: decimal('tree_density', { precision: 8, scale: 2 }), // trees per hectare
-
-  // Intervention Metrics
-  totalInterventions: integer('total_interventions'),
-  completedInterventions: integer('completed_interventions'),
-  activeInterventions: integer('active_interventions'),
-  interventionSuccessRate: decimal('intervention_success_rate', { precision: 5, scale: 2 }),
-
-  // Team Metrics
-  totalMembers: integer('total_members'),
-  activeMembers: integer('active_members'), // active in last 30 days
-  ownerCount: integer('owner_count'),
-  adminCount: integer('admin_count'),
-  contributorCount: integer('contributor_count'),
-  observerCount: integer('observer_count'),
-
-  // Activity Metrics
-  totalActivities: integer('total_activities'),
-  activitiesLast30Days: integer('activities_last_30_days'),
-  activitiesLast7Days: integer('activities_last_7_days'),
-  treesPlantedLast30Days: integer('trees_planted_last_30_days'),
-  measurementsTakenLast30Days: integer('measurements_taken_last_30_days'),
-
-  // Target Progress
-  targetTrees: integer('target_trees'),
-  targetProgress: decimal('target_progress', { precision: 5, scale: 2 }), // percentage
-  projectedCompletionDate: date('projected_completion_date'),
-
-  // Device Usage
-  mobileAppUsage: decimal('mobile_app_usage', { precision: 5, scale: 2 }), // percentage
-  webAppUsage: decimal('web_app_usage', { precision: 5, scale: 2 }), // percentage
-  tabletUsage: decimal('tablet_usage', { precision: 5, scale: 2 }), // percentage
-
-  // Trends (month over month)
-  treeGrowthTrend: decimal('tree_growth_trend', { precision: 5, scale: 2 }), // percentage change
-  survivalRateTrend: decimal('survival_rate_trend', { precision: 5, scale: 2 }),
-  activityTrend: decimal('activity_trend', { precision: 5, scale: 2 }),
-  membershipTrend: decimal('membership_trend', { precision: 5, scale: 2 }),
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('project_analytics_project_idx').on(table.projectId),
-  calculatedAtIdx: index('project_analytics_calculated_at_idx').on(table.calculatedAt),
-  versionIdx: index('project_analytics_version_idx').on(table.version),
-}));
-
-// ============================================================================
-// PROJECT ANALYTICS HISTORY TABLE
-// ============================================================================
-
-export const projectAnalyticsHistory = pgTable('project_analytics_history', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-  period: aggregationPeriodEnum('period').notNull().default('monthly'),
-  periodStart: date('period_start').notNull(),
-  periodEnd: date('period_end').notNull(),
-
-  // Snapshot of key metrics for this period
-  totalTrees: integer('total_trees'),
-  aliveTrees: integer('alive_trees'),
-  deadTrees: integer('dead_trees'),
-  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }),
-  averageHeight: decimal('average_height', { precision: 8, scale: 2 }),
-  averageWidth: decimal('average_width', { precision: 8, scale: 2 }),
-  averageHealthScore: decimal('average_health_score', { precision: 5, scale: 2 }),
-  totalSpecies: integer('total_species'),
-  totalMembers: integer('total_members'),
-  activeMembers: integer('active_members'),
-  totalActivities: integer('total_activities'),
-  treesPlanted: integer('trees_planted'),
-  measurementsTaken: integer('measurements_taken'),
-  interventionsCompleted: integer('interventions_completed'),
-  targetProgress: decimal('target_progress', { precision: 5, scale: 2 }),
-
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('project_analytics_history_project_idx').on(table.projectId),
-  periodIdx: index('project_analytics_history_period_idx').on(table.periodStart, table.periodEnd),
-  projectPeriodIdx: index('project_analytics_history_project_period_idx').on(table.projectId, table.periodStart),
-}));
-
-// ============================================================================
-// SPECIES ANALYTICS TABLE
-// ============================================================================
-
-export const speciesAnalytics = pgTable('species_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id),
-  scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Tree Counts
-  totalTrees: integer('total_trees'),
-  aliveTrees: integer('alive_trees'),
-  deadTrees: integer('dead_trees'),
-  sickTrees: integer('sick_trees'),
-  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }),
-
-  // Growth Performance
-  averageHeight: decimal('average_height', { precision: 8, scale: 2 }),
-  averageWidth: decimal('average_width', { precision: 8, scale: 2 }),
-  averageGrowthRate: decimal('average_growth_rate', { precision: 8, scale: 3 }),
-  averageHealthScore: decimal('average_health_score', { precision: 5, scale: 2 }),
-  averageVitalityScore: decimal('average_vitality_score', { precision: 5, scale: 2 }),
-
-  // Performance Rankings
-  survivalRank: integer('survival_rank'),
-  growthRateRank: integer('growth_rate_rank'),
-  healthScoreRank: integer('health_score_rank'),
-  overallPerformanceRank: integer('overall_performance_rank'),
-  performanceScore: decimal('performance_score', { precision: 5, scale: 2 }), // composite score 0-100
-
-  // Site Performance
-  bestPerformingSiteId: integer('best_performing_site_id').references(() => sites.id),
-  worstPerformingSiteId: integer('worst_performing_site_id').references(() => sites.id),
-  sitesPlantedIn: integer('sites_planted_in'),
-
-  // Temporal Data
-  firstPlantingDate: date('first_planting_date'),
-  lastPlantingDate: date('last_planting_date'),
-  averageAge: integer('average_age'), // days
-
-  // Activity
-  totalMeasurements: integer('total_measurements'),
-  lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
-  measurementFrequency: decimal('measurement_frequency', { precision: 5, scale: 2 }), // measurements per tree
-
-  // Classification
-  isNative: boolean('is_native'),
-  isEndangered: boolean('is_endangered'),
-  isFavourite: boolean('is_favourite'),
-
-  // Recommendations
-  recommendationScore: varchar('recommendation_score', { length: 20 }), // excellent, good, fair, poor
-  recommendationNotes: text('recommendation_notes'),
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectSpeciesIdx: uniqueIndex('species_analytics_project_species_idx').on(table.projectId, table.scientificSpeciesId),
-  projectIdx: index('species_analytics_project_idx').on(table.projectId),
-  survivalRankIdx: index('species_analytics_survival_rank_idx').on(table.survivalRank),
-  performanceRankIdx: index('species_analytics_performance_rank_idx').on(table.overallPerformanceRank),
-  calculatedAtIdx: index('species_analytics_calculated_at_idx').on(table.calculatedAt),
-}));
-
-// ============================================================================
-// SITE ANALYTICS TABLE
-// ============================================================================
-
-export const siteAnalytics = pgTable('site_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id),
-  siteId: integer('site_id').notNull().references(() => sites.id).unique(),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Tree Metrics
-  totalTrees: integer('total_trees'),
-  aliveTrees: integer('alive_trees'),
-  deadTrees: integer('dead_trees'),
-  sickTrees: integer('sick_trees'),
-  survivalRate: decimal('survival_rate', { precision: 5, scale: 2 }),
-
-  // Density and Area
-  siteArea: decimal('site_area', { precision: 12, scale: 2 }), // square meters
-  treeDensity: decimal('tree_density', { precision: 8, scale: 2 }), // trees per hectare
-  plantedArea: decimal('planted_area', { precision: 12, scale: 2 }), // square meters
-  coveragePercentage: decimal('coverage_percentage', { precision: 5, scale: 2 }),
-
-  // Species Diversity
-  totalSpecies: integer('total_species'),
-  nativeSpeciesCount: integer('native_species_count'),
-  endangeredSpeciesCount: integer('endangered_species_count'),
-  speciesDiversityIndex: decimal('species_diversity_index', { precision: 6, scale: 3 }),
-  dominantSpeciesId: integer('dominant_species_id').references(() => scientificSpecies.id),
-
-  // Growth Performance
-  averageHeight: decimal('average_height', { precision: 8, scale: 2 }),
-  averageWidth: decimal('average_width', { precision: 8, scale: 2 }),
-  averageGrowthRate: decimal('average_growth_rate', { precision: 8, scale: 3 }),
-  averageHealthScore: decimal('average_health_score', { precision: 5, scale: 2 }),
-  averageVitalityScore: decimal('average_vitality_score', { precision: 5, scale: 2 }),
-
-  // Environmental Data (derived from location)
-  averageElevation: decimal('average_elevation', { precision: 8, scale: 2 }),
-  averageSlope: decimal('average_slope', { precision: 5, scale: 2 }),
-  aspectDirection: varchar('aspect_direction', { length: 2 }), // N, NE, E, SE, S, SW, W, NW
-
-  // Activity and Engagement
-  totalInterventions: integer('total_interventions'),
-  totalActivities: integer('total_activities'),
-  activitiesLast30Days: integer('activities_last_30_days'),
-  uniqueContributors: integer('unique_contributors'),
-  lastActivityDate: timestamp('last_activity_date', { withTimezone: true }),
-
-  // Performance Rankings
-  survivalRateRank: integer('survival_rate_rank'),
-  growthRateRank: integer('growth_rate_rank'),
-  diversityRank: integer('diversity_rank'),
-  activityRank: integer('activity_rank'),
-  overallPerformanceRank: integer('overall_performance_rank'),
-  performanceScore: decimal('performance_score', { precision: 5, scale: 2 }),
-
-  // Temporal Data
-  firstPlantingDate: date('first_planting_date'),
-  lastPlantingDate: date('last_planting_date'),
-  establishmentDuration: integer('establishment_duration'), // days
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('site_analytics_project_idx').on(table.projectId),
-  siteIdx: index('site_analytics_site_idx').on(table.siteId),
-  survivalRateRankIdx: index('site_analytics_survival_rank_idx').on(table.survivalRateRank),
-  performanceRankIdx: index('site_analytics_performance_rank_idx').on(table.overallPerformanceRank),
-  calculatedAtIdx: index('site_analytics_calculated_at_idx').on(table.calculatedAt),
-}));
-
-// ============================================================================
-// GEOSPATIAL ANALYTICS TABLE
-// ============================================================================
-
-export const geospatialAnalytics = pgTable('geospatial_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id).unique(),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Spatial Coverage
-  totalProjectArea: decimal('total_project_area', { precision: 12, scale: 2 }), // square meters
-  plantedArea: decimal('planted_area', { precision: 12, scale: 2 }),
-  unplantedArea: decimal('unplanted_area', { precision: 12, scale: 2 }),
-  coveragePercentage: decimal('coverage_percentage', { precision: 5, scale: 2 }),
-
-  // Density Analysis
-  averageTreeDensity: decimal('average_tree_density', { precision: 8, scale: 2 }), // trees per hectare
-  highDensityZones: integer('high_density_zones'), // areas > 1000 trees/hectare
-  mediumDensityZones: integer('medium_density_zones'), // 500-1000 trees/hectare
-  lowDensityZones: integer('low_density_zones'), // < 500 trees/hectare
-
-  // Performance Zones
-  highSurvivalZones: integer('high_survival_zones'), // > 80% survival
-  mediumSurvivalZones: integer('medium_survival_zones'), // 60-80% survival
-  lowSurvivalZones: integer('low_survival_zones'), // < 60% survival
-
-  // Clustering Analysis
-  treeClusters: integer('tree_clusters'),
-  averageClusterSize: decimal('average_cluster_size', { precision: 8, scale: 2 }),
-  largestClusterSize: integer('largest_cluster_size'),
-  isolatedTrees: integer('isolated_trees'), // trees > 100m from nearest neighbor
-
-  // Environmental Correlation
-  elevationRange: jsonb('elevation_range'), // {min, max, avg}
-  slopeRange: jsonb('slope_range'), // {min, max, avg}
-  aspectDistribution: jsonb('aspect_distribution'), // distribution by direction
-
-  // Spatial Performance
-  bestPerformingArea: geometryWithGeoJSON(4326)('best_performing_area'),
-  worstPerformingArea: geometryWithGeoJSON(4326)('worst_performing_area'),
-  highGrowthZones: geometryWithGeoJSON(4326)('high_growth_zones'),
-
-  // Boundary Analysis
-  boundaryLength: decimal('boundary_length', { precision: 12, scale: 2 }), // meters
-  perimeterToAreaRatio: decimal('perimeter_to_area_ratio', { precision: 8, scale: 4 }),
-  compactnessIndex: decimal('compactness_index', { precision: 6, scale: 3 }),
-
-  // Distribution Metrics
-  spatialDistributionIndex: decimal('spatial_distribution_index', { precision: 6, scale: 3 }),
-  uniformityScore: decimal('uniformity_score', { precision: 5, scale: 2 }),
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('geospatial_analytics_project_idx').on(table.projectId),
-  calculatedAtIdx: index('geospatial_analytics_calculated_at_idx').on(table.calculatedAt),
-  bestPerformingAreaIdx: index('geospatial_analytics_best_area_gist_idx').using('gist', table.bestPerformingArea),
-  worstPerformingAreaIdx: index('geospatial_analytics_worst_area_gist_idx').using('gist', table.worstPerformingArea),
-}));
-
-// ============================================================================
-// USER ENGAGEMENT ANALYTICS TABLE
-// ============================================================================
-
-export const userEngagementAnalytics = pgTable('user_engagement_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id).unique(),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Overall Activity
-  totalActivities: integer('total_activities'),
-  activitiesLast7Days: integer('activities_last_7_days'),
-  activitiesLast30Days: integer('activities_last_30_days'),
-  activitiesLast90Days: integer('activities_last_90_days'),
-
-  // User Tiers
-  highlyActiveUsers: integer('highly_active_users'), // > 10 activities/month
-  moderateUsers: integer('moderate_users'), // 3-10 activities/month
-  lowActivityUsers: integer('low_activity_users'), // 1-3 activities/month
-  inactiveUsers: integer('inactive_users'), // 0 activities in last 30 days
-
-  // Device Usage Distribution
-  mobileAppActivities: integer('mobile_app_activities'),
-  webAppActivities: integer('web_app_activities'),
-  tabletActivities: integer('tablet_activities'),
-  desktopActivities: integer('desktop_activities'),
-  apiActivities: integer('api_activities'),
-  importActivities: integer('import_activities'),
-
-  // Device Usage Percentages
-  mobileUsagePercentage: decimal('mobile_usage_percentage', { precision: 5, scale: 2 }),
-  webUsagePercentage: decimal('web_usage_percentage', { precision: 5, scale: 2 }),
-  tabletUsagePercentage: decimal('tablet_usage_percentage', { precision: 5, scale: 2 }),
-
-  // Activity Types
-  treesPlantedCount: integer('trees_planted_count'),
-  treesMeasuredCount: integer('trees_measured_count'),
-  statusChangesCount: integer('status_changes_count'),
-  interventionsCreatedCount: integer('interventions_created_count'),
-  sitesCreatedCount: integer('sites_created_count'),
-  speciesAddedCount: integer('species_added_count'),
-  imagesUploadedCount: integer('images_uploaded_count'),
-
-  // Temporal Patterns
-  mostActiveHour: integer('most_active_hour'), // 0-23
-  mostActiveDayOfWeek: integer('most_active_day_of_week'), // 1-7
-  mostActiveMonth: integer('most_active_month'), // 1-12
-
-  // Collaboration Metrics
-  teamCollaborationScore: decimal('team_collaboration_score', { precision: 5, scale: 2 }),
-  crossMemberInteractions: integer('cross_member_interactions'),
-  averageResponseTime: decimal('average_response_time', { precision: 8, scale: 2 }), // hours
-
-  // Recent Activity Summary
-  recentActivities: jsonb('recent_activities'), // Array of recent activity summaries
-  topContributors: jsonb('top_contributors'), // Array of {userId, activityCount, lastActivity}
-
-  // Retention Metrics
-  newMembersLast30Days: integer('new_members_last_30_days'),
-  activeMembersRetention: decimal('active_members_retention', { precision: 5, scale: 2 }),
-  memberEngagementScore: decimal('member_engagement_score', { precision: 5, scale: 2 }),
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('user_engagement_analytics_project_idx').on(table.projectId),
-  calculatedAtIdx: index('user_engagement_analytics_calculated_at_idx').on(table.calculatedAt),
-  mostActiveHourIdx: index('user_engagement_analytics_hour_idx').on(table.mostActiveHour),
-  mostActiveDayIdx: index('user_engagement_analytics_day_idx').on(table.mostActiveDayOfWeek),
-}));
-
-// ============================================================================
-// INTERVENTION ANALYTICS TABLE
-// ============================================================================
-
-export const interventionAnalytics = pgTable('intervention_analytics', {
-  id: serial('id').primaryKey(),
-  uid: varchar('uid', { length: 50 }).notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id).unique(),
-  analyticsJobId: integer('analytics_job_id').references(() => analyticsJobs.id),
-  version: varchar('version', { length: 20 }).default('1.0'),
-
-  // Overall Intervention Metrics
-  totalInterventions: integer('total_interventions'),
-  completedInterventions: integer('completed_interventions'),
-  activeInterventions: integer('active_interventions'),
-  failedInterventions: integer('failed_interventions'),
-  plannedInterventions: integer('planned_interventions'),
-  onHoldInterventions: integer('on_hold_interventions'),
-  cancelledInterventions: integer('cancelled_interventions'),
-
-  // Success Rates by Type
-  directSeedingSuccessRate: decimal('direct_seeding_success_rate', { precision: 5, scale: 2 }),
-  enrichmentPlantingSuccessRate: decimal('enrichment_planting_success_rate', { precision: 5, scale: 2 }),
-  maintenanceSuccessRate: decimal('maintenance_success_rate', { precision: 5, scale: 2 }),
-  fencingSuccessRate: decimal('fencing_success_rate', { precision: 5, scale: 2 }),
-  otherInterventionSuccessRate: decimal('other_intervention_success_rate', { precision: 5, scale: 2 }),
-
-  // Temporal Analysis
-  averageInterventionDuration: decimal('average_intervention_duration', { precision: 8, scale: 2 }), // days
-  shortestInterventionDuration: decimal('shortest_intervention_duration', { precision: 8, scale: 2 }),
-  longestInterventionDuration: decimal('longest_intervention_duration', { precision: 8, scale: 2 }),
-
-  // Resource Analysis
-  averageTreesPerIntervention: decimal('average_trees_per_intervention', { precision: 8, scale: 2 }),
-  totalTreesFromInterventions: integer('total_trees_from_interventions'),
-  interventionDensity: decimal('intervention_density', { precision: 8, scale: 2 }), // interventions per hectare
-
-  // Seasonal Patterns
-  springInterventions: integer('spring_interventions'),
-  summerInterventions: integer('summer_interventions'),
-  autumnInterventions: integer('autumn_interventions'),
-  winterInterventions: integer('winter_interventions'),
-  mostEffectiveSeason: varchar('most_effective_season', { length: 10 }),
-
-  // Effectiveness Rankings
-  mostSuccessfulInterventionType: varchar('most_successful_intervention_type', { length: 50 }),
-  leastSuccessfulInterventionType: varchar('least_successful_intervention_type', { length: 50 }),
-
-  // Follow-up Analysis
-  interventionsWithFollowUp: integer('interventions_with_follow_up'),
-  averageFollowUpTime: decimal('average_follow_up_time', { precision: 8, scale: 2 }), // days
-  followUpSuccessRate: decimal('follow_up_success_rate', { precision: 5, scale: 2 }),
-
-  // Site Distribution
-  sitesWithInterventions: integer('sites_with_interventions'),
-  averageInterventionsPerSite: decimal('average_interventions_per_site', { precision: 8, scale: 2 }),
-
-  calculatedAt: timestamp('calculated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  projectIdx: index('intervention_analytics_project_idx').on(table.projectId),
-  calculatedAtIdx: index('intervention_analytics_calculated_at_idx').on(table.calculatedAt),
-  mostSuccessfulTypeIdx: index('intervention_analytics_most_successful_idx').on(table.mostSuccessfulInterventionType),
-}));
-
-// ============================================================================
-// NOTIFICATIONS TABLE
-// ============================================================================
 
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
@@ -1250,6 +776,7 @@ export const notifications = pgTable('notifications', {
   deliveryMethod: varchar('delivery_method', { length: 50 }).default('in_app'),
   sentAt: timestamp('sent_at'),
   deliveredAt: timestamp('delivered_at'),
+  image: text('image'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -1299,8 +826,6 @@ export const userRelations = relations(users, ({ many }) => ({
   notifications: many(notifications),
   speciesRequests: many(speciesRequests, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequests, { relationName: 'reviewedBy' }),
-  triggeredAnalyticsJobs: many(analyticsJobs, { relationName: 'triggeredBy' }),
-  activities: many(userActivity),
   createdTrees: many(trees, { relationName: 'createdBy' }),
 }));
 
@@ -1317,15 +842,6 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   projectSpecies: many(projectSpecies),
   speciesRequests: many(speciesRequests),
   images: many(projectImages),
-  analytics: one(projectAnalytics),
-  analyticsHistory: many(projectAnalyticsHistory),
-  speciesAnalytics: many(speciesAnalytics),
-  siteAnalytics: many(siteAnalytics),
-  geospatialAnalytics: one(geospatialAnalytics),
-  userEngagementAnalytics: one(userEngagementAnalytics),
-  interventionAnalytics: one(interventionAnalytics),
-  analyticsJobs: many(analyticsJobs),
-  activities: many(userActivity),
 }));
 
 export const projectMemberRelations = relations(projectMembers, ({ one }) => ({
@@ -1353,7 +869,6 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
 
 export const scientificSpeciesRelations = relations(scientificSpecies, ({ many }) => ({
   projectSpecies: many(projectSpecies),
-  speciesAnalytics: many(speciesAnalytics),
 }));
 
 export const projectSpeciesRelations = relations(projectSpecies, ({ one, many }) => ({
@@ -1392,7 +907,6 @@ export const siteRelations = relations(sites, ({ one, many }) => ({
   }),
   images: many(siteImages),
   interventions: many(interventions),
-  analytics: one(siteAnalytics),
 }));
 
 export const siteImagesRelations = relations(siteImages, ({ one }) => ({
@@ -1423,6 +937,7 @@ export const interventionsRelations = relations(interventions, ({ one, many }) =
   }),
   childInterventions: many(interventions, { relationName: 'parentIntervention' }),
   images: many(interventionImages),
+  species: many(interventionSpecies),
   records: many(interventionRecords),
   trees: many(trees),
 }));
@@ -1439,8 +954,20 @@ export const treesRelations = relations(trees, ({ one, many }) => ({
     references: [users.id],
     relationName: 'createdBy',
   }),
+  records: many(treeRecords),
 }));
 
+export const treeRecordsRelations = relations(treeRecords, ({ one }) => ({
+  tree: one(trees, {
+    fields: [treeRecords.treeId],
+    references: [trees.id],
+  }),
+  recordedBy: one(users, {
+    fields: [treeRecords.recordedById],
+    references: [users.id],
+    relationName: 'recordedBy',
+  }),
+}));
 
 
 export const interventionRecordRelations = relations(interventionRecords, ({ one }) => ({
@@ -1469,132 +996,6 @@ export const projectImagesRelations = relations(projectImages, ({ one }) => ({
   })
 }));
 
-export const userActivityRelations = relations(userActivity, ({ one }) => ({
-  user: one(users, {
-    fields: [userActivity.userId],
-    references: [users.id],
-  }),
-  project: one(projects, {
-    fields: [userActivity.projectId],
-    references: [projects.id],
-  }),
-}));
-
-export const analyticsJobsRelations = relations(analyticsJobs, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [analyticsJobs.projectId],
-    references: [projects.id],
-  }),
-  triggeredBy: one(users, {
-    fields: [analyticsJobs.triggeredById],
-    references: [users.id],
-    relationName: 'triggeredBy',
-  }),
-  projectAnalytics: many(projectAnalytics),
-  projectAnalyticsHistory: many(projectAnalyticsHistory),
-  speciesAnalytics: many(speciesAnalytics),
-  siteAnalytics: many(siteAnalytics),
-  geospatialAnalytics: many(geospatialAnalytics),
-  userEngagementAnalytics: many(userEngagementAnalytics),
-  interventionAnalytics: many(interventionAnalytics),
-}));
-
-export const projectAnalyticsRelations = relations(projectAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [projectAnalytics.projectId],
-    references: [projects.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [projectAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-}));
-
-export const projectAnalyticsHistoryRelations = relations(projectAnalyticsHistory, ({ one }) => ({
-  project: one(projects, {
-    fields: [projectAnalyticsHistory.projectId],
-    references: [projects.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [projectAnalyticsHistory.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-}));
-
-export const speciesAnalyticsRelations = relations(speciesAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [speciesAnalytics.projectId],
-    references: [projects.id],
-  }),
-  scientificSpecies: one(scientificSpecies, {
-    fields: [speciesAnalytics.scientificSpeciesId],
-    references: [scientificSpecies.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [speciesAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-  bestPerformingSite: one(sites, {
-    fields: [speciesAnalytics.bestPerformingSiteId],
-    references: [sites.id],
-  }),
-  worstPerformingSite: one(sites, {
-    fields: [speciesAnalytics.worstPerformingSiteId],
-    references: [sites.id],
-  }),
-}));
-
-export const siteAnalyticsRelations = relations(siteAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [siteAnalytics.projectId],
-    references: [projects.id],
-  }),
-  site: one(sites, {
-    fields: [siteAnalytics.siteId],
-    references: [sites.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [siteAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-  dominantSpecies: one(scientificSpecies, {
-    fields: [siteAnalytics.dominantSpeciesId],
-    references: [scientificSpecies.id],
-  }),
-}));
-
-export const geospatialAnalyticsRelations = relations(geospatialAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [geospatialAnalytics.projectId],
-    references: [projects.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [geospatialAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-}));
-
-export const userEngagementAnalyticsRelations = relations(userEngagementAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [userEngagementAnalytics.projectId],
-    references: [projects.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [userEngagementAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-}));
-
-export const interventionAnalyticsRelations = relations(interventionAnalytics, ({ one }) => ({
-  project: one(projects, {
-    fields: [interventionAnalytics.projectId],
-    references: [projects.id],
-  }),
-  analyticsJob: one(analyticsJobs, {
-    fields: [interventionAnalytics.analyticsJobId],
-    references: [analyticsJobs.id],
-  }),
-}));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
@@ -1640,4 +1041,16 @@ export const projectAuditRelations = relations(projectAudit, ({ one }) => ({
     fields: [projectAudit.modifiedBy],
     references: [users.id],
   }),
+}));
+
+export const interventionSpeciesRelations = relations(interventionSpecies, ({ one, many }) => ({
+  intervention: one(interventions, {
+    fields: [interventionSpecies.interventionId],
+    references: [interventions.id],
+  }),
+  scientificSpecies: one(scientificSpecies, {
+    fields: [interventionSpecies.scientificSpeciesId],
+    references: [scientificSpecies.id],
+  }),
+  trees: many(trees),
 }));

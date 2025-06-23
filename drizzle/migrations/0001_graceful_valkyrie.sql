@@ -1,0 +1,1 @@
+ALTER TABLE "intervention_species" ALTER COLUMN "uid" DROP NOT NULL;

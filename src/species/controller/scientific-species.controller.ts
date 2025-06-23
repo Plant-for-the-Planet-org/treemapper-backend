@@ -20,15 +20,15 @@ export class ScientificSpeciesController {
     return this.scientificSpeciesService.bulkUpload(bulkUploadDto);
   }
 
-  // @Get()
-  // async getAll(@Query() filterDto: ScientificSpeciesFilterDto) {
-  //   return this.scientificSpeciesService.getAll(filterDto);
-  // }
+  @Get()
+  async getAll(@Query() filterDto: ScientificSpeciesFilterDto) {
+    return this.scientificSpeciesService.getAll(filterDto);
+  }
 
 
-  // @Get('search')
-  // getProjectInviteStatus(
-  //  @Query() queryDto: SearchSpeciesQueryDto) {
-  //   return this.scientificSpeciesService.searchSpecies(queryDto.name);
-  // }
+  @Get('search')
+  getProjectInviteStatus(
+   @Query() queryDto: SearchSpeciesQueryDto) {
+    return this.scientificSpeciesService.searchSpecies(queryDto.name);
+  }
 }

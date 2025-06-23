@@ -19,92 +19,90 @@ export class ProjectSpeciesService {
     private readonly drizzle: DrizzleService,
   ) { }
 
-  // async create(
-  //   membership: ProjectGuardResponse,
-  //   createDto: CreateUserSpeciesDto,
-  // ) {
+  async create(
+    membership: ProjectGuardResponse,
+    createDto: CreateUserSpeciesDto,
+  ) {
 
-  //   console.log("SDCDS",createDto)
-  //   const scientificSpeciesExists = await this.drizzle.db
-  //     .select()
-  //     .from(scientificSpecies)
-  //     .where(eq(scientificSpecies.id, createDto.scientificSpeciesId))
-  //     .limit(1);
+    console.log("SDCDS",createDto)
+    const scientificSpeciesExists = await this.drizzle.db
+      .select()
+      .from(scientificSpecies)
+      .where(eq(scientificSpecies.id, createDto.scientificSpeciesId))
+      .limit(1);
 
-  //   if (!scientificSpeciesExists.length) {
-  //     throw new NotFoundException('Scientific species not found');
-  //   }
+    if (!scientificSpeciesExists.length) {
+      throw new NotFoundException('Scientific species not found');
+    }
 
-  //   const existingUserSpecies = await this.drizzle.db
-  //     .select()
-  //     .from(projectSpecies)
-  //     .where(
-  //       and(
-  //         eq(projectSpecies.addedById, membership.userId),
-  //         eq(projectSpecies.projectId, membership.projectId),
-  //         eq(projectSpecies.scientificSpeciesId, createDto.scientificSpeciesId),
-  //       ),
-  //     )
-  //     .limit(1);
+    const existingUserSpecies = await this.drizzle.db
+      .select()
+      .from(projectSpecies)
+      .where(
+        and(
+          eq(projectSpecies.addedById, membership.userId),
+          eq(projectSpecies.projectId, membership.projectId),
+          eq(projectSpecies.scientificSpeciesId, createDto.scientificSpeciesId),
+        ),
+      )
+      .limit(1);
 
-  //   if (existingUserSpecies.length > 0) {
-  //     throw new ConflictException('You have already added this species to this project');
-  //   }
+    if (existingUserSpecies.length > 0) {
+      throw new ConflictException('You have already added this species to this project');
+    }
 
 
-  //   // Auto-populate fields from scientific species
-  //   const scientificSpeciesData = scientificSpeciesExists[0];
+    // Auto-populate fields from scientific species
+    const scientificSpeciesData = scientificSpeciesExists[0];
 
-  //   const newUserSpecies = await this.drizzle.db
-  //     .insert(projectSpecies)
-  //     .values({
-  //       uid: generateUid('psp'),
-  //       projectId: membership.projectId,
-  //       addedById: membership.userId,
-  //       scientificSpeciesId: createDto.scientificSpeciesId,
-  //       aliases: createDto.aliases || scientificSpeciesData.commonName,
-  //       commonName: createDto.commonName,
-  //       isNativeSpecies: createDto.isNativeSpecies || false,
-  //       isDisabled: createDto.isDisbaledSpecies || false,
-  //       description: createDto.description || scientificSpeciesData.description,
-  //       notes: createDto.notes,
-  //       favourite: createDto.favourite || false,
-  //       metadata: createDto.metadata || null
-  //     })
-  //     .returning();
+    const newUserSpecies = await this.drizzle.db
+      .insert(projectSpecies)
+      .values({
+        uid: generateUid('psp'),
+        projectId: membership.projectId,
+        addedById: membership.userId,
+        scientificSpeciesId: createDto.scientificSpeciesId,
+        commonName: createDto.commonName,
+        isNativeSpecies: createDto.isNativeSpecies || false,
+        isDisabled: createDto.isDisbaledSpecies || false,
+        description: createDto.description || scientificSpeciesData.description,
+        notes: createDto.notes,
+        favourite: createDto.favourite || false,
+        metadata: createDto.metadata || null
+      })
+      .returning();
 
-  //   return newUserSpecies[0];
-  // }
+    return newUserSpecies[0];
+  }
 
-  // async getAll(membership: ProjectGuardResponse) {
-  //   const [data] = await Promise.all([
-  //     this.drizzle.db
-  //       .select({
-  //         uid: projectSpecies.uid,
-  //         commonName: projectSpecies.commonName,
-  //         description: projectSpecies.description,
-  //         isNativeSpecies: projectSpecies.isNativeSpecies,
-  //         disbaled: projectSpecies.isDisabled,
-  //         favourite: projectSpecies.favourite,
-  //         createdAt: projectSpecies.createdAt,
-  //         scientificName: scientificSpecies.scientificName,
-  //         updatedAt: projectSpecies.updatedAt,
-  //         scientificSpecies: {
-  //           id: scientificSpecies.id,
-  //           uid: scientificSpecies.uid,
-  //           commonName: scientificSpecies.commonName,
-  //           description: scientificSpecies.description,
-  //           image: scientificSpecies.image,
-  //           gbifId: scientificSpecies.gbifId,
-  //         },
-  //       })
-  //       .from(projectSpecies)
-  //       .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
-  //       .where(eq(projectSpecies.projectId, membership.projectId))
-  //       .orderBy(desc(projectSpecies.createdAt))
-  //   ]);
-  //   return data
-  // }
+  async getAll(membership: ProjectGuardResponse) {
+    const [data] = await Promise.all([
+      this.drizzle.db
+        .select({
+          uid: projectSpecies.uid,
+          commonName: projectSpecies.commonName,
+          description: projectSpecies.description,
+          isNativeSpecies: projectSpecies.isNativeSpecies,
+          disbaled: projectSpecies.isDisabled,
+          favourite: projectSpecies.favourite,
+          createdAt: projectSpecies.createdAt,
+          scientificName: scientificSpecies.scientificName,
+          updatedAt: projectSpecies.updatedAt,
+          scientificSpecies: {
+            id: scientificSpecies.id,
+            uid: scientificSpecies.uid,
+            commonName: scientificSpecies.commonName,
+            description: scientificSpecies.description,
+            gbifId: scientificSpecies.gbifId,
+          },
+        })
+        .from(projectSpecies)
+        .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
+        .where(eq(projectSpecies.projectId, membership.projectId))
+        .orderBy(desc(projectSpecies.createdAt))
+    ]);
+    return data
+  }
 
   // async update(
   //   speciesId: string,

@@ -80,39 +80,38 @@ export class ScientificSpeciesService {
     };
   }
 
-  // async searchSpecies(searchTerm: string, limit: number = 10) {
-  //   try {
-  //     // Trim and validate search term
-  //     const trimmedSearch = searchTerm.trim();
+  async searchSpecies(searchTerm: string, limit: number = 10) {
+    try {
+      // Trim and validate search term
+      const trimmedSearch = searchTerm.trim();
 
-  //     if (!trimmedSearch) {
-  //       return {
-  //         success: false,
-  //         message: 'Search term cannot be empty',
-  //         data: [],
-  //         count: 0,
-  //       };
-  //     }
+      if (!trimmedSearch) {
+        return {
+          success: false,
+          message: 'Search term cannot be empty',
+          data: [],
+          count: 0,
+        };
+      }
 
-  //     const species = await this.drizzle.db
-  //       .select({
-  //         id: scientificSpecies.id,
-  //         uid: scientificSpecies.uid,
-  //         scientificName: scientificSpecies.scientificName,
-  //         commonName: scientificSpecies.commonName,
-  //         description: scientificSpecies.description,
-  //         image: scientificSpecies.image,
-  //       })
-  //       .from(scientificSpecies)
-  //       .where(ilike(scientificSpecies.scientificName, `%${trimmedSearch}%`))
-  //       .orderBy(asc(scientificSpecies.scientificName))
-  //       .limit(limit);
+      const species = await this.drizzle.db
+        .select({
+          id: scientificSpecies.id,
+          uid: scientificSpecies.uid,
+          scientificName: scientificSpecies.scientificName,
+          commonName: scientificSpecies.commonName,
+          description: scientificSpecies.description,
+        })
+        .from(scientificSpecies)
+        .where(ilike(scientificSpecies.scientificName, `%${trimmedSearch}%`))
+        .orderBy(asc(scientificSpecies.scientificName))
+        .limit(limit);
 
-  //     return species;
-  //   } catch (error) {
-  //     console.error('Error searching species:', error);
-  //     throw new Error('Failed to search species');
-  //   }
-  // }
+      return species;
+    } catch (error) {
+      console.error('Error searching species:', error);
+      throw new Error('Failed to search species');
+    }
+  }
 
 }

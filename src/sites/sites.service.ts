@@ -219,7 +219,7 @@ export class SiteService {
       .set(updateData)
       .where(eq(sites.id, existingSite[0].id));
 
-    return this.getSiteById(existingSite[0].id);
+    return '';
   }
 
   async updateSiteImages(
