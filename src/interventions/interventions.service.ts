@@ -10,7 +10,6 @@ import {
   users,
   treeRecords,
   trees,
-  interventionSpecies
 } from '../database/schema/index';
 import {
   CreateInterventionDto,
@@ -380,36 +379,36 @@ export class InterventionsService {
     const interventionIds = allInterventions.map(intervention => intervention.id);
 
     // Fetch intervention species for all interventions
-    const interventionSpeciesData = interventionIds.length > 0 ? await this.drizzleService.db
-      .select({
-        interventionId: interventionSpecies.interventionId,
-        uid: interventionSpecies.uid,
-        scientificSpeciesId: interventionSpecies.scientificSpeciesId,
-        scientificSpeciesUid: interventionSpecies.scientificSpeciesUid,
-        speciesName: interventionSpecies.speciesName,
-        isUnknown: interventionSpecies.isUnknown,
-        otherSpeciesName: interventionSpecies.otherSpeciesName,
-        count: interventionSpecies.count,
-        createdAt: interventionSpecies.createdAt,
-        updatedAt: interventionSpecies.updatedAt,
-        // Include scientific species details
-        scientificSpecies: {
-          uid: scientificSpecies.uid,
-          scientificName: scientificSpecies.scientificName,
-          commonName: scientificSpecies.commonName,
-          family: scientificSpecies.family,
-          genus: scientificSpecies.genus
-        }
-      })
-      .from(interventionSpecies)
-      .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
-      .where(
-        and(
-          inArray(interventionSpecies.interventionId, interventionIds),
-          isNull(interventionSpecies.deletedAt),
-          isNull(scientificSpecies.deletedAt)
-        )
-      ) : [];
+    // const interventionSpeciesData = interventionIds.length > 0 ? await this.drizzleService.db
+    //   .select({
+    //     interventionId: interventionSpecies.interventionId,
+    //     uid: interventionSpecies.uid,
+    //     scientificSpeciesId: interventionSpecies.scientificSpeciesId,
+    //     scientificSpeciesUid: interventionSpecies.scientificSpeciesUid,
+    //     speciesName: interventionSpecies.speciesName,
+    //     isUnknown: interventionSpecies.isUnknown,
+    //     otherSpeciesName: interventionSpecies.otherSpeciesName,
+    //     count: interventionSpecies.count,
+    //     createdAt: interventionSpecies.createdAt,
+    //     updatedAt: interventionSpecies.updatedAt,
+    //     // Include scientific species details
+    //     scientificSpecies: {
+    //       uid: scientificSpecies.uid,
+    //       scientificName: scientificSpecies.scientificName,
+    //       commonName: scientificSpecies.commonName,
+    //       family: scientificSpecies.family,
+    //       genus: scientificSpecies.genus
+    //     }
+    //   })
+    //   .from(interventionSpecies)
+    //   .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
+    //   .where(
+    //     and(
+    //       inArray(interventionSpecies.interventionId, interventionIds),
+    //       isNull(interventionSpecies.deletedAt),
+    //       isNull(scientificSpecies.deletedAt)
+    //     )
+    //   ) : [];
 
     // Fetch trees and their records for all interventions
     const treesWithRecords = interventionIds.length > 0 ? await this.drizzleService.db
@@ -421,13 +420,11 @@ export class InterventionsService {
           hid: trees.hid,
           tag: trees.tag,
           treeType: trees.treeType,
-          latitude: trees.latitude,
-          longitude: trees.longitude,
           status: trees.status,
           statusReason: trees.statusReason,
           plantingDate: trees.plantingDate,
-          lastMeasuredHeight: trees.lastMeasuredHeight,
-          lastMeasuredWidth: trees.lastMeasuredWidth,
+          height: trees.height,
+          width: trees.width,
           lastMeasurementDate: trees.lastMeasurementDate,
           nextMeasurementDate: trees.nextMeasurementDate,
           createdAt: trees.createdAt,
@@ -476,9 +473,9 @@ export class InterventionsService {
     // Group and structure the data
     const interventionsWithRelatedData = allInterventions.map(intervention => {
       // Group species by intervention
-      const species = interventionSpeciesData.filter(
-        s => s.interventionId === intervention.id
-      );
+      // const species = interventionSpeciesData.filter(
+      //   s => s.interventionId === intervention.id
+      // );
 
       // Group trees and their records by intervention
       const treesData = treesWithRecords.filter(
@@ -508,7 +505,7 @@ export class InterventionsService {
 
       return {
         ...intervention,
-        species,
+        species:[],
         trees
       };
     });

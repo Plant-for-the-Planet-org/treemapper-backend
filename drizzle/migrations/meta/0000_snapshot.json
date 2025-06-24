@@ -1,5 +1,5 @@
 {
-  "id": "8c861a4b-f518-442e-842e-85b9ee0e43e1",
+  "id": "8a483e79-3f92-4285-9412-a6c44c0ea166",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -150,8 +150,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.intervention_images": {
-      "name": "intervention_images",
+    "public.images": {
+      "name": "images",
       "schema": "",
       "columns": {
         "id": {
@@ -166,11 +166,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "intervention_id": {
-          "name": "intervention_id",
-          "type": "integer",
+        "entity_id": {
+          "name": "entity_id",
+          "type": "serial",
           "primaryKey": false,
           "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         },
         "filename": {
           "name": "filename",
@@ -208,13 +214,17 @@
           "primaryKey": false,
           "notNull": false
         },
-        "image_type": {
-          "name": "image_type",
-          "type": "image_type",
-          "typeSchema": "public",
+        "notes": {
+          "name": "notes",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'detail'"
+          "notNull": false
+        },
+        "uploaded_from": {
+          "name": "uploaded_from",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         },
         "is_primary": {
           "name": "is_primary",
@@ -229,12 +239,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -258,11 +262,11 @@
         }
       },
       "indexes": {
-        "intervention_images_intervention_id_idx": {
-          "name": "intervention_images_intervention_id_idx",
+        "entityId_images__id_idx": {
+          "name": "entityId_images__id_idx",
           "columns": [
             {
-              "expression": "intervention_id",
+              "expression": "entity_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -274,25 +278,11 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "intervention_images_intervention_id_interventions_id_fk": {
-          "name": "intervention_images_intervention_id_interventions_id_fk",
-          "tableFrom": "intervention_images",
-          "tableTo": "interventions",
-          "columnsFrom": [
-            "intervention_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "intervention_images_uid_unique": {
-          "name": "intervention_images_uid_unique",
+        "images_uid_unique": {
+          "name": "images_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -422,146 +412,6 @@
       "uniqueConstraints": {
         "intervention_records_uid_unique": {
           "name": "intervention_records_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.intervention_species": {
-      "name": "intervention_species",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intervention_id": {
-          "name": "intervention_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scientific_species_id": {
-          "name": "scientific_species_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scientific_species_uid": {
-          "name": "scientific_species_uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "species_name": {
-          "name": "species_name",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_unknown": {
-          "name": "is_unknown",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "other_species_name": {
-          "name": "other_species_name",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 1
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "interventions_intervention_id_idx": {
-          "name": "interventions_intervention_id_idx",
-          "columns": [
-            {
-              "expression": "intervention_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "intervention_species_intervention_id_interventions_id_fk": {
-          "name": "intervention_species_intervention_id_interventions_id_fk",
-          "tableFrom": "intervention_species",
-          "tableTo": "interventions",
-          "columnsFrom": [
-            "intervention_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "intervention_species_scientific_species_id_scientific_species_id_fk": {
-          "name": "intervention_species_scientific_species_id_scientific_species_id_fk",
-          "tableFrom": "intervention_species",
-          "tableTo": "scientific_species",
-          "columnsFrom": [
-            "scientific_species_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "intervention_species_uid_unique": {
-          "name": "intervention_species_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -731,6 +581,13 @@
           "notNull": true,
           "default": false
         },
+        "species": {
+          "name": "species",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -854,9 +711,45 @@
           "method": "btree",
           "with": {}
         },
+        "interventions_species_gin_idx": {
+          "name": "interventions_species_gin_idx",
+          "columns": [
+            {
+              "expression": "species",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
         "interventions_start_date_idx": {
           "name": "interventions_start_date_idx",
           "columns": [
+            {
+              "expression": "intervention_start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "interventions_project_date_range_idx": {
+          "name": "interventions_project_date_range_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "intervention_start_date",
               "isExpression": false,
@@ -1416,8 +1309,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.project_audit": {
-      "name": "project_audit",
+    "public.project_audits": {
+      "name": "project_audits",
       "schema": "",
       "columns": {
         "id": {
@@ -1516,9 +1409,9 @@
         }
       },
       "foreignKeys": {
-        "project_audit_project_id_projects_id_fk": {
-          "name": "project_audit_project_id_projects_id_fk",
-          "tableFrom": "project_audit",
+        "project_audits_project_id_projects_id_fk": {
+          "name": "project_audits_project_id_projects_id_fk",
+          "tableFrom": "project_audits",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
@@ -1529,9 +1422,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "project_audit_modified_by_users_id_fk": {
-          "name": "project_audit_modified_by_users_id_fk",
-          "tableFrom": "project_audit",
+        "project_audits_modified_by_users_id_fk": {
+          "name": "project_audits_modified_by_users_id_fk",
+          "tableFrom": "project_audits",
           "tableTo": "users",
           "columnsFrom": [
             "modified_by"
@@ -1545,159 +1438,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "project_audit_uid_unique": {
-          "name": "project_audit_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.project_images": {
-      "name": "project_images",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size": {
-          "name": "size",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "uploaded_from": {
-          "name": "uploaded_from",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "is_private": {
-          "name": "is_private",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "project_images_site_id_idx": {
-          "name": "project_images_site_id_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "project_images_project_id_projects_id_fk": {
-          "name": "project_images_project_id_projects_id_fk",
-          "tableFrom": "project_images",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "project_images_uid_unique": {
-          "name": "project_images_uid_unique",
+        "project_audits_uid_unique": {
+          "name": "project_audits_uid_unique",
           "nullsNotDistinct": false,
           "columns": [
             "uid"
@@ -2330,154 +2072,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.project_species_images": {
-      "name": "project_species_images",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "species_id": {
-          "name": "species_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size": {
-          "name": "size",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "is_private": {
-          "name": "is_private",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uid_species_image_idx": {
-          "name": "uid_species_image_idx",
-          "columns": [
-            {
-              "expression": "uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "species_images_species_id_idx": {
-          "name": "species_images_species_id_idx",
-          "columns": [
-            {
-              "expression": "species_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "project_species_images_species_id_project_species_id_fk": {
-          "name": "project_species_images_species_id_project_species_id_fk",
-          "tableFrom": "project_species_images",
-          "tableTo": "project_species",
-          "columnsFrom": [
-            "species_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "project_species_images_uid_unique": {
-          "name": "project_species_images_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.projects": {
       "name": "projects",
       "schema": "",
@@ -2871,172 +2465,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "scientific_name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.site_images": {
-      "name": "site_images",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uid": {
-          "name": "uid",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "site_id": {
-          "name": "site_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size": {
-          "name": "size",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_private": {
-          "name": "is_private",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "site_images_site_id_idx": {
-          "name": "site_images_site_id_idx",
-          "columns": [
-            {
-              "expression": "site_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "site_images_primary_idx": {
-          "name": "site_images_primary_idx",
-          "columns": [
-            {
-              "expression": "site_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "is_primary",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "site_images_site_id_sites_id_fk": {
-          "name": "site_images_site_id_sites_id_fk",
-          "tableFrom": "site_images",
-          "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "site_images_uid_unique": {
-          "name": "site_images_uid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uid"
           ]
         }
       },
@@ -3771,18 +3199,6 @@
           "notNull": false,
           "default": "'sample'"
         },
-        "latitude": {
-          "name": "latitude",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
         "altitude": {
           "name": "altitude",
           "type": "numeric(8, 2)",
@@ -3801,14 +3217,20 @@
           "primaryKey": false,
           "notNull": false
         },
-        "last_measured_height": {
-          "name": "last_measured_height",
+        "original_geometry": {
+          "name": "original_geometry",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height": {
+          "name": "height",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
         },
-        "last_measured_width": {
-          "name": "last_measured_width",
+        "width": {
+          "name": "width",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
@@ -4407,54 +3829,6 @@
     }
   },
   "enums": {
-    "public.activity_type": {
-      "name": "activity_type",
-      "schema": "public",
-      "values": [
-        "tree_planted",
-        "tree_measured",
-        "tree_status_changed",
-        "intervention_created",
-        "intervention_updated",
-        "site_created",
-        "site_updated",
-        "species_added",
-        "image_uploaded",
-        "project_joined",
-        "project_updated"
-      ]
-    },
-    "public.aggregation_period": {
-      "name": "aggregation_period",
-      "schema": "public",
-      "values": [
-        "daily",
-        "weekly",
-        "monthly",
-        "quarterly",
-        "yearly"
-      ]
-    },
-    "public.analytics_job_type": {
-      "name": "analytics_job_type",
-      "schema": "public",
-      "values": [
-        "on_demand",
-        "scheduled_monthly",
-        "manual_trigger"
-      ]
-    },
-    "public.analytics_status": {
-      "name": "analytics_status",
-      "schema": "public",
-      "values": [
-        "processing",
-        "completed",
-        "failed",
-        "pending",
-        "partial"
-      ]
-    },
     "public.capture_mode": {
       "name": "capture_mode",
       "schema": "public",
@@ -4491,18 +3865,6 @@
         "estimated"
       ]
     },
-    "public.device_type": {
-      "name": "device_type",
-      "schema": "public",
-      "values": [
-        "mobile_app",
-        "web_app",
-        "tablet",
-        "desktop",
-        "api",
-        "import"
-      ]
-    },
     "public.entity_type": {
       "name": "entity_type",
       "schema": "public",
@@ -4513,6 +3875,17 @@
         "species",
         "sites",
         "images"
+      ]
+    },
+    "public.image_entity": {
+      "name": "image_entity",
+      "schema": "public",
+      "values": [
+        "projects",
+        "sites",
+        "users",
+        "interventions",
+        "trees"
       ]
     },
     "public.image_type": {
@@ -4670,16 +4043,6 @@
         "single",
         "sample",
         "plot"
-      ]
-    },
-    "public.user_activity_tier": {
-      "name": "user_activity_tier",
-      "schema": "public",
-      "values": [
-        "highly_active",
-        "moderate",
-        "low_activity",
-        "inactive"
       ]
     },
     "public.user_type": {

@@ -16,7 +16,6 @@ import {
   FlagReasonEntry,
   trees,
   users,
-  interventionSpecies
 } from '../database/schema/index';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -1217,13 +1216,13 @@ export class MigrationService {
             await this.insertTreeChunkIndividually(treeMappedData, migrationId);
           }
           const treeSpeciesData = interventionoParentSpeciesRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
-          try {
-            await this.drizzleService.db
-              .insert(interventionSpecies)
-              .values(treeSpeciesData)
-          } catch (error) {
-            await this.insertInteventionsSpceisInd(treeSpeciesData, migrationId);
-          }
+          // try {
+          //   await this.drizzleService.db
+          //     .insert(interventionSpecies)
+          //     .values(treeSpeciesData)
+          // } catch (error) {
+          //   await this.insertInteventionsSpceisInd(treeSpeciesData, migrationId);
+          // }
         }
       });
 
@@ -1303,33 +1302,33 @@ export class MigrationService {
     return interventionIds;
   }
 
-  private async insertInteventionsSpceisInd(chunk: any[], migrationId) {
-    const interventionIds: any = []
-    for (let j = 0; j < chunk.length; j++) {
-      try {
-        const result = await this.drizzleService.db
-          .insert(interventionSpecies)
-          .values(chunk[j])
-          .returning();
+  // private async insertInteventionsSpceisInd(chunk: any[], migrationId) {
+  //   const interventionIds: any = []
+  //   for (let j = 0; j < chunk.length; j++) {
+  //     try {
+  //       const result = await this.drizzleService.db
+  //         .insert(interventionSpecies)
+  //         .values(chunk[j])
+  //         .returning();
 
-        interventionIds.push({
-          id: result[0].id,
-          uid: chunk[j].uid,
-          success: true,
-          error: null
-        });
-      } catch (error) {
-        this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
-        interventionIds.push({
-          id: null,
-          uid: chunk[j].uid,
-          success: false,
-          error: JSON.stringify(error)
-        });
-      }
-    }
-    return interventionIds;
-  }
+  //       interventionIds.push({
+  //         id: result[0].id,
+  //         uid: chunk[j].uid,
+  //         success: true,
+  //         error: null
+  //       });
+  //     } catch (error) {
+  //       this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
+  //       interventionIds.push({
+  //         id: null,
+  //         uid: chunk[j].uid,
+  //         success: false,
+  //         error: JSON.stringify(error)
+  //       });
+  //     }
+  //   }
+  //   return interventionIds;
+  // }
 
 
 
@@ -1470,7 +1469,7 @@ export class MigrationService {
       }
 
       if (parentData.measurements && parentData.measurements.height) {
-        treeFinalData['lastMeasuredHeight'] = parentData.measurements.height
+        treeFinalData['height'] = parentData.measurements.height
       } else {
         singleTreeflag = true
         singleTreeFlagreason.push({
@@ -1482,12 +1481,12 @@ export class MigrationService {
           updatedAt: new Date(),
           createdAt: new Date()
         })
-        treeFinalData['lastMeasuredHeight'] = 0
+        treeFinalData['height'] = 0
 
       }
 
       if (parentData.measurements && parentData.measurements.width) {
-        treeFinalData['lastMeasuredHeight'] = parentData.measurements.width
+        treeFinalData['height'] = parentData.measurements.width
       } else {
         singleTreeflag = true
         singleTreeFlagreason.push({
@@ -1573,7 +1572,7 @@ export class MigrationService {
         }
 
         if (sampleIntervention.measurements && sampleIntervention.measurements.height) {
-          treeFinalData['lastMeasuredHeight'] = sampleIntervention.measurements.height
+          treeFinalData['height'] = sampleIntervention.measurements.height
         } else {
           singleTreeflag = true
           singleTreeFlagreason.push({
@@ -1585,12 +1584,12 @@ export class MigrationService {
             updatedAt: new Date(),
             createdAt: new Date()
           })
-          treeFinalData['lastMeasuredHeight'] = 0
+          treeFinalData['height'] = 0
 
         }
 
         if (sampleIntervention.measurements && sampleIntervention.measurements.width) {
-          treeFinalData['lastMeasuredHeight'] = sampleIntervention.measurements.width
+          treeFinalData['height'] = sampleIntervention.measurements.width
         } else {
           singleTreeflag = true
           singleTreeFlagreason.push({
