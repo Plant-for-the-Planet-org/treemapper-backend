@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1750729634410,
-      "tag": "0000_loving_mimic",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1750742092584,
-      "tag": "0001_military_hiroim",
+      "when": 1750803788262,
+      "tag": "0000_strange_tempest",
       "breakpoints": true
     }
   ]

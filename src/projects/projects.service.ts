@@ -1,7 +1,7 @@
 // src/projects/projects.service.ts
 import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { projects, projectMembers, users, projectInvites } from '../database/schema';
+import { projects, projectMembers, users, projectInvites, bulkInvites } from '../database/schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
@@ -14,6 +14,7 @@ import { generateUid } from 'src/util/uidGenerator';
 import { User } from 'src/users/entities/user.entity';
 import { NotificationType } from 'src/notification/dto/notification.dto';
 import { NotificationService } from 'src/notification/notification.service';
+import { isValidEmailDomain } from 'src/util/domainValidationHelper';
 
 export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
 
@@ -351,7 +352,7 @@ export class ProjectsService {
       .select({
         uid: projectInvites.uid,
         email: projectInvites.email,
-        role: projectInvites.role,
+        role: projectInvites.projectRole,
         status: projectInvites.status,
         message: projectInvites.message,
         expiresAt: projectInvites.expiresAt,
@@ -478,7 +479,7 @@ export class ProjectsService {
           uid: generateUid('inv'),
           email,
           // Only allow roles supported by your schema
-          role: role as 'owner' | 'admin' | 'contributor' | 'observer',
+          projectRole: role as 'owner' | 'admin' | 'contributor' | 'observer',
           invitedById: membership.userId,
           expiresAt: expiryDate,
           message: message || '',
@@ -514,6 +515,63 @@ export class ProjectsService {
     }
   }
 
+
+
+  async createInviteLink(membership: ProjectGuardResponse, data: any): Promise<any> {
+    try {
+
+      const validateRestriction = isValidEmailDomain(data.restriction)
+      if (!validateRestriction) {
+        return {
+          message: 'Failed to validate domain',
+          statusCode: 500,
+          error: "restriction",
+          data: null,
+          code: 'restriction',
+        };
+      }
+      // Create invitation
+      const expiryDate = new Date(data.expiry);
+
+
+      const result = await this.drizzleService.db
+        .insert(bulkInvites)
+        .values({
+          projectId: membership.projectId,
+          invitedById: membership.userId,
+          token: uuidv4(),
+          uid: generateUid('inv'),
+          projectRole: 'contributor',
+          expiresAt: expiryDate,
+          message: '',
+          domainRestriction: data.restriction
+        })
+        .returning();
+
+      if (!result) {
+        throw ''
+      }
+
+      return {
+        message: 'Invitation Link Created',
+        statusCode: 201,
+        error: null,
+        data: {
+          link: result[0].token
+        },
+        code: 'invitation_link_created',
+      };
+    } catch (error) {
+      return {
+        message: 'Failed to created invitation link',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'invitation_send_failed',
+      };
+    }
+  }
+
   async getProjectInviteStatus(token: string, email: string): Promise<ProjectInviteStatusResponse> {
     try {
       const inviteResult = await this.drizzleService.db
@@ -521,7 +579,7 @@ export class ProjectsService {
           invite: {
             uid: projectInvites.uid,
             email: projectInvites.email,
-            role: projectInvites.role,
+            role: projectInvites.projectRole,
             message: projectInvites.message,
             status: projectInvites.status,
             expiresAt: projectInvites.expiresAt,
@@ -685,7 +743,7 @@ export class ProjectsService {
             projectId: invite.invite.projectId,
             userId: userId,
             uid: generateUid('mem'),
-            projectRole: invite.invite.role,
+            projectRole: invite.invite.projectRole,
             joinedAt: new Date(),
           })
           .returning();
@@ -717,6 +775,107 @@ export class ProjectsService {
         data: {
           projectId: invite.project.id,
           role: result.projectRole,
+        },
+        code: 'invite_accepted',
+      };
+    } catch (error) {
+      console.error('Error accepting invite:', error);
+      return {
+        message: 'Failed to accept invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'accept_invite_failed',
+      };
+    }
+  }
+
+  async acceptLinkInvite(token: string, userId: number) {
+    try {
+      const invite = await this.drizzleService.db
+        .select({
+          invite: bulkInvites,
+          project: projects,
+          inviter: users,
+        })
+        .from(bulkInvites)
+        .innerJoin(projects, eq(bulkInvites.projectId, projects.id))
+        .innerJoin(users, eq(bulkInvites.invitedById, users.id))
+        .where(eq(bulkInvites.token, token))
+        .then(results => results[0] || null);
+
+      if (!invite) {
+        return {
+          message: 'Invitation link is invalid',
+        };
+      }
+
+      if (new Date(invite.invite.expiresAt) < new Date()) {
+        return {
+          message: 'Invitation has expired',
+          statusCode: 400,
+          error: "expired",
+          data: null,
+          code: 'invitation_expired',
+        };
+      }
+
+
+      // Check if already a member
+      const existingMember = await this.drizzleService.db
+        .select()
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, invite.invite.projectId),
+            eq(projectMembers.userId, userId),
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (existingMember) {
+        return {
+          message: 'You are already a member of this project',
+          statusCode: 409,
+          error: "conflict",
+          data: null,
+          code: 'already_member',
+        };
+      }
+      const result = await this.drizzleService.db
+          .insert(projectMembers)
+          .values({
+            projectId: invite.invite.projectId,
+            userId: userId,
+            uid: generateUid('mem'),
+            projectRole: 'contributor',
+            joinedAt: new Date(),
+            bulkInviteId: invite.invite.id,
+          })
+          .returning();
+      // // Send notifications
+      // await this.notificationService.sendInviteAcceptedEmail({
+      //   inviterEmail: invite.inviter.email,
+      //   inviterName: invite.inviter.name || invite.inviter.authName || '',
+      //   memberName: user.name || user.authName || user.email,
+      //   memberEmail: user.email,
+      //   projectName: invite.project.projectName,
+      //   projectId: invite.project.id,
+      // });
+
+      // await this.notificationService.sendNewMemberWelcomeEmail({
+      //   email: user.email,
+      //   name: user.name || user.authName || 'there',
+      //   projectName: invite.project.projectName,
+      //   projectId: invite.project.id,
+      // });
+
+      return {
+        message: `You have successfully joined ${invite.project.projectName}`,
+        statusCode: 200,
+        error: null,
+        data: {
+          projectId: invite.project.id,
         },
         code: 'invite_accepted',
       };
@@ -1428,7 +1587,7 @@ export class ProjectsService {
         .select({
           id: projectInvites.id,
           email: projectInvites.email,
-          role: projectInvites.role,
+          role: projectInvites.projectRole,
           message: projectInvites.message,
           status: projectInvites.status,
           expiresAt: projectInvites.expiresAt,

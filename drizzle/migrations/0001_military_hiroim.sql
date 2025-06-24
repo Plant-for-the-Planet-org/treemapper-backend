@@ -1,1 +1,0 @@
-ALTER TYPE "public"."migration_status" ADD VALUE 'started';

@@ -12,12 +12,12 @@ import {
   ParseIntPipe,
   Query
 } from '@nestjs/common';
-import { ProjectMembersAndInvitesResponse, ProjectsService } from './projects.service';
+import { ProjectGuardResponse, ProjectMembersAndInvitesResponse, ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
-import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
+import { InviteProjectLinkDto, InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { DeclineInviteDto } from './dto/decline-invite.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -77,6 +77,19 @@ export class ProjectsController {
     );
   }
 
+  @Post(':id/invites/link')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  createInviteLink(
+    @Body() inviteLinkDto: InviteProjectLinkDto,
+    @Membership() membership: ProjectGuardResponse,
+  ) {
+    return this.projectsService.createInviteLink(
+      membership,
+      inviteLinkDto
+    );
+  }
+
   @Get('invites/:invite/status')
   getProjectInviteStatus(@Param('invite') invite: string, @Req() req) {
     return this.projectsService.getProjectInviteStatus(invite, req.user.email);
@@ -85,6 +98,11 @@ export class ProjectsController {
   @Post('invites/accept')
   acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
     return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id, req.user.email);
+  }
+
+  @Post('invites/accept/link')
+  acceptInviteLink(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
+    return this.projectsService.acceptLinkInvite(acceptInviteDto.token, req.user.id);
   }
 
 

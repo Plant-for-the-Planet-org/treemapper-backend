@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsDate, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class InviteProjectMemberDto {
   @IsEmail()
@@ -12,4 +12,13 @@ export class InviteProjectMemberDto {
   @IsOptional()
   @IsString()
   message?: string;
+}
+
+
+export class InviteProjectLinkDto {
+  @IsString()
+  restriction?: string;
+
+  @IsString()
+  expiry: string;
 }

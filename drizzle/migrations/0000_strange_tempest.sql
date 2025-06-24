@@ -10,7 +10,7 @@ CREATE TYPE "public"."intervention_status" AS ENUM('planned', 'active', 'complet
 CREATE TYPE "public"."intervention_type" AS ENUM('assisting-seed-rain', 'control-livestock', 'direct-seeding', 'enrichment-planting', 'fencing', 'fire-patrol', 'fire-suppression', 'firebreaks', 'generic-tree-registration', 'grass-suppression', 'liberating-regenerant', 'maintenance', 'marking-regenerant', 'multi-tree-registration', 'other-intervention', 'plot-plant-registration', 'removal-invasive-species', 'sample-tree-registration', 'single-tree-registration', 'soil-improvement', 'stop-tree-harvesting');--> statement-breakpoint
 CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'declined', 'expired', 'discarded');--> statement-breakpoint
 CREATE TYPE "public"."log_level" AS ENUM('debug', 'info', 'warning', 'error', 'fatal');--> statement-breakpoint
-CREATE TYPE "public"."migration_status" AS ENUM('in_progress', 'completed', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."migration_status" AS ENUM('in_progress', 'completed', 'failed', 'started');--> statement-breakpoint
 CREATE TYPE "public"."project_role" AS ENUM('owner', 'admin', 'contributor', 'observer');--> statement-breakpoint
 CREATE TYPE "public"."record_type" AS ENUM('planting', 'measurement', 'status_change', 'inspection', 'maintenance', 'death', 'removal', 'health_assessment', 'growth_monitoring');--> statement-breakpoint
 CREATE TYPE "public"."site_status" AS ENUM('planted', 'planting', 'barren', 'reforestation');--> statement-breakpoint
@@ -30,6 +30,24 @@ CREATE TABLE "audit_logs" (
 	"ip_address" varchar(45),
 	"user_agent" text,
 	"metadata" jsonb
+);
+--> statement-breakpoint
+CREATE TABLE "bulk_invites" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"project_id" integer NOT NULL,
+	"domain_restriction" varchar(320) NOT NULL,
+	"message" varchar(400),
+	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
+	"invited_by_id" integer NOT NULL,
+	"discarded_by" integer,
+	"status" "invite_status" DEFAULT 'pending' NOT NULL,
+	"token" uuid DEFAULT gen_random_uuid() NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "bulk_invites_uid_unique" UNIQUE("uid"),
+	CONSTRAINT "bulk_invites_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "images" (
@@ -162,7 +180,7 @@ CREATE TABLE "project_invites" (
 	"project_id" integer NOT NULL,
 	"email" varchar(320) NOT NULL,
 	"message" varchar(400),
-	"role" "project_role" DEFAULT 'contributor' NOT NULL,
+	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
 	"invited_by_id" integer NOT NULL,
 	"discarded_by" integer,
 	"status" "invite_status" DEFAULT 'pending' NOT NULL,
@@ -185,6 +203,7 @@ CREATE TABLE "project_members" (
 	"joined_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"bulk_invite_id" integer,
 	CONSTRAINT "project_members_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "unique_project_member" UNIQUE("project_id","user_id")
 );
@@ -429,6 +448,9 @@ CREATE TABLE "users" (
 );
 --> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_changed_by_users_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -444,6 +466,7 @@ ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_invited_by_id_user
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_members" ADD CONSTRAINT "project_members_bulk_invite_id_bulk_invites_id_fk" FOREIGN KEY ("bulk_invite_id") REFERENCES "public"."bulk_invites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_added_by_id_users_id_fk" FOREIGN KEY ("added_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -461,6 +484,7 @@ ALTER TABLE "user_migrations" ADD CONSTRAINT "user_migrations_user_id_users_id_f
 CREATE INDEX "audit_logs_table_record_idx" ON "audit_logs" USING btree ("table_name","record_uid");--> statement-breakpoint
 CREATE INDEX "audit_logs_user_idx" ON "audit_logs" USING btree ("changed_by");--> statement-breakpoint
 CREATE INDEX "audit_logs_time_idx" ON "audit_logs" USING btree ("changed_at");--> statement-breakpoint
+CREATE INDEX "project_bulk_invites_project_idx" ON "bulk_invites" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "entityId_images__id_idx" ON "images" USING btree ("entity_id");--> statement-breakpoint
 CREATE INDEX "intervention_records_intervention_idx" ON "intervention_records" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_updated_by_idx" ON "intervention_records" USING btree ("updated_by");--> statement-breakpoint

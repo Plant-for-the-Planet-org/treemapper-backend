@@ -287,11 +287,33 @@ export const projectMembers = pgTable('project_members', {
   joinedAt: timestamp('joined_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  bulkInviteId: integer('bulk_invite_id').references(() => bulkInvites.id),
 }, (table) => ({
   uniqueMember: unique('unique_project_member').on(table.projectId, table.userId),
   projectIdIdx: index('project_members_project_idx').on(table.projectId),
   userIdIdx: index('project_members_user_idx').on(table.userId),
   projectRoleIdx: index('project_members_role_idx').on(table.projectRole),
+}));
+
+export const bulkInvites = pgTable('bulk_invites', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  projectId: integer('project_id').notNull().references(() => projects.id),
+  domainRestriction: varchar('domain_restriction', { length: 320 }).notNull(),
+  message: varchar('message', { length: 400 }),
+  projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
+  invitedById: integer('invited_by_id').notNull().references(() => users.id),
+  discardedBy: integer('discarded_by').references(() => users.id),
+  status: inviteStatusEnum('status').notNull().default('pending'),
+  token: uuid('token').defaultRandom().notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+}, (table) => ({
+  projectBulkIdIdx: index('project_bulk_invites_project_idx').on(table.projectId),
 }));
 
 // ============================================================================
@@ -357,7 +379,7 @@ export const projectInvites = pgTable('project_invites', {
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   email: varchar('email', { length: 320 }).notNull(),
   message: varchar('message', { length: 400 }),
-  role: projectRoleEnum('role').notNull().default('contributor'),
+  projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedById: integer('invited_by_id').notNull().references(() => users.id),
   discardedBy: integer('discarded_by').references(() => users.id),
   status: inviteStatusEnum('status').notNull().default('pending'),
@@ -683,6 +705,7 @@ export const userRelations = relations(users, ({ many }) => ({
   createdSites: many(sites, { relationName: 'createdBy' }),
   recordedIntervention: many(interventionRecords, { relationName: 'recordedBy' }),
   sentInvites: many(projectInvites, { relationName: 'invitedBy' }),
+  bulkInvites: many(bulkInvites, { relationName: 'invitedBy' }),
   interventions: many(interventions, { relationName: 'userInterventions' }),
   notifications: many(notifications),
   speciesRequests: many(speciesRequests, { relationName: 'requestedBy' }),
@@ -698,6 +721,7 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   }),
   members: many(projectMembers),
   invites: many(projectInvites),
+  bulkInvites: many(bulkInvites),
   sites: many(sites),
   interventions: many(interventions),
   projectSpecies: many(projectSpecies),
@@ -722,6 +746,18 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
   }),
   invitedBy: one(users, {
     fields: [projectInvites.invitedById],
+    references: [users.id],
+    relationName: 'invitedBy',
+  }),
+}));
+
+export const bulkInviteRelations = relations(bulkInvites, ({ one }) => ({
+  project: one(projects, {
+    fields: [bulkInvites.projectId],
+    references: [projects.id],
+  }),
+  invitedBy: one(users, {
+    fields: [bulkInvites.invitedById],
     references: [users.id],
     relationName: 'invitedBy',
   }),

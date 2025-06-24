@@ -1,5 +1,5 @@
 {
-  "id": "8a483e79-3f92-4285-9412-a6c44c0ea166",
+  "id": "fa02e9fc-b0e0-4e58-a2e8-0f53d490593b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -146,6 +146,175 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bulk_invites": {
+      "name": "bulk_invites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "domain_restriction": {
+          "name": "domain_restriction",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "varchar(400)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_role": {
+          "name": "project_role",
+          "type": "project_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'contributor'"
+        },
+        "invited_by_id": {
+          "name": "invited_by_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "discarded_by": {
+          "name": "discarded_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "invite_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "token": {
+          "name": "token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "project_bulk_invites_project_idx": {
+          "name": "project_bulk_invites_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bulk_invites_project_id_projects_id_fk": {
+          "name": "bulk_invites_project_id_projects_id_fk",
+          "tableFrom": "bulk_invites",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bulk_invites_invited_by_id_users_id_fk": {
+          "name": "bulk_invites_invited_by_id_users_id_fk",
+          "tableFrom": "bulk_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "invited_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bulk_invites_discarded_by_users_id_fk": {
+          "name": "bulk_invites_discarded_by_users_id_fk",
+          "tableFrom": "bulk_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "discarded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bulk_invites_uid_unique": {
+          "name": "bulk_invites_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uid"
+          ]
+        },
+        "bulk_invites_token_unique": {
+          "name": "bulk_invites_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1484,8 +1653,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "role": {
-          "name": "role",
+        "project_role": {
+          "name": "project_role",
           "type": "project_role",
           "typeSchema": "public",
           "primaryKey": false,
@@ -1722,6 +1891,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "bulk_invite_id": {
+          "name": "bulk_invite_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1791,6 +1966,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_members_bulk_invite_id_bulk_invites_id_fk": {
+          "name": "project_members_bulk_invite_id_bulk_invites_id_fk",
+          "tableFrom": "project_members",
+          "tableTo": "bulk_invites",
+          "columnsFrom": [
+            "bulk_invite_id"
           ],
           "columnsTo": [
             "id"
@@ -3978,7 +4166,8 @@
       "values": [
         "in_progress",
         "completed",
-        "failed"
+        "failed",
+        "started"
       ]
     },
     "public.project_role": {
