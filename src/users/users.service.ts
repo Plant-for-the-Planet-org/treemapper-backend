@@ -154,9 +154,7 @@ export class UsersService {
 
   public async resetUserCache(user: number): Promise<void> {
     try {
-      await Promise.all([
-        this.cacheService.reset(),
-      ]);
+      await this.cacheService.reset()
     } catch (error) {
       // Don't throw - cache failure shouldn't break user operations
     }
@@ -205,7 +203,6 @@ export class UsersService {
       .update(users)
       .set({
         updatedAt: new Date(),
-        migratedAt: new Date(),
       })
       .where(eq(users.id, id))
     this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));

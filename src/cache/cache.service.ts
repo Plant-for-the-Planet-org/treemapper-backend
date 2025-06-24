@@ -79,56 +79,8 @@ export class CacheService {
    */
   async reset(): Promise<void> {
     try {
-      // Access the underlying store
-      const store = (this.cacheManager as any).store;
-
-      if (!store) {
-        this.logger.warn('Cache store is not accessible');
-        return;
-      }
-
-      // Method 1: Try store.reset()
-      if (typeof store.reset === 'function') {
-        await store.reset();
-        this.logger.debug('Cache RESET (store.reset) - all keys deleted');
-        return;
-      }
-
-      // Method 2: Try to get all keys and delete them
-      if (typeof store.keys === 'function') {
-        const keys = await store.keys('*');
-        this.logger.debug(`Found ${keys.length} keys to delete`);
-
-        if (keys.length > 0) {
-          // Delete keys in batches
-          const batchSize = 100;
-          for (let i = 0; i < keys.length; i += batchSize) {
-            const batch = keys.slice(i, i + batchSize);
-            await Promise.all(batch.map((key: string) => this.cacheManager.del(key)));
-          }
-          this.logger.debug(`Cache RESET - deleted ${keys.length} keys`);
-          return;
-        } else {
-          this.logger.debug('Cache RESET - no keys to delete');
-          return;
-        }
-      }
-
-      // Method 3: Try Redis flushdb if it's a Redis store
-      if (store.client && typeof store.client.flushdb === 'function') {
-        await store.client.flushdb();
-        this.logger.debug('Cache RESET (Redis flushdb) - all keys deleted');
-        return;
-      }
-
-      // Method 4: Try store.clear()
-      if (typeof store.clear === 'function') {
-        await store.clear();
-        this.logger.debug('Cache RESET (store.clear) - all keys deleted');
-        return;
-      }
-
-      this.logger.warn('Cache store does not support any clear/reset methods');
+      await this.cacheManager.clear();
+      this.logger.log('Cache store cleared');
     } catch (error) {
       this.logger.error('Cache RESET error:', error);
       throw error;

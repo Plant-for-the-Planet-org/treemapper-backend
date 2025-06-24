@@ -122,7 +122,7 @@ export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'su
 export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record']);
 export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 'active', 'completed', 'failed', 'on_hold', 'cancelled']);
 export const migrationStatusEnum = pgEnum('migration_status', [
-  'in_progress', 'completed', 'failed'
+  'in_progress', 'completed', 'failed', 'started'
 ]);
 export const logLevelEnum = pgEnum('log_level', [
   'debug',

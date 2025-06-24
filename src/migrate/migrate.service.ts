@@ -89,7 +89,7 @@ export class MigrationService {
   async checkUserInttc(accessToken: string, userId: number): Promise<MigrationCheckResult> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get('https://app.plant-for-the-planet.org/app/profile', {
+        this.httpService.get(`${process.env.OLD_BACKEND_URL}/app/profile`, {
           headers: {
             Authorization: accessToken,
           },
@@ -99,34 +99,24 @@ export class MigrationService {
         })
       );
 
-      // If status is 303, return migrate: false
       if (response.status === 303) {
         await this.usersetvice.migrateSuccess(userId)
         await this.drizzleService.db.update(users).set({ existingPlanetUser: false, migratedAt: new Date() }).where(eq(users.id, userId))
         return { migrationNeeded: false, planetId: '' };
       }
-
-
-      // If status is 200, return migrate: true
       return { migrationNeeded: true, planetId: response.data.id };
-
     } catch (error) {
-      // Handle network errors or other HTTP errors (not 200/303)
       if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx and is not 303
         throw new HttpException(
           `External API returned status: ${error.response.status}`,
           HttpStatus.BAD_GATEWAY
         );
       } else if (error.request) {
-        // The request was made but no response was received
         throw new HttpException(
           'No response from external API',
           HttpStatus.SERVICE_UNAVAILABLE
         );
       } else {
-        // Something happened in setting up the request
         throw new HttpException(
           'Error setting up request to external API',
           HttpStatus.INTERNAL_SERVER_ERROR
@@ -169,17 +159,20 @@ export class MigrationService {
   ): Promise<void> {
     let userMigrationRecord;
     try {
-      this.logger.log('Migrating started')
       userMigrationRecord = await this.createMigrationRecord(userId, planetId, email);
-
       if (userMigrationRecord.status === 'completed') {
-        this.logger.log('Migrating already completed')
         this.addLog(userMigrationRecord.id, 'info', 'Migration already done', 'users');
         this.logMigration()
         return;
       }
 
-      if (userMigrationRecord.status === 'failed') {
+
+      if (userMigrationRecord.status === 'in_progress') {
+        this.addLog(userMigrationRecord.id, 'info', 'Migration in progress', 'users');
+        return;
+      }
+
+      if (userMigrationRecord.status === 'failed' || userMigrationRecord.status === 'started') {
         await this.continueMigration(userMigrationRecord.id)
         this.addLog(userMigrationRecord.id, 'info', 'Migration resumed', 'users');
       }
@@ -224,42 +217,46 @@ export class MigrationService {
 
       // // Step 1: Migrate user
       if (!userMigrationRecord.migratedEntities.user) {
-        console.log('Migrating user');
         stop = await this.migrateUserData(userId, authToken, userMigrationRecord.id);
       }
 
       if (stop) {
         this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for user and will not proceed further', 'users');
+        await this.updateMigrationProgress(userMigrationRecord.id, 'user', false, true);
         return;
+      } else {
+        await this.updateMigrationProgress(userMigrationRecord.id, 'user', true, false);
       }
 
 
       // // Step 2: Migrate Projects
       if (!userMigrationRecord.migratedEntities.projects) {
-        console.log('Migrating projects');
         stop = await this.migrateUserProjects(userId, authToken, userMigrationRecord.id);
       }
 
 
       if (stop) {
         this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for project', 'projects');
+        await this.updateMigrationProgress(userMigrationRecord.id, 'projects', false, true)
         return
+      } else {
+        await this.updateMigrationProgress(userMigrationRecord.id, 'projects', true, false);
       }
-      console.log('User project migrated');
+
 
       // // Step 3: Migrate sites
       if (!userMigrationRecord.migratedEntities.sites) {
-        console.log('Migrating sites');
         stop = await this.migrateUserSites(userId, authToken, userMigrationRecord.id);
       }
 
 
       if (stop) {
-        console.log('Issue in  site migration');
         this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for site', 'sites');
+        await this.updateMigrationProgress(userMigrationRecord.id, 'sites', false, true);
         return
+      } else {
+        await this.updateMigrationProgress(userMigrationRecord.id, 'sites', true, false);
       }
-      console.log('Sites  migrated');
 
 
       // Step 4: Migrate User Species
@@ -269,11 +266,13 @@ export class MigrationService {
 
 
       if (stop) {
-        console.log('Issue in  species migration');
         this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for species', 'species');
+        await this.updateMigrationProgress(userMigrationRecord.id, 'species', false, true);
         return
+      } else {
+        await this.updateMigrationProgress(userMigrationRecord.id, 'species', true, false);
       }
-      console.log('Species  migrated');
+
 
 
       if (!userMigrationRecord.migratedEntities.intervention) {
@@ -282,26 +281,23 @@ export class MigrationService {
 
 
       if (stop) {
-        console.log('Issue in  intervention migration');
-        this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for species', 'interventions');
+        this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for intervention', 'interventions');
+        await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', false, true);
         return
+      } else {
+        await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
       }
-      console.log('Intervention  migrated');
-
-
-
 
       await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
       await this.completeMigration(userMigrationRecord.id);
-      this.usersetvice.resetUserCache(userId)
+      await this.usersetvice.resetUserCache(userId)
       await this.drizzleService.db.update(users).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(users.id, userId))
-      this.notificationService.createNotification({
+      await this.notificationService.createNotification({
         userId: userId,
         type: NotificationType.SYSTEM_UPDATE,
         title: 'Migration Completed',
-        message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plane.org'
+        message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plant.org'
       })
-      this.addLog(userMigrationRecord.id, 'info', 'Migration completed successfully', 'images');
     } catch (error) {
       await this.handleMigrationError(userId, userMigrationRecord?.id, error);
       throw error;
@@ -419,7 +415,7 @@ export class MigrationService {
         uid: generateUid('mgr'),
         userId: userId,
         planetId,
-        status: 'in_progress',
+        status: 'started',
         migratedEntities: {
           user: false,
           projects: false,
@@ -437,27 +433,20 @@ export class MigrationService {
   private async migrateUserData(userId: number, authToken: string, migrationId: number): Promise<boolean> {
     try {
       this.addLog(migrationId, 'info', 'Starting user data migration', 'users');
-
       const userResponse = await this.makeApiCall(`/app/profile`, authToken);
       if (!userResponse || userResponse === null) {
-        await this.updateMigrationProgress(migrationId, 'user', false, true);
         this.addLog(migrationId, 'error', `User migration failed. No response recieved`, 'users');
         return true;
       }
       const oldUserData = userResponse.data;
-
       const transformedUser = this.transformUserData(oldUserData, userId);
       await this.usersetvice.update(userId, transformedUser).catch(async () => {
-        await this.updateMigrationProgress(migrationId, 'user', false, true);
         this.addLog(migrationId, 'error', `User migration stopped while wrtiting to db`, 'users', JSON.stringify(transformedUser));
         throw ''
       })
-
-      await this.updateMigrationProgress(migrationId, 'user', true);
       this.addLog(migrationId, 'info', 'User data migration completed', 'users');
       return false;
     } catch (error) {
-      await this.updateMigrationProgress(migrationId, 'user', false, true);
       this.addLog(migrationId, 'error', `User migration failed`, 'users', JSON.stringify(error.stack));
       return true;
     }
@@ -493,7 +482,6 @@ export class MigrationService {
       createdAt: new Date(oldUserData.created) || new Date(),
       updatedAt: new Date(),
       deletedAt: null,
-      migratedAt: new Date(),
       planetRecord: true
     };
     return transformedUser;
@@ -526,7 +514,7 @@ export class MigrationService {
         .update(userMigrations)
         .set({
           status: 'failed',
-          errorMessage: error.message
+          errorMessage: ''
         })
         .where(eq(userMigrations.id, migrationId));
       this.logMigration()
@@ -607,7 +595,6 @@ export class MigrationService {
       const projectsResponse = await this.makeApiCall(`/app/profile/projects?_scope=extended`, authToken);
       if (!projectsResponse || projectsResponse === null) {
         this.addLog(migrationId, 'error', `Project migration failed. No response recieved`, 'projects');
-        await this.updateMigrationProgress(migrationId, 'projects', false, true);
         return true;
       }
       const oldProjects = projectsResponse.data;
@@ -615,7 +602,6 @@ export class MigrationService {
       let stop = false;
       for (const oldProject of oldProjects) {
         if (stop) {
-
           this.addLog(migrationId, 'error', `Project loop stopped`, 'projects');
           return true
         }
@@ -666,12 +652,10 @@ export class MigrationService {
                 stop = false;
               } catch (error) {
                 this.addLog(migrationId, 'error', `Projects migration failed: At 12837`, 'projects', JSON.stringify(error.stack));
-                await this.updateMigrationProgress(migrationId, 'projects', false, true);
                 stop = true
               }
             })
           }
-          this.addLog(migrationId, 'info', `Project with id:${transformedProject.uid} migrated.Moving to next project`, 'projects');
         } catch (error) {
           this.addLog(migrationId, 'error', `Project migration failed for project at catch block`, 'projects', JSON.stringify(oldProject));
           stop = true;
@@ -767,7 +751,6 @@ export class MigrationService {
       const sitesResponse = await this.makeApiCall(`/app/profile/projects?_scope=extended`, authToken);
       if (!sitesResponse || sitesResponse === null) {
         this.addLog(migrationId, 'error', `Site migration failed. No response recieved`, 'projects');
-        await this.updateMigrationProgress(migrationId, 'sites', false, true);
         return true;
       }
       const allProjects = sitesResponse.data;
@@ -777,18 +760,13 @@ export class MigrationService {
           const stopParentLoop = await this.transformSiteData(oldSite, uid, migrationId);
           if (stopParentLoop || stopProcess) {
             this.addLog(migrationId, 'error', `Site Parent loop stopped`, 'sites', JSON.stringify(oldSite));
-            await this.updateMigrationProgress(migrationId, 'sites', false);
             return true
           }
-          this.addLog(migrationId, 'info', `Project Sites migrated for id ${oldSite.properties.id}`, 'sites');
-          await this.updateMigrationProgress(migrationId, 'sites', false);
         } catch (error) {
           this.addLog(migrationId, 'error', `Site migration failed for project ${oldSite.properties.id}: ${error.message}`, 'sites', JSON.stringify(oldSite));
-          await this.updateMigrationProgress(migrationId, 'sites', false);
           stopProcess = true
         }
       }
-      await this.updateMigrationProgress(migrationId, 'sites', true);
       this.addLog(migrationId, 'info', `Sites migration completed`, 'sites');
       return false
     } catch (error) {
@@ -866,11 +844,9 @@ export class MigrationService {
         await this.drizzleService.db
           .insert(sites)
           .values(insertValues)
-        // .catch(() => {
-        //   throw ''
-        // });
-
-        this.addLog(migrationId, 'info', `Sites with siteID:${site.id} in project:${projectData.id} migrated`, 'sites');
+        .catch(() => {
+          throw ''
+        });
       } catch (error) {
         this.addLog(migrationId, 'error', `Failed to insert site ${site.id} from project ${projectData.slug}: `, 'sites', JSON.stringify(site));
         stopProcess = true;
@@ -881,10 +857,9 @@ export class MigrationService {
   }
   private async migrateUserSpecies(uid: number, authToken: string, migrationId: number, email: string): Promise<boolean> {
     try {
-      this.addLog(migrationId, 'info', 'Starting User Species migration', 'sites');
+      this.addLog(migrationId, 'info', 'Starting User Species migration', 'species');
       const speciesResponse = await this.makeApiCall(`/treemapper/species`, authToken);
       if (!speciesResponse || speciesResponse === null) {
-        await this.updateMigrationProgress(migrationId, 'species', false, true);
         this.addLog(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
         return true;
       }
@@ -913,7 +888,6 @@ export class MigrationService {
       }
       if (speciesResponse.data.length === 0) {
         this.addLog(migrationId, 'info', `Species migration done. No species found`, 'species');
-        await this.updateMigrationProgress(migrationId, 'species', true, false);
         return false
       }
       const cleanData = removeDuplicatesByScientificSpeciesId(speciesResponse.data)
@@ -945,15 +919,12 @@ export class MigrationService {
         });
       if (result) {
         this.addLog(migrationId, 'info', `Species migration done`, 'species');
-        await this.updateMigrationProgress(migrationId, 'species', true, false);
         return false
       }
       this.addLog(migrationId, 'error', `Species migration failed.(After running bulk)`, 'species');
-      await this.updateMigrationProgress(migrationId, 'species', false, true);
       return true
     } catch (error) {
-      this.addLog(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species');
-      await this.updateMigrationProgress(migrationId, 'species', false, true);
+      this.addLog(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species', JSON.stringify(error));
       return true
     }
   }
@@ -991,7 +962,6 @@ export class MigrationService {
   }
   private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
     try {
-      console.log("Started Intervetnion  Migration")
       this.addLog(migrationId, 'info', 'Starting User intervention migration', 'interventions');
       const { projectMapping, personalProjectId } = await this.buildProjectMapping(uid);
       const { siteMapping } = await this.buildSiteMapping(uid);
@@ -1000,11 +970,9 @@ export class MigrationService {
         throw 'needToStop activated'
       }
       this.addLog(migrationId, 'info', `Interventions migration completed`, 'interventions');
-      await this.updateMigrationProgress(migrationId, 'interventions', true, false);
       return false
     } catch (error) {
-      this.addLog(migrationId, 'error', `Interventions migration failed`, 'interventions');
-      await this.updateMigrationProgress(migrationId, 'interventions', false, true);
+      this.addLog(migrationId, 'error', `Interventions migration failed`, 'interventions', JSON.stringify(error));
       return true
     }
   }
@@ -1050,7 +1018,7 @@ export class MigrationService {
   }
 
 
-  private async buildSpeciesMapping(uids: string[]): Promise<{ speciesMapping: Map<string, number> }> {
+  private async buildSpeciesMapping(uids: string[]): Promise<Map<string, number>> {
     const speciesMapping = new Map<string, number>();
     // Get all migrated projects for this user
     const migratedProjects = await this.drizzleService.db
@@ -1064,7 +1032,7 @@ export class MigrationService {
     for (const project of migratedProjects) {
       speciesMapping.set(project.oldUuid, project.id);
     }
-    return { speciesMapping };
+    return speciesMapping;
   }
 
 
@@ -1082,54 +1050,40 @@ export class MigrationService {
     let hasMore = true;
     let totalProcessed = 0;
     let lastPage: number | null = null;
-    console.log("Started Intervetnion  currentPage", currentPage)
     while (hasMore) {
       if (lastPage && currentPage > lastPage) {
-        console.log(`Reached last page (${lastPage}). Stopping migration.`);
         break;
       }
-
       const interventionResponse = await this.makeApiCall(
         `/treemapper/interventions?limit=${batchSize}&_scope=extended&page=${currentPage}`,
         authToken
       );
-      console.log(" interventionResponse ", Boolean(interventionResponse))
-
-
       if (!interventionResponse || interventionResponse === null) {
         if (lastPage && currentPage > lastPage) {
-          console.log(`Migration completed. Processed all ${lastPage} pages.`);
           break;
         }
-
         this.addLog(migrationId, 'error', `interventions migration failed. No response`, 'interventions');
-        await this.updateMigrationProgress(migrationId, 'interventions', false, false);
         return true;
       }
 
-      console.log(`Processing page ${currentPage}`);
       const oldInterventions = interventionResponse.data;
       if (oldInterventions && oldInterventions.length === 0) {
         return false
       }
-      // Extract last page info from _links if available
+
       if (!lastPage && oldInterventions._links?.last) {
         const lastPageMatch = oldInterventions._links.last.match(/page=(\d+)/);
         if (lastPageMatch) {
           lastPage = parseInt(lastPageMatch[1]);
-          console.log(`Detected last page: ${lastPage}`);
         }
       }
 
-      // Check if we have more data to process
       const itemsCount = oldInterventions.items?.length || 0;
 
-      // Determine if there are more pages using multiple checks
       hasMore = oldInterventions._links?.next ? true : false;
 
       // Additional safety checks
       if (itemsCount === 0) {
-        console.log("No items in current page. Stopping migration.");
         break;
       }
 
@@ -1137,17 +1091,12 @@ export class MigrationService {
         hasMore = false;
       }
 
-      console.log(`Processing ${itemsCount} items from page ${currentPage}`);
-
       // Process in transaction
       const parentIntervention: any[] = [];
       const interventionoParentRelatedData = {};
-      const interventionoParentSpeciesRelatedData = {};
 
 
       for (const oldIntervention of oldInterventions.items) {
-        console.log(`Processing intervention: ${oldIntervention.id}`);
-
         let newProjectId = personalProjectId;
         let siteId = oldIntervention.plantProjectSite ? siteMapping.get(oldIntervention.plantProjectSite) : null;
 
@@ -1166,21 +1115,17 @@ export class MigrationService {
           }
         }
 
-        const { parentFinalData, treeData, interventionSpecies } = await this.transformParentIntervention(
+        const { parentFinalData, treeData } = await this.transformParentIntervention(
           oldIntervention,
           newProjectId,
           userId,
-          siteId
+          siteId,
+          migrationId
         );
         parentIntervention.push(parentFinalData)
         interventionoParentRelatedData[`${parentFinalData.uid}`] = treeData
-        interventionoParentSpeciesRelatedData[`${parentFinalData.uid}`] = interventionSpecies
       }
-
-      console.log(`Inserting ${parentIntervention.length} interventions`);
       const finalInterventionIDMapping: any = [];
-
-
       try {
         const result = await this.drizzleService.db
           .insert(interventions)
@@ -1198,13 +1143,12 @@ export class MigrationService {
           });
         }
       } catch (error) {
-        const chunkResults = await this.insertChunkIndividually(parentIntervention);
+        const chunkResults = await this.insertChunkIndividually(parentIntervention, migrationId);
         finalInterventionIDMapping.push(...chunkResults)
       }
 
       finalInterventionIDMapping.forEach(async inv => {
         if (inv.error) {
-          this.addLog(migrationId, 'error', `Failed to add intervention with id ${inv.uid}`, 'interventions')
         } else {
           const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
           try {
@@ -1215,36 +1159,22 @@ export class MigrationService {
           } catch (error) {
             await this.insertTreeChunkIndividually(treeMappedData, migrationId);
           }
-          const treeSpeciesData = interventionoParentSpeciesRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
-          // try {
-          //   await this.drizzleService.db
-          //     .insert(interventionSpecies)
-          //     .values(treeSpeciesData)
-          // } catch (error) {
-          //   await this.insertInteventionsSpceisInd(treeSpeciesData, migrationId);
-          // }
         }
       });
 
       totalProcessed += itemsCount;
       currentPage++;
-
       // Final check before next iteration
       if (lastPage && currentPage > lastPage) {
         hasMore = false;
       }
-      console.log(`Completed page ${currentPage - 1}. Total processed: ${totalProcessed}/${oldInterventions.total || 'unknown'}`);
     }
-    console.log(`Migration completed. Total processed: ${totalProcessed} interventions for user ${userId}`);
     return false;
   }
 
 
-  private async insertChunkIndividually(chunk: any[]) {
+  private async insertChunkIndividually(chunk: any[], migrationId: number) {
     const interventionIds: any = []
-
-
-
     for (let j = 0; j < chunk.length; j++) {
       try {
         const result = await this.drizzleService.db
@@ -1265,9 +1195,9 @@ export class MigrationService {
           success: false,
           error: JSON.stringify(error)
         });
+        this.addLog(migrationId, 'error', `Failed to add intervention with id ${chunk[j].uid}`, 'interventions', JSON.stringify(error))
       }
     }
-
     return interventionIds;
   }
 
@@ -1289,7 +1219,6 @@ export class MigrationService {
           error: null
         });
       } catch (error) {
-        console.log("SDC", error)
         this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
         interventionIds.push({
           id: null,
@@ -1332,227 +1261,273 @@ export class MigrationService {
 
 
 
-  private async transformParentIntervention(parentData: any, newProjectId: number, userId: number, siteId: any) {
+  private async transformParentIntervention(parentData: any, newProjectId: number, userId: number, siteId: any, mgID: number) {
     let parentFinalData: any = {}
     let interventionSpecies: any = []
     const interventionSampleTree: any = []
-    let treesPlanted = 0; //todo
+    let treesPlanted = 0;
     let flag = false
     let flagReason: FlagReasonEntry[] = []
     let locationValue: any = null;
-    const parentGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
-    if (parentGeometry.isValid) {
-      locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(parentGeometry.validatedGeoJSON)}), 4326)`
-    } else {
-      flag = true,
-        flagReason = [{
-          uid: generateUid('flag'),
-          type: 'geolocation',
-          level: 'high',
-          title: 'Location need fix',
-          message: 'Please update your project location that is accepted by the system. ',
-          updatedAt: new Date(),
-          createdAt: new Date()
-        }]
-    }
-
-    for (let index = 0; index < parentData.plantedSpecies.length; index++) {
-      const el = parentData.plantedSpecies[index];
-      treesPlanted = + el.treeCount
-      interventionSpecies.push({
-        "uid": generateUid("invspc"),
-        "speciesName": el.scientificName || null,
-        "createdAt": el.created ? new Date(el.created) : new Date(),
-        "scientificSpeciesId": 0,
-        "scientificSpeciesUid": el.scientificSpecies,
-        "interventionId": 0,
-        "isUnknown": false,
-        "otherSpeciesName": el.otherSpecies,
-        "count": el.treeCount,
-      })
-    }
-
-    if (parentData.scientificSpecies) {
-      treesPlanted = +1
-      interventionSpecies.push({
-        "uid": generateUid("invspc"),
-        "speciesName": parentData.scientificName || null,
-        "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
-        "scientificSpeciesId": 0,
-        "scientificSpeciesUid": parentData.scientificSpecies,
-        "isUnknown": parentData.otherSpecies ? true : false,
-        "otherSpeciesName": parentData.otherSpecies || 'Unknown',
-        "interventionId": 0,
-        "count": 1,
-      })
-    }
-
-    if (parentData.otherSpecies) {
-      treesPlanted = +1
-      interventionSpecies.push({
-        "uid": generateUid("invspc"),
-        "speciesName": null,
-        "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
-        "scientificSpeciesId": null,
-        "scientificSpeciesUid": null,
-        "isUnknown": true,
-        "interventionId": 0,
-        "otherSpeciesName": parentData.otherSpecies || 'Unknown',
-        "count": 1,
-      })
-    }
-    const removedUnknown = interventionSpecies.filter(el => !el.isUnknown).map(el => el.scientificSpeciesUid)
-    const speciesMapping = await this.buildSpeciesMapping(removedUnknown)
-    const finalInterventionSpeciesMapping = interventionSpecies.map(el => {
-      if (el.isUnknown) {
-        return el
-      }
-      const speciesId = speciesMapping.speciesMapping.get(el.scientificSpeciesUid)
-      if (!speciesId) {
-        flag = true
-        flagReason.push({
-          uid: generateUid('flag'),
-          type: 'spcies',
-          level: 'high',
-          title: 'Species has some issue',
-          message: 'Please check the spcies data integrity',
-          updatedAt: new Date(),
-          createdAt: new Date()
-        })
-        return el;
-      }
-      return {
-        ...el,
-        scientificSpeciesId: speciesId
-      }
-    })
-    parentFinalData['hid'] = parentData.hid
-    parentFinalData['uid'] = parentData.id
-    parentFinalData['userId'] = userId
-    parentFinalData['projectId'] = newProjectId
-    parentFinalData['projectSiteId'] = siteId
-    parentFinalData['type'] = parentData.type
-    parentFinalData['idempotencyKey'] = parentData.idempotencyKey
-    parentFinalData['captureMode'] = 'on_site'
-    parentFinalData['captureStatus'] = parentData.captureStatus
-    parentFinalData['registrationDate'] = parentData.registrationDate ? new Date(parentData.registrationDate) : new Date()
-    parentFinalData['interventionStartDate'] = parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date()
-    parentFinalData['interventionEndDate'] = parentData.interventionEndDate !== null ? new Date(parentData.interventionEndDate) : new Date()
-    parentFinalData['location'] = locationValue
-    parentFinalData['originalGeometry'] = parentData.originalGeometry
-    parentFinalData['deviceLocation'] = parentData.deviceLocation
-    parentFinalData['treeCount'] = treesPlanted
-    parentFinalData['sampleTreeCount'] = parentData.sampleTreeCount
-    parentFinalData['metadata'] = parentData.metadata
-    parentFinalData['flag'] = flag
-    parentFinalData['flagReason'] = flagReason
-
-    if (parentData.type === "single-tree-registration") {
-      let treeFinalData = {}
-      let singleTreeflag = false
-      let singleTreeFlagreason: any = []
-      let singleTreeLocation: any = null;
-      const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
-      if (singleTreeGeometry.isValid) {
-        singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
+    try {
+      const parentGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
+      if (parentGeometry.isValid) {
+        locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(parentGeometry.validatedGeoJSON)}), 4326)`
       } else {
-        singleTreeflag = true
-        singleTreeFlagreason.push({
-          uid: generateUid('flag'),
-          type: 'geolocation',
-          level: 'high',
-          title: 'Location need fix',
-          message: 'Please update your tree location that is accepted by the system. ',
-          updatedAt: new Date(),
-          createdAt: new Date()
+        flag = true,
+          flagReason = [{
+            uid: generateUid('flag'),
+            type: 'geolocation',
+            level: 'high',
+            title: 'Location need fix',
+            message: 'Please update your project location that is accepted by the system. ',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          }]
+      }
+
+      if (parentData.plantedSpecies !== null && parentData.plantedSpecies.length > 0) {
+        for (let index = 0; index < parentData.plantedSpecies.length; index++) {
+          const el = parentData.plantedSpecies[index];
+          treesPlanted = + el.treeCount
+          interventionSpecies.push({
+            "uid": generateUid("invspc"),
+            "speciesName": el.scientificName || null,
+            "createdAt": el.created ? new Date(el.created) : new Date(),
+            "scientificSpeciesId": 0,
+            "scientificSpeciesUid": el.scientificSpecies || null,
+            "interventionId": 0,
+            "isUnknown": false,
+            "otherSpeciesName": el.otherSpecies,
+            "count": el.treeCount,
+          })
+        }
+
+      }
+      if (parentData.scientificSpecies !== null) {
+        treesPlanted = +1
+        interventionSpecies.push({
+          "uid": generateUid("invspc"),
+          "speciesName": parentData.scientificName || null,
+          "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
+          "scientificSpeciesId": 0,
+          "scientificSpeciesUid": parentData.scientificSpecies || null,
+          "isUnknown": parentData.otherSpecies ? true : false,
+          "otherSpeciesName": parentData.otherSpecies || 'Unknown',
+          "interventionId": 0,
+          "count": 1,
         })
       }
 
-      if (parentData.measurements && parentData.measurements.height) {
-        treeFinalData['height'] = parentData.measurements.height
-      } else {
-        singleTreeflag = true
-        singleTreeFlagreason.push({
-          uid: generateUid('flag'),
-          type: 'measurements',
-          level: 'high',
-          title: 'Measurements height fix',
-          message: 'height of the tree is missing ',
-          updatedAt: new Date(),
-          createdAt: new Date()
+      if (parentData.otherSpecies !== null) {
+        treesPlanted = +1
+        interventionSpecies.push({
+          "uid": generateUid("invspc"),
+          "speciesName": null,
+          "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
+          "scientificSpeciesId": null,
+          "scientificSpeciesUid": null,
+          "isUnknown": true,
+          "interventionId": 0,
+          "otherSpeciesName": parentData.otherSpecies || 'Unknown',
+          "count": 1,
         })
-        treeFinalData['height'] = 0
-
       }
+      const removedUnknown = interventionSpecies.filter(el => !el.isUnknown).map(el => el.scientificSpeciesUid)
+      const speciesMapping = await this.buildSpeciesMapping(removedUnknown)
+      const finalInterventionSpeciesMapping = interventionSpecies.map(el => {
+        if (el.isUnknown) {
+          return el
+        }
+        const speciesId = el.scientificSpeciesUid !== null ? speciesMapping.get(el.scientificSpeciesUid) : null
+        if (!speciesId) {
+          flag = true
+          flagReason.push({
+            uid: generateUid('flag'),
+            type: 'spcies',
+            level: 'high',
+            title: 'Species has some issue',
+            message: 'Please check the spcies data integrity',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+          return el;
+        }
+        return {
+          ...el,
+          scientificSpeciesId: speciesId
+        }
+      })
+      parentFinalData['hid'] = parentData.hid
+      parentFinalData['uid'] = parentData.id
+      parentFinalData['userId'] = userId
+      parentFinalData['projectId'] = newProjectId
+      parentFinalData['projectSiteId'] = siteId
+      parentFinalData['type'] = parentData.type
+      parentFinalData['idempotencyKey'] = parentData.idempotencyKey
+      parentFinalData['captureMode'] = 'on_site'
+      parentFinalData['captureStatus'] = parentData.captureStatus
+      parentFinalData['registrationDate'] = parentData.registrationDate ? new Date(parentData.registrationDate) : new Date()
+      parentFinalData['interventionStartDate'] = parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date()
+      parentFinalData['interventionEndDate'] = parentData.interventionEndDate !== null ? new Date(parentData.interventionEndDate) : new Date()
+      parentFinalData['location'] = locationValue
+      parentFinalData['originalGeometry'] = parentData.originalGeometry
+      parentFinalData['deviceLocation'] = parentData.deviceLocation
+      parentFinalData['treeCount'] = treesPlanted
+      parentFinalData['sampleTreeCount'] = parentData.sampleTreeCount
+      parentFinalData['metadata'] = parentData.metadata
+      parentFinalData['flag'] = flag
+      parentFinalData['flagReason'] = flagReason
+      parentFinalData['species'] = finalInterventionSpeciesMapping
 
-      if (parentData.measurements && parentData.measurements.width) {
-        treeFinalData['height'] = parentData.measurements.width
-      } else {
-        singleTreeflag = true
-        singleTreeFlagreason.push({
-          uid: generateUid('flag'),
-          type: 'measurements',
-          level: 'high',
-          title: 'Measurements width fix',
-          message: 'height of the tree is missing ',
-          updatedAt: new Date(),
-          createdAt: new Date()
-        })
-        treeFinalData['lastMeasuredWidth'] = 0
+      if (parentData.type === "single-tree-registration") {
+        let treeFinalData = {}
+        let singleTreeflag = false
+        let singleTreeFlagreason: any = []
+        let singleTreeLocation: any = null;
+        const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
+        if (singleTreeGeometry.isValid) {
+          singleTreeLocation = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(singleTreeGeometry.validatedGeoJSON)}), 4326)`;
+        } else {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'geolocation',
+            level: 'high',
+            title: 'Location need fix',
+            message: 'Please update your tree location that is accepted by the system. ',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+        }
+
+        if (parentData.measurements && parentData.measurements.height) {
+          treeFinalData['height'] = parentData.measurements.height
+        } else {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'measurements',
+            level: 'high',
+            title: 'Measurements height fix',
+            message: 'height of the tree is missing',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+          treeFinalData['height'] = 0
+        }
+
+        if (parentData.measurements && parentData.measurements.width) {
+          treeFinalData['width'] = parentData.measurements.width
+        } else {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'measurements',
+            level: 'high',
+            title: 'Measurements width fix',
+            message: 'width of the tree is missing ',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+          treeFinalData['width'] = 0
+        }
+
+        if (interventionSpecies.length > 0 && interventionSpecies[0].scientificSpeciesId) {
+          treeFinalData['scientificSpeciesId'] = interventionSpecies[0].scientificSpeciesId
+          treeFinalData['speciesName'] = interventionSpecies[0].speciesName
+        }
+
+        if (interventionSpecies.length > 0 && interventionSpecies[0].isUnknown) {
+          treeFinalData['isUnknown'] = true
+        }
+
+        if (!interventionSpecies || interventionSpecies.length === 0) {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'species',
+            level: 'high',
+            title: 'species fix requried',
+            message: 'species of the tree is missing ',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+        }
+
+        let newHID = generateParentHID();
+        treeFinalData['hid'] = newHID
+        treeFinalData['uid'] = generateUid('tree')
+        treeFinalData['createdById'] = userId
+        treeFinalData['interventionSpeciesId'] = interventionSpecies && interventionSpecies[0] ? interventionSpecies[0].uid : generateUid('temp'),
+          treeFinalData['tag'] = parentData.tag
+        treeFinalData['treeType'] = 'single'
+        treeFinalData['location'] = singleTreeLocation
+        treeFinalData['originalGeometry'] = parentData.originalGeometry
+        treeFinalData['status'] = parentData.status || 'alive'
+        treeFinalData['statusReason'] = parentData.statusReason || null
+        treeFinalData['plantingDate'] = parentData.planting_date || parentData.interventionStartDate || parentData.registrationDate || new Date()
+        treeFinalData['flag'] = singleTreeflag
+        treeFinalData['flagReason'] = singleTreeFlagreason
+        interventionSampleTree.push(treeFinalData)
       }
-
-      if (interventionSpecies[0].scientificSpeciesId) {
-        treeFinalData['scientificSpeciesId'] = interventionSpecies[0].scientificSpeciesId
-        treeFinalData['speciesName'] = interventionSpecies[0].speciesName
-      }
-
-      if (interventionSpecies[0].isUnknown) {
-        treeFinalData['isUnknown'] = true
-      }
-
-      let newHID = generateParentHID();
-      treeFinalData['hid'] = newHID
-      treeFinalData['uid'] = generateUid('tree')
-      treeFinalData['createdById'] = userId
-      treeFinalData['interventionSpeciesId'] = interventionSpecies[0].uid
-      treeFinalData['tag'] = parentData.tag
-      treeFinalData['treeType'] = 'single'
-      treeFinalData['location'] = singleTreeLocation
-      treeFinalData['status'] = parentData.status || 'alive'
-      treeFinalData['statusReason'] = parentData.statusReason || null
-      treeFinalData['plantingDate'] = parentData.planting_date || parentData.interventionStartDate || parentData.registrationDate || new Date()
-      treeFinalData['flag'] = singleTreeflag
-      treeFinalData['flagReason'] = singleTreeFlagreason
-      interventionSampleTree.push(treeFinalData)
+    } catch (error) {
+      this.addLog(mgID, 'error', "There is error in this intervention", 'interventions', JSON.stringify(error))
     }
     let transofrmedSample = []
     if (parentData.sampleInterventions && parentData.sampleInterventions.length > 0) {
-      transofrmedSample = await this.transformSampleIntervention(parentData, newProjectId, userId, siteId, interventionSpecies)
+      transofrmedSample = await this.transformSampleIntervention(parentData, userId, siteId, interventionSpecies)
     }
     interventionSampleTree.push(...transofrmedSample)
     return {
       parentFinalData,
-      treeData: interventionSampleTree,
-      interventionSpecies: finalInterventionSpeciesMapping
+      treeData: interventionSampleTree
     }
   }
 
-  private async transformSampleIntervention(parentData: any, newProjectId: number, userId: number, siteId: any, allSpecies) {
+  private async transformSampleIntervention(parentData: any, userId: number, siteId: any, allSpecies) {
     try {
       const allTranformedSampleTrees: any = []
-
       for (const sampleIntervention of parentData.sampleInterventions) {
         let plantLocationDate = sampleIntervention.interventionStartDate || sampleIntervention.plantDate || sampleIntervention.registrationDate
         let treeFinalData = {}
         let singleTreeflag = false
         let singleTreeFlagreason: any = []
-        let invSpeciesId
-        if (sampleIntervention.otherSpecies) {
+        let invSpeciesId: any = null
+        if (sampleIntervention.otherSpecies !== null) {
           invSpeciesId = allSpecies.find(el => el.isUnknown === true)
         }
-        if (sampleIntervention.scientificSpecies) {
+        if (sampleIntervention.scientificSpecies !== null) {
           invSpeciesId = allSpecies.find(el => el.scientificSpeciesUid === sampleIntervention.scientificSpecies)
         }
+
+        if (!invSpeciesId) {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'species',
+            level: 'high',
+            title: 'sample species need fix',
+            message: 'Please update your sample trees species',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+        }
+
+        if (invSpeciesId && !invSpeciesId.uid) {
+          singleTreeflag = true
+          singleTreeFlagreason.push({
+            uid: generateUid('flag'),
+            type: 'species',
+            level: 'high',
+            title: 'sample species uid is incorrect need fix',
+            message: 'Please update your sample trees species',
+            updatedAt: new Date(),
+            createdAt: new Date()
+          })
+        }
+
+
         let singleTreeLocation;
         const singleTreeGeometry = this.getGeoJSONForPostGIS(sampleIntervention.geometry);
 
@@ -1589,7 +1564,7 @@ export class MigrationService {
         }
 
         if (sampleIntervention.measurements && sampleIntervention.measurements.width) {
-          treeFinalData['height'] = sampleIntervention.measurements.width
+          treeFinalData['width'] = sampleIntervention.measurements.width
         } else {
           singleTreeflag = true
           singleTreeFlagreason.push({
@@ -1597,11 +1572,11 @@ export class MigrationService {
             type: 'measurements',
             level: 'high',
             title: 'Measurements width fix',
-            message: 'height of the tree is missing ',
+            message: 'width of the tree is missing ',
             updatedAt: new Date(),
             createdAt: new Date()
           })
-          treeFinalData['lastMeasuredWidth'] = 0
+          treeFinalData['width'] = 0
         }
 
         if (sampleIntervention.scientificSpeciesId) {
@@ -1609,7 +1584,6 @@ export class MigrationService {
           treeFinalData['speciesName'] = sampleIntervention.speciesName || ''
         } else {
           treeFinalData['isUnknown'] = true
-
         }
 
 
@@ -1618,19 +1592,19 @@ export class MigrationService {
         treeFinalData['createdById'] = userId
         treeFinalData['tag'] = sampleIntervention.tag
         treeFinalData['treeType'] = 'sample'
-        treeFinalData['interventionSpeciesId'] = invSpeciesId && invSpeciesId.uid ? invSpeciesId.uid : null
-        treeFinalData['location'] = singleTreeLocation
+        treeFinalData['interventionSpeciesId'] = invSpeciesId?.uid != null ? invSpeciesId.uid : null;
+        treeFinalData['location'] = singleTreeLocation || null
+        treeFinalData['originalGeometry'] = sampleIntervention.originalGeometry
         treeFinalData['status'] = sampleIntervention.status || 'alive'
         treeFinalData['statusReason'] = sampleIntervention.statusReason || null
         treeFinalData['metadata'] = sampleIntervention.metadata || null
-        treeFinalData['plantingDate'] = plantLocationDate
+        treeFinalData['plantingDate'] = plantLocationDate || new Date()
         treeFinalData['flag'] = singleTreeflag
         treeFinalData['flagReason'] = singleTreeFlagreason
         allTranformedSampleTrees.push(treeFinalData);
       }
       return allTranformedSampleTrees
     } catch (error) {
-      console.log("main catch", error)
       return []
     }
   }
