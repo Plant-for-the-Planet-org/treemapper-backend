@@ -56,10 +56,9 @@ export interface RecentAdditionsResponse {
 
 
 export interface PlantingOverviewData {
-  period: string; // Date string for the period
-  treeCount: number;
+  date: Date;
+  value: number;
 }
-
 export interface PlantingOverviewResponse {
   projectId: number;
   interval: string;
@@ -73,11 +72,6 @@ export interface ProjectAnalyticsDto {
 }
 
 export interface ProjectKPIsResponse {
-  projectId: number;
-  dateRange: {
-    startDate: string;
-    endDate: string;
-  };
   kpis: {
     totalTreesPlanted: number;
     totalSpeciesPlanted: number;
@@ -96,7 +90,7 @@ export interface ProjectKPIs {
 
 export interface PlantingOverviewDto {
   projectId: number;
-  interval: '1week' | '7weeks' | '12months';
+  interval: 'days' | 'weeks' | 'months';
 }
 
 
@@ -111,7 +105,6 @@ export class AnalyticsService {
   ) {
   }
 
-
   async getPlantingOverview(dto: PlantingOverviewDto): Promise<PlantingOverviewResponse> {
     const { projectId, interval } = dto;
     const today = new Date();
@@ -119,13 +112,13 @@ export class AnalyticsService {
     let data: PlantingOverviewData[] = [];
 
     switch (interval) {
-      case '1week':
+      case 'days':
         data = await this.getDailyData(projectId, today, 7);
         break;
-      case '7weeks':
+      case 'weeks':
         data = await this.getWeeklyData(projectId, today, 7);
         break;
-      case '12months':
+      case 'months':
         data = await this.getMonthlyData(projectId, today, 12);
         break;
     }
@@ -138,134 +131,173 @@ export class AnalyticsService {
   }
 
   private async getDailyData(projectId: number, today: Date, days: number): Promise<PlantingOverviewData[]> {
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - (days - 1));
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(today);
+    endDate.setHours(23, 59, 59, 999);
+
     const result = await this.drizzleService.db
       .select({
-        period: sql<string>`DATE(${interventions.interventionStartDate})::text`,
+        date: sql<string>`DATE(${interventions.interventionStartDate})`,
         treeCount: sql<number>`COALESCE(SUM(${interventions.treeCount}), 0)`
       })
       .from(interventions)
       .where(
         and(
           eq(interventions.projectId, projectId),
-          gte(interventions.interventionStartDate, this.subtractDays(today, days - 1)),
-          lte(interventions.interventionStartDate, today),
-          sql`${interventions.deletedAt} IS NULL`
+          gte(interventions.interventionStartDate, startDate),
+          lte(interventions.interventionStartDate, endDate),
+          isNull(interventions.deletedAt)
         )
       )
       .groupBy(sql`DATE(${interventions.interventionStartDate})`)
       .orderBy(sql`DATE(${interventions.interventionStartDate})`);
 
-    // Fill missing days with 0 count
-    return this.fillMissingPeriods(result, today, days, 'daily');
+    return this.fillMissingDates(result, startDate, endDate, 'day');
   }
 
   private async getWeeklyData(projectId: number, today: Date, weeks: number): Promise<PlantingOverviewData[]> {
+    const startDate = this.getWeekStart(today);
+    startDate.setDate(startDate.getDate() - ((weeks - 1) * 7));
+
+    const endDate = new Date(today);
+    endDate.setHours(23, 59, 59, 999);
+
     const result = await this.drizzleService.db
       .select({
-        period: sql<string>`DATE_TRUNC('week', ${interventions.interventionStartDate})::date::text`,
+        date: sql<string>`DATE(DATE_TRUNC('week', ${interventions.interventionStartDate}) + INTERVAL '0 days')`,
         treeCount: sql<number>`COALESCE(SUM(${interventions.treeCount}), 0)`
       })
       .from(interventions)
       .where(
         and(
           eq(interventions.projectId, projectId),
-          gte(interventions.interventionStartDate, this.subtractWeeks(today, weeks - 1)),
-          lte(interventions.interventionStartDate, today),
-          sql`${interventions.deletedAt} IS NULL`
+          gte(interventions.interventionStartDate, startDate),
+          lte(interventions.interventionStartDate, endDate),
+          isNull(interventions.deletedAt)
         )
       )
       .groupBy(sql`DATE_TRUNC('week', ${interventions.interventionStartDate})`)
       .orderBy(sql`DATE_TRUNC('week', ${interventions.interventionStartDate})`);
-
-    return this.fillMissingPeriods(result, today, weeks, 'weekly');
+    return this.fillMissingDates(result, this.getWeekStart(startDate), this.getWeekStart(endDate), 'week');
   }
 
   private async getMonthlyData(projectId: number, today: Date, months: number): Promise<PlantingOverviewData[]> {
+    const startDate = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1);
+    const endDate = new Date(today);
+    endDate.setHours(23, 59, 59, 999);
+
     const result = await this.drizzleService.db
       .select({
-        period: sql<string>`DATE_TRUNC('month', ${interventions.interventionStartDate})::date::text`,
+        date: sql<string>`DATE(DATE_TRUNC('month', ${interventions.interventionStartDate}))`,
         treeCount: sql<number>`COALESCE(SUM(${interventions.treeCount}), 0)`
       })
       .from(interventions)
       .where(
         and(
           eq(interventions.projectId, projectId),
-          gte(interventions.interventionStartDate, this.subtractMonths(today, months - 1)),
-          lte(interventions.interventionStartDate, today),
-          sql`${interventions.deletedAt} IS NULL`
+          gte(interventions.interventionStartDate, startDate),
+          lte(interventions.interventionStartDate, endDate),
+          isNull(interventions.deletedAt)
         )
       )
       .groupBy(sql`DATE_TRUNC('month', ${interventions.interventionStartDate})`)
       .orderBy(sql`DATE_TRUNC('month', ${interventions.interventionStartDate})`);
-
-    return this.fillMissingPeriods(result, today, months, 'monthly');
+    return this.fillMissingDates(result, startDate, new Date(today.getFullYear(), today.getMonth(), 1), 'month');
   }
 
-  private fillMissingPeriods(
-    dbResult: { period: string; treeCount: number }[],
-    today: Date,
-    count: number,
-    type: 'daily' | 'weekly' | 'monthly'
+  private fillMissingDates(
+    dbResult: { date: string; treeCount: number }[],
+    startDate: Date,
+    endDate: Date,
+    interval: 'day' | 'week' | 'month'
   ): PlantingOverviewData[] {
-    const resultMap = new Map(dbResult.map(r => [r.period, r.treeCount]));
+    const resultMap = new Map(dbResult.map(r => [r.date, Number(r.treeCount)]));
     const periods: PlantingOverviewData[] = [];
 
-    for (let i = count - 1; i >= 0; i--) {
-      let periodDate: Date;
-      let periodKey: string;
+    if (interval === 'month') {
+      // Handle monthly data
+      const startYear = startDate.getFullYear();
+      const startMonth = startDate.getMonth();
+      const endYear = endDate.getFullYear();
+      const endMonth = endDate.getMonth();
 
-      switch (type) {
-        case 'daily':
-          periodDate = this.subtractDays(today, i);
-          periodKey = periodDate.toISOString().split('T')[0]; // YYYY-MM-DD
-          break;
-        case 'weekly':
-          periodDate = this.subtractWeeks(today, i);
-          periodDate = this.getWeekStart(periodDate); // Get Monday of that week
-          periodKey = periodDate.toISOString().split('T')[0];
-          break;
-        case 'monthly':
-          periodDate = this.subtractMonths(today, i);
-          periodDate = new Date(periodDate.getFullYear(), periodDate.getMonth(), 1); // First day of month
-          periodKey = periodDate.toISOString().split('T')[0];
-          break;
+      let currentYear = startYear;
+      let currentMonth = startMonth;
+
+      while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
+        // Create date key in format YYYY-MM-01 to match your DB format
+        const monthStr = String(currentMonth + 1).padStart(2, '0');
+        const dateKey = `${currentYear}-${monthStr}-01`;
+
+        // Create the date object in UTC to avoid timezone issues
+        const dateObj = new Date(Date.UTC(currentYear, currentMonth, 1));
+
+        periods.push({
+          date: dateObj,
+          value: resultMap.get(dateKey) || 0
+        });
+
+        // Move to next month
+        currentMonth++;
+        if (currentMonth > 11) {
+          currentYear++;
+          currentMonth = 0;
+        }
       }
+    } else if (interval === 'week') {
+      // Handle weekly data
+      let currentDate = new Date(Date.UTC(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate()
+      ));
 
-      periods.push({
-        period: periodKey,
-        treeCount: resultMap.get(periodKey) || 0
-      });
+      while (currentDate <= endDate) {
+        const dateKey = currentDate.toISOString().split('T')[0];
+
+        periods.push({
+          date: new Date(currentDate),
+          value: resultMap.get(dateKey) || 0
+        });
+
+        // Add 7 days
+        currentDate.setUTCDate(currentDate.getUTCDate() + 7);
+      }
+    } else {
+      // Handle daily data
+      let currentDate = new Date(Date.UTC(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate()
+      ));
+
+      while (currentDate <= endDate) {
+        const dateKey = currentDate.toISOString().split('T')[0];
+
+        periods.push({
+          date: new Date(currentDate),
+          value: resultMap.get(dateKey) || 0
+        });
+
+        // Add 1 day
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
     }
 
     return periods;
   }
 
-  private subtractDays(date: Date, days: number): Date {
-    const result = new Date(date);
-    result.setDate(result.getDate() - days);
-    return result;
-  }
-
-  private subtractWeeks(date: Date, weeks: number): Date {
-    const result = new Date(date);
-    result.setDate(result.getDate() - (weeks * 7));
-    return result;
-  }
-
-  private subtractMonths(date: Date, months: number): Date {
-    const result = new Date(date);
-    result.setMonth(result.getMonth() - months);
-    return result;
-  }
-
   private getWeekStart(date: Date): Date {
     const result = new Date(date);
     const day = result.getDay();
-    const diff = result.getDate() - day + (day === 0 ? -6 : 1); // Monday as start of week
+    const diff = result.getDate() - day + (day === 0 ? -6 : 1); // Monday as start
     result.setDate(diff);
+    result.setHours(0, 0, 0, 0);
     return result;
   }
-
 
   async getProjectKPIs(dto: ProjectAnalyticsDto): Promise<ProjectKPIsResponse> {
     const { startDate, endDate, projectId } = dto;
@@ -312,11 +344,6 @@ export class AnalyticsService {
     const contributorResult = contributorStats[0];
 
     return {
-      projectId,
-      dateRange: {
-        startDate,
-        endDate,
-      },
       kpis: {
         totalTreesPlanted: interventionResult?.totalTrees || 0,
         totalSpeciesPlanted: interventionResult?.uniqueSpecies || 0,
@@ -332,90 +359,90 @@ export class AnalyticsService {
 
     // Get all activities using UNION ALL
     const activitiesQuery = sql`
-      (
-        SELECT 
-          i.uid as id,
-          'intervention' as activity_type,
-          i.created_at as time_of_activity,
-          u.id as user_id,
-          u.display_name as user_name,
-          u.image as user_image,
-          i.tree_count as tree_count,
-          NULL as area_in_ha,
-          NULL as species_name,
-          NULL as member_name
-        FROM ${interventions} i
-        JOIN ${users} u ON i.user_id = u.id
-        WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
-      )
-      UNION ALL
-      (
-        SELECT 
-          ps.uid as id,
-          'species' as activity_type,
-          ps.created_at as time_of_activity,
-          u.id as user_id,
-          u.display_name as user_name,
-          u.image as user_image,
-          NULL as tree_count,
-          NULL as area_in_ha,
-          COALESCE(ps.common_name, ss.scientific_name) as species_name,
-          NULL as member_name
-        FROM ${schema.projectSpecies} ps
-        JOIN ${users} u ON ps.added_by_id = u.id
-        JOIN ${schema.scientificSpecies} ss ON ps.scientific_species_id = ss.id
-        WHERE ps.project_id = ${projectId} AND ps.deleted_at IS NULL
-      )
-      UNION ALL
-      (
-        SELECT 
-          s.uid as id,
-          'site' as activity_type,
-          s.created_at as time_of_activity,
-          u.id as user_id,
-          u.display_name as user_name,
-          u.image as user_image,
-          NULL as tree_count,
-          ROUND(ST_Area(s.location::geography) / 10000.0, 2) as area_in_ha,
-          NULL as species_name,
-          NULL as member_name
-        FROM ${schema.sites} s
-        JOIN ${users} u ON s.created_by_id = u.id
-        WHERE s.project_id = ${projectId} AND s.deleted_at IS NULL
-      )
-      UNION ALL
-      (
-        SELECT 
-          pm.uid as id,
-          'member' as activity_type,
-          pm.created_at as time_of_activity,
-          invited_by.id as user_id,
-          invited_by.display_name as user_name,
-          invited_by.image as user_image,
-          NULL as tree_count,
-          NULL as area_in_ha,
-          NULL as species_name,
-          new_member.display_name as member_name
-        FROM ${projectMembers} pm
-        JOIN ${users} new_member ON pm.user_id = new_member.id
-        LEFT JOIN ${users} invited_by ON pm.user_id = invited_by.id
-        WHERE pm.project_id = ${projectId}
-      )
-      ORDER BY time_of_activity DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+    (
+      SELECT 
+        i.uid as id,
+        'intervention' as activity_type,
+        i.created_at as time_of_activity,
+        u.id as user_id,
+        u.display_name as user_name,
+        u.image as user_image,
+        i.tree_count as tree_count,
+        NULL::numeric as area_in_ha,
+        NULL::text as species_name,
+        NULL::text as member_name
+      FROM ${interventions} i
+      JOIN ${users} u ON i.user_id = u.id
+      WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
+    )
+    UNION ALL
+    (
+      SELECT 
+        ps.uid as id,
+        'species' as activity_type,
+        ps.created_at as time_of_activity,
+        u.id as user_id,
+        u.display_name as user_name,
+        u.image as user_image,
+        NULL::integer as tree_count,
+        NULL::numeric as area_in_ha,
+        COALESCE(ps.common_name, ss.scientific_name) as species_name,
+        NULL::text as member_name
+      FROM ${schema.projectSpecies} ps
+      JOIN ${users} u ON ps.added_by_id = u.id
+      JOIN ${schema.scientificSpecies} ss ON ps.scientific_species_id = ss.id
+      WHERE ps.project_id = ${projectId} AND ps.deleted_at IS NULL
+    )
+    UNION ALL
+    (
+      SELECT 
+        s.uid as id,
+        'site' as activity_type,
+        s.created_at as time_of_activity,
+        u.id as user_id,
+        u.display_name as user_name,
+        u.image as user_image,
+        NULL::integer as tree_count,
+        ROUND((ST_Area(s.location::geography) / 10000.0)::numeric, 2) as area_in_ha,
+        NULL::text as species_name,
+        NULL::text as member_name
+      FROM ${schema.sites} s
+      JOIN ${users} u ON s.created_by_id = u.id
+      WHERE s.project_id = ${projectId} AND s.deleted_at IS NULL
+    )
+    UNION ALL
+    (
+      SELECT 
+        pm.uid as id,
+        'member' as activity_type,
+        pm.created_at as time_of_activity,
+        invited_by.id as user_id,
+        invited_by.display_name as user_name,
+        invited_by.image as user_image,
+        NULL::integer as tree_count,
+        NULL::numeric as area_in_ha,
+        NULL::text as species_name,
+        new_member.display_name as member_name
+      FROM ${projectMembers} pm
+      JOIN ${users} new_member ON pm.user_id = new_member.id
+      LEFT JOIN ${users} invited_by ON pm.user_id = invited_by.id
+      WHERE pm.project_id = ${projectId}
+    )
+    ORDER BY time_of_activity DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
 
     const countQuery = sql`
-      SELECT COUNT(*) as total FROM (
-        (SELECT uid FROM ${interventions} WHERE project_id = ${projectId} AND deleted_at IS NULL)
-        UNION ALL
-        (SELECT uid FROM ${schema.projectSpecies} WHERE project_id = ${projectId} AND deleted_at IS NULL)
-        UNION ALL
-        (SELECT uid FROM ${schema.sites} WHERE project_id = ${projectId} AND deleted_at IS NULL)
-        UNION ALL
-        (SELECT uid FROM ${projectMembers} WHERE project_id = ${projectId})
-      ) combined
-    `;
+    SELECT COUNT(*) as total FROM (
+      (SELECT uid FROM ${interventions} WHERE project_id = ${projectId} AND deleted_at IS NULL)
+      UNION ALL
+      (SELECT uid FROM ${schema.projectSpecies} WHERE project_id = ${projectId} AND deleted_at IS NULL)
+      UNION ALL
+      (SELECT uid FROM ${schema.sites} WHERE project_id = ${projectId} AND deleted_at IS NULL)
+      UNION ALL
+      (SELECT uid FROM ${projectMembers} WHERE project_id = ${projectId})
+    ) combined
+  `;
 
     const [activitiesResult, countResult] = await Promise.all([
       this.drizzleService.db.execute(activitiesQuery),
@@ -473,21 +500,21 @@ export class AnalyticsService {
       case 'intervention':
         const treeText = row.tree_count === 1 ? 'tree' : 'trees';
         return `Created intervention with ${row.tree_count} ${treeText}`;
-      
+
       case 'species':
         return `Added ${row.species_name} species to project`;
-      
+
       case 'site':
         return `Created new site covering ${row.area_in_ha} ha`;
-      
+
       case 'member':
-        return row.member_name 
+        return row.member_name
           ? `Invited ${row.member_name} to project`
           : `Joined the project`;
-      
+
       default:
         return 'Unknown activity';
     }
   }
-  
+
 }
