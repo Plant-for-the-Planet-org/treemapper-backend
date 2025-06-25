@@ -95,6 +95,20 @@ export class ProjectsController {
     return this.projectsService.getProjectInviteStatus(invite, req.user.email);
   }
 
+  @Get('invites/:invite/status/link')
+  getProjectSingleLinkStatus(@Param('invite') invite: string, @Req() req) {
+    return this.projectsService.getProjectSingleLinkStatus(invite);
+  }
+
+
+
+  @Get('/:id/links')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  getAllProjectInviteLink(@Membership() membership: ProjectGuardResponse,) {
+    return this.projectsService.getProjectInviteLink(membership);
+  }
+
   @Post('invites/accept')
   acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
     return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id, req.user.email);
@@ -102,7 +116,7 @@ export class ProjectsController {
 
   @Post('invites/accept/link')
   acceptInviteLink(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
-    return this.projectsService.acceptLinkInvite(acceptInviteDto.token, req.user.id);
+    return this.projectsService.acceptLinkInvite(acceptInviteDto.token, req.user.id, req.user.email);
   }
 
 
@@ -171,6 +185,14 @@ export class ProjectsController {
   remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
     return this.projectsService.remove(id, req.user.id);
   }
+
+  @Patch(':id/invites/:invite/link')
+  @ProjectRoles('owner')
+  @UseGuards(ProjectPermissionsGuard)
+  removeInviteLink(@Param('invite') invite: string, @Membership() membership: any) {
+    return this.projectsService.removeInviteLink(membership, invite);
+  }
+
 
   @Get(':id/members')
   @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')

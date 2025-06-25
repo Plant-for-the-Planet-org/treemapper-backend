@@ -123,7 +123,11 @@ export class UsersService {
   }
 
   async findByAuth0Id(auth0Id: string): Promise<User | null> {
-    return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    try {
+      return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    } catch (error) {
+      return null
+    }
   }
 
   async findById(id: number): Promise<User | null> {

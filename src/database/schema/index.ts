@@ -308,12 +308,14 @@ export const bulkInvites = pgTable('bulk_invites', {
   token: uuid('token').defaultRandom().notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
 }, (table) => ({
   projectBulkIdIdx: index('project_bulk_invites_project_idx').on(table.projectId),
+  deletedAtIdx: index('project_bulk_invites_deleted_at_idx').on(table.deletedAt),
 }));
 
 // ============================================================================
