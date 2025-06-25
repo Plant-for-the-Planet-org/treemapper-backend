@@ -45,6 +45,7 @@ CREATE TABLE "bulk_invites" (
 	"token" uuid DEFAULT gen_random_uuid() NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "bulk_invites_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "bulk_invites_token_unique" UNIQUE("token")
@@ -485,6 +486,7 @@ CREATE INDEX "audit_logs_table_record_idx" ON "audit_logs" USING btree ("table_n
 CREATE INDEX "audit_logs_user_idx" ON "audit_logs" USING btree ("changed_by");--> statement-breakpoint
 CREATE INDEX "audit_logs_time_idx" ON "audit_logs" USING btree ("changed_at");--> statement-breakpoint
 CREATE INDEX "project_bulk_invites_project_idx" ON "bulk_invites" USING btree ("project_id");--> statement-breakpoint
+CREATE INDEX "project_bulk_invites_deleted_at_idx" ON "bulk_invites" USING btree ("deleted_at");--> statement-breakpoint
 CREATE INDEX "entityId_images__id_idx" ON "images" USING btree ("entity_id");--> statement-breakpoint
 CREATE INDEX "intervention_records_intervention_idx" ON "intervention_records" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "intervention_updated_by_idx" ON "intervention_records" USING btree ("updated_by");--> statement-breakpoint

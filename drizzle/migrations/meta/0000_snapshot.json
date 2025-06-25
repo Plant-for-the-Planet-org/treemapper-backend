@@ -1,5 +1,5 @@
 {
-  "id": "d724b2c8-f98a-46a9-bd5d-3dd8074bead7",
+  "id": "ef00ce71-a1d5-4fc1-b821-d15be00b257b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -232,6 +232,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -246,6 +252,21 @@
           "columns": [
             {
               "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "project_bulk_invites_deleted_at_idx": {
+          "name": "project_bulk_invites_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "deleted_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
