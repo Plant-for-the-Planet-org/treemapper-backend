@@ -20,7 +20,6 @@ import {
 import { interventions, projectMembers, trees, users } from '../database/schema';
 
 export interface RecentAdditionsDto {
-  projectId: number;
   page: number;
   limit: number;
 }
@@ -68,7 +67,7 @@ export interface PlantingOverviewResponse {
 export interface ProjectAnalyticsDto {
   startDate: string; // ISO date string
   endDate: string;   // ISO date string
-  projectId: number;
+  projectId: string;
 }
 
 export interface ProjectKPIsResponse {
@@ -89,7 +88,6 @@ export interface ProjectKPIs {
 
 
 export interface PlantingOverviewDto {
-  projectId: number;
   interval: 'days' | 'weeks' | 'months';
 }
 
@@ -105,8 +103,8 @@ export class AnalyticsService {
   ) {
   }
 
-  async getPlantingOverview(dto: PlantingOverviewDto): Promise<PlantingOverviewResponse> {
-    const { projectId, interval } = dto;
+  async getPlantingOverview(dto: PlantingOverviewDto, projectId): Promise<PlantingOverviewResponse> {
+    const { interval } = dto;
     const today = new Date();
 
     let data: PlantingOverviewData[] = [];
@@ -299,11 +297,10 @@ export class AnalyticsService {
     return result;
   }
 
-  async getProjectKPIs(dto: ProjectAnalyticsDto): Promise<ProjectKPIsResponse> {
-    const { startDate, endDate, projectId } = dto;
+  async getProjectKPIs(dto: ProjectAnalyticsDto, projectId): Promise<ProjectKPIsResponse> {
+    const { startDate, endDate } = dto;
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-
     // Single query to get trees, species, and area from interventions
     const interventionStats = await this.drizzleService.db
       .select({
@@ -353,8 +350,8 @@ export class AnalyticsService {
     };
   }
 
-  async getRecentAdditions(dto: RecentAdditionsDto): Promise<RecentAdditionsResponse> {
-    const { projectId, page, limit } = dto;
+  async getRecentAdditions(dto: RecentAdditionsDto, projectId): Promise<RecentAdditionsResponse> {
+    const { page, limit } = dto;
     const offset = (page - 1) * limit;
 
     // Get all activities using UNION ALL

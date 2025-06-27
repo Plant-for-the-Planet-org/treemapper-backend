@@ -30,20 +30,26 @@ export enum TimeInterval {
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) { }
 
-  @Get('planting-overview')
-  async getPlantingOverview(@Query() dto: PlantingOverviewDto): Promise<PlantingOverviewResponse> {
-    return this.analyticsService.getPlantingOverview(dto);
+  @Get('planting-overview/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getPlantingOverview(@Query() dto: PlantingOverviewDto, @Membership() membership: any,
+  ): Promise<PlantingOverviewResponse> {
+    return this.analyticsService.getPlantingOverview(dto, membership.projectId);
   }
 
-    @Get('recent-additions')
-  async getRecentAdditions(@Query() dto: RecentAdditionsDto): Promise<RecentAdditionsResponse> {
-    return this.analyticsService.getRecentAdditions(dto);
+  @Get('recent-additions/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getRecentAdditions(@Query() dto: RecentAdditionsDto, @Membership() membership: any): Promise<RecentAdditionsResponse> {
+    return this.analyticsService.getRecentAdditions(dto, membership.projectId);
   }
 
-  @Get('project-kpis')
-  async getProjectKPIs(@Query() dto: ProjectAnalyticsDto): Promise<ProjectKPIsResponse> {
-    return this.analyticsService.getProjectKPIs(dto);
+  @Get('project-kpis/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectKPIs(@Query() dto: ProjectAnalyticsDto, @Membership() membership: any,
+  ): Promise<ProjectKPIsResponse> {
+    return this.analyticsService.getProjectKPIs(dto, membership.projectId);
   }
-
-  
 }
