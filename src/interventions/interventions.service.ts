@@ -10,13 +10,15 @@ import {
   users,
   treeRecords,
   trees,
+  InterventionSpeciesEntry,
 } from '../database/schema/index';
 import {
   CreateInterventionDto,
   UpdateInterventionDto,
   QueryInterventionDto,
   BulkImportResultDto,
-  InterventionResponseDto
+  InterventionResponseDto,
+  CreateInterventionBulkDto
 } from './dto/interventions.dto';
 import * as XLSX from 'xlsx';
 import { generateUid } from 'src/util/uidGenerator';
@@ -291,6 +293,132 @@ export class InterventionsService {
     }
   }
 
+
+
+  async bulk(createInterventionDto: CreateInterventionBulkDto[], membership: ProjectGuardResponse): Promise<any> {
+    try {
+      console.log('Bulk create interventions:', createInterventionDto.length);
+      let projectSiteId: null | number = null;
+      const failedUpload = [];
+      if (createInterventionDto[0].plantProjectSite && !createInterventionDto[0].plantProject) {
+        throw new NotFoundException('Project not found');
+      }
+      if (createInterventionDto[0].plantProjectSite) {
+        const site = await this.drizzleService.db
+          .select()
+          .from(sites)
+          .where(eq(sites.uid, createInterventionDto[0].plantProjectSite ?? ''))
+          .limit(1);
+        if (site.length === 0) {
+          throw new NotFoundException('Site not found');
+        }
+        projectSiteId = site[0].id;
+      }
+
+      const tranformedData: any = [];
+      createInterventionDto.forEach(async (el: CreateInterventionBulkDto) => {
+        let newHID = generateParentHID();
+        const uid = generateUid('inv');
+        let failed = false;
+        let failedReason: string[] = []
+        const interventionConfig = interventionConfigurationSeedData.find(p => p.interventionType === el.type);
+        if (!interventionConfig) {
+          failed = true;
+          failedReason = ['Invalid intervention type'];
+        }
+        if (el.species && el.species.length === 0) {
+          failed = true;
+          failedReason = ['No Species Data found'];
+        }
+        const geometry = this.getGeoJSONForPostGIS(el.geometry);
+        const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+        tranformedData.push({
+          uid: uid,
+          hid: newHID,
+          discr: 'intervention' as const,
+          userId: membership.userId,
+          idempotencyKey: generateUid('r'),
+          type: el.type,
+          interventionStartDate: new Date(el.interventionStartDate),
+          interventionEndDate: new Date(el.interventionEndDate),
+          captureMode: 'external' as const,
+          captureStatus: CaptureStatus.COMPLETE,
+          location: locationValue,
+          originalGeometry: el.geometry,
+          sampleTreeCount: 0,
+          projectId: membership.projectId,
+          deviceLocation: null,
+          metaData: el.metadata || null,
+          projectSiteId: projectSiteId || null,
+          geometryType: el.geometry.type || 'Point',
+          registrationDate: new Date(el.registrationDate),
+          treesPlanted: el.treesPlanted || null,
+          species: el.species || [],
+          failedReason: failed ? failedReason : null,
+          failed: failed,
+        })
+      })
+      const finalInterventionIDMapping: any = []
+      const filteredData = tranformedData.filter(el => !el.failed);
+      console.log('Filtered data for bulk insert:', filteredData.length);
+      try {
+        await this.drizzleService.db
+          .insert(interventions)
+          .values(filteredData)
+          .returning({ id: interventions.id, uid: interventions.uid });
+      } catch (error) {
+        console.error('Error during bulk insert:', error);
+        const chunkResults = await this.insertChunkIndividually(filteredData);
+        finalInterventionIDMapping.push(...chunkResults.filter(res => res.error === null));
+      }
+      finalInterventionIDMapping.push(...tranformedData.filter(el => el.failed).map(el => ({
+        id: el.uid,
+        uid: el.idempotencyKey,
+        success: false,
+        error: el.failedReason
+      })));
+      return {
+        data: finalInterventionIDMapping,
+        message: 'Bulk intervention uploaed',
+        totalCreated: finalInterventionIDMapping.filter(el => el.success).length,
+        totalFailed: finalInterventionIDMapping.filter(el => !el.success).length
+      }
+    } catch (error) {
+      throw new BadRequestException(`Failed to create interventions: ${error.message}`);
+    }
+  }
+
+  private async insertChunkIndividually(chunk: any[]) {
+    console.log('Inserting chunk of interventions:', chunk.length);
+    const interventionIds: any = []
+    for (let j = 0; j < chunk.length; j++) {
+      try {
+        const result = await this.drizzleService.db
+          .insert(interventions)
+          .values(chunk[j])
+          .returning();
+
+        interventionIds.push({
+          id: result[0].uid,
+          uid: chunk[j].uid,
+          success: true,
+          error: null
+        });
+      } catch (error) {
+        console.error(`Failed to add intervention with id ${chunk[j].uid}:`, error);
+        interventionIds.push({
+          id: null,
+          uid: chunk[j].uid,
+          success: false,
+          error: JSON.stringify(error)
+        });
+      }
+    }
+    return interventionIds;
+  }
+
+
+
   async findAll(
     membership: ProjectGuardResponse,
     params: FindAllInterventionsParams = {}
@@ -505,7 +633,7 @@ export class InterventionsService {
 
       return {
         ...intervention,
-        species:[],
+        species: [],
         trees
       };
     });

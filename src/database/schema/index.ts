@@ -36,7 +36,7 @@ export interface FlagReasonEntry {
   createdAt: Date
 }
 
-interface InterventionSpeciesEntry {
+export interface InterventionSpeciesEntry {
   uid: string;
   scientificSpeciesId?: number;
   scientificSpeciesUid?: string;
@@ -45,7 +45,7 @@ interface InterventionSpeciesEntry {
   otherSpeciesName?: string;
   count: number;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   deletedAt?: string;
 }
 
@@ -111,7 +111,7 @@ export const recordTypeEnum = pgEnum('record_type', [
   'growth_monitoring'
 ]);
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
-export const captureModeEnum = pgEnum('capture_mode', ['on_site', 'off_site']);
+export const captureModeEnum = pgEnum('capture_mode', ['on_site', 'off_site', 'external', 'unknown']);
 export const captureStatusEnum = pgEnum('capture_status', ['complete', 'partial', 'incomplete']);
 export const imageEntityEnum = pgEnum('image_entity', ['projects', 'sites', 'users', 'interventions', 'trees']);
 
@@ -299,7 +299,7 @@ export const bulkInvites = pgTable('bulk_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
-  domainRestriction: varchar('domain_restriction', { length: 320 }).notNull(),
+  restriction: varchar('restriction').array().default([]), 
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedById: integer('invited_by_id').notNull().references(() => users.id),

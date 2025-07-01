@@ -544,7 +544,7 @@ export class ProjectsService {
           projectRole: 'contributor',
           expiresAt: expiryDate,
           message: '',
-          domainRestriction: data.restriction
+          restriction: data.restriction
         })
         .returning();
 
@@ -668,7 +668,7 @@ export class ProjectsService {
         .select({
           invite: {
             uid: bulkInvites.uid,
-            email: bulkInvites.domainRestriction,
+            email: bulkInvites.restriction,
             role: bulkInvites.projectRole,
             message: bulkInvites.message,
             status: bulkInvites.status,
@@ -752,7 +752,7 @@ export class ProjectsService {
         .select({
           id: bulkInvites.uid,
           invitationlink: bulkInvites.token,
-          domain_restriction: bulkInvites.domainRestriction,
+          domain_restriction: bulkInvites.restriction,
           created_at: bulkInvites.createdAt,
           created_by: users.displayName,
         })
@@ -943,8 +943,8 @@ export class ProjectsService {
 
       try {
         const emailDomain = email.substring(email.indexOf('@'));
-        const targetDomain = invite.invite.domainRestriction.startsWith('@') ? invite.invite.domainRestriction : '@' + invite.invite.domainRestriction;
-        if (emailDomain !== targetDomain) {
+        const targetDomain = invite.invite.restriction?.map(el=>el.startsWith('@') ? el: '@' + el)
+        if (!targetDomain?.includes(emailDomain)) {
           return {
             message: 'Please login with the email you have been invited with',
             statusCode: 401,

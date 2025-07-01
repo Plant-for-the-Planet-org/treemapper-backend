@@ -195,6 +195,65 @@ export class CreateInterventionDto {
 
 
 }
+export class CreateInterventionBulkDto {
+
+  @IsEnum(InterventionType)
+  type: InterventionType;
+
+  @IsOptional()
+  @IsGeoJSON({ message: 'Invalid GeoJSON format' })
+  geometry?: any;
+
+  @IsDateString()
+  registrationDate: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: any;
+
+  @IsString()
+  plantProject?: string;
+
+  @IsString()
+  idempotencyKey?: string;
+
+
+
+  @IsOptional()
+  @IsString()
+  plantProjectSite?: string;
+
+  @ApiProperty({ example: '2024-01-15T09:00:00Z' })
+  @IsDateString()
+  interventionStartDate: string;
+
+  @ApiProperty({ example: '2024-01-15T17:00:00Z' })
+  @IsDateString()
+  interventionEndDate: string;
+
+  @IsArray()
+  species: any[]
+
+
+  @IsOptional()
+  height: number;
+
+  @IsOptional()
+  width: number;
+
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  treesPlanted?: number;
+
+
+  @ApiPropertyOptional({ example: 'restoration-2024' })
+  @IsOptional()
+  @IsString()
+  tag?: string;
+
+}
 
 // src/modules/interventions/dto/update-intervention.dto.ts
 import { PartialType } from '@nestjs/swagger';
