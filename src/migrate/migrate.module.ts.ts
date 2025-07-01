@@ -5,6 +5,7 @@ import { MigrationController } from './migrate.controller'
 import { DatabaseModule } from '../database/database.module';
 import { UsersModule } from 'src/users/users.module';
 import { ProjectsModule } from 'src/projects/projects.module';
+import { NotificationModule } from 'src/notification/notification.module';
 
 @Module({
   imports: [
@@ -14,9 +15,10 @@ import { ProjectsModule } from 'src/projects/projects.module';
     }),
     DatabaseModule,
     UsersModule,
-    ProjectsModule
+    ProjectsModule,
+    NotificationModule
   ],
-  controllers: [MigrationController],
+  controllers: [MigrationController,],
   providers: [MigrationService],
   exports: [MigrationService]
 })

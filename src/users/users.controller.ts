@@ -21,6 +21,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -34,13 +35,9 @@ import { CreatePresignedUrlDto } from './dto/signed-url.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
+@ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
-
-  // @Post()
-  // async create(@Body() createUserDto: CreateUserDto) {
-  //   return await this.usersService.create(createUserDto);
-  // }
 
   @Get('me')
   async getProfile(@CurrentUser() users: User) {
@@ -52,7 +49,6 @@ export class UsersController {
       displayName: users.displayName,
       image: users.image,
       slug: users.slug,
-      authName: users.authName,
       type: users.type,
       country: users.country,
       url: users.url,
@@ -61,22 +57,27 @@ export class UsersController {
       locale: users.locale,
       isActive: users.isActive,
       migratedAt: users.migratedAt,
+      existingPlanetUser: users.existingPlanetUser
     }
   }
-
+  // @ApiExcludeEndpoint()
   @Put('migrated')
   async migrated(@CurrentUser() user: User) {
     return await this.usersService.migrateSuccess(user.id);
   }
 
+  // @ApiExcludeEndpoint()
   @Post('presign-url')
   async getSignedUrl(
     @Body() dto: CreatePresignedUrlDto,
     @CurrentUser() user: User) {
-    return await this.usersService.generateR2Url(user.id,dto);
-
+    return await this.usersService.generateR2Url(user.id, dto);
   }
 
+  // @Post()
+  // async create(@Body() createUserDto: CreateUserDto) {
+  //   return await this.usersService.create(createUserDto);
+  // }
 
 
   // @Get('stats')

@@ -27,7 +27,7 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import { InterventionsService } from './interventions.service';
+import { InterventionsService, PaginatedInterventionsResponse } from './interventions.service';
 import {
   CreateInterventionDto,
   UpdateInterventionDto,
@@ -35,6 +35,7 @@ import {
   BulkImportInterventionDto,
   BulkImportResultDto,
   InterventionResponseDto,
+  CreateInterventionBulkDto,
 } from './dto/interventions.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'; // Adjust import path
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard'; // Adjust import path
@@ -58,6 +59,24 @@ export class InterventionsController {
     return this.interventionsService.create(createInterventionDto, membership);
   }
 
+  @Get('/projects/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async findAllintervention(
+    @Membership() membership: any
+  ): Promise<PaginatedInterventionsResponse> {
+    return this.interventionsService.findAll(membership);
+  }
+
+  @Post('/projects/:id/bulk')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async bulkUpload(
+    @Body() interventionData: CreateInterventionBulkDto[],
+    @Membership() membership: any
+  ): Promise<InterventionResponseDto> {
+    return this.interventionsService.bulk(interventionData, membership);
+  }
   // @Get()
   // @ApiOperation({ summary: 'Get all interventions with filtering and pagination' })
   // @ApiResponse({

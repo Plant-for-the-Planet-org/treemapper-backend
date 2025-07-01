@@ -58,6 +58,35 @@ export class SiteController {
     return result;
   }
 
+
+  @Put(':siteUid')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async updateSite(
+    @Param('projectId') projectId: string,
+    @Param('siteUid') siteUid: string,
+    @Body() updateSiteDto: UpdateSiteDto,
+    @Req() req: any
+  ) {
+    // Check permissions - only allow contributors and above
+    const allowedRoles = ['owner', 'admin', 'manager', 'contributor'];
+    if (!allowedRoles.includes(req.userRole)) {
+      throw new ForbiddenException('Insufficient permissions to update sites');
+    }
+
+    const site = await this.siteService.updateSite(
+      parseInt(projectId),
+      siteUid,
+      updateSiteDto
+    );
+
+    return {
+      status: 'success',
+      message: 'Site updated successfully',
+      data: site,
+    };
+  }
+
   // @Get('stats')
   // @ProjectRoles('owner', 'admin')
   // @UseGuards(ProjectPermissionsGuard)

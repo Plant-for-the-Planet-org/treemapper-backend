@@ -96,8 +96,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })
@@ -127,8 +126,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })
@@ -168,8 +166,7 @@ export class SiteService {
         },
         createdBy: {
           uid: users.uid,
-          name: users.authName,
-          displayName: users.displayName,
+          name: users.displayName,
           email: users.email,
         }
       })
@@ -222,7 +219,7 @@ export class SiteService {
       .set(updateData)
       .where(eq(sites.id, existingSite[0].id));
 
-    return this.getSiteById(existingSite[0].id);
+    return '';
   }
 
   async updateSiteImages(

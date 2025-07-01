@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 
 // Services
-// import { SpeciesRequestService } from './species-request.service';
+import { SpeciesRequestService } from './services/species-request.service';
 import { ScientificSpeciesService } from './services/scientific-species.service';
 import { ProjectSpeciesService } from './services/project-species.service';
 import { DatabaseModule } from '../database/database.module';
 import { ProjectsModule } from '../projects/projects.module'; // Add this import
 
 // Controllers
-// import { SpeciesRequestController } from './species-request.controller';
+import { SpeciesRequestController } from './controller/species-request.controller';
 import { ScientificSpeciesController } from './controller/scientific-species.controller';
 import { ProjectSpeciesController } from './controller/project-species.controller';
 
@@ -18,17 +18,17 @@ import { ProjectSpeciesController } from './controller/project-species.controlle
     ProjectsModule
   ],
   controllers: [
-    // SpeciesRequestController,
+    SpeciesRequestController,
     ScientificSpeciesController,
     ProjectSpeciesController,
   ],
   providers: [
-    // SpeciesRequestService,
+    SpeciesRequestService,
     ScientificSpeciesService,
     ProjectSpeciesService,
   ],
   exports: [
-    // SpeciesRequestService,
+    SpeciesRequestService,
     ScientificSpeciesService,
     ProjectSpeciesService,
   ],

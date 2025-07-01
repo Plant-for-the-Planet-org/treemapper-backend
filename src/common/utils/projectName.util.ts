@@ -12,7 +12,7 @@ export function removeDuplicatesByScientificSpeciesId(array: any[]) {
   const duplicates: { index: number; record: any; scientificSpeciesId: any; reason: string }[] = [];
 
   array.forEach((record, index) => {
-    const scientificSpeciesId = record.scientificSpeciesId;
+    const scientificSpeciesId = record.scientificSpecies;
 
     if (seen.has(scientificSpeciesId)) {
       duplicates.push({

@@ -29,7 +29,6 @@ export class UsersService {
     uid: users.uid,
     auth0Id: users.auth0Id,
     email: users.email,
-    authName: users.authName,
     firstname: users.firstname,
     lastname: users.lastname,
     displayName: users.displayName,
@@ -47,8 +46,9 @@ export class UsersService {
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
     migratedAt: users.migratedAt,
-    supportPin: users.supportPin,
-    planetRecord: users.planetRecord
+    existingPlanetUser: users.existingPlanetUser,
+    flag: users.flag,
+    flagReason: users.flagReason
   } as const;
 
   // Public user selection (excludes sensitive fields)
@@ -60,7 +60,6 @@ export class UsersService {
     displayName: users.displayName,
     image: users.image,
     slug: users.slug,
-    authName: users.authName,
     type: users.type,
     country: users.country,
     url: users.url,
@@ -90,7 +89,7 @@ export class UsersService {
             uid: generateUid('usr'),
             auth0Id: auth0Id,
             email: email,
-            authName: name || email.split('@')[0],
+            displayName: name || email.split('@')[0],
             isActive: true,
             lastLoginAt: new Date(),
           })
@@ -108,7 +107,6 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User | null> {
     const cacheKey = CACHE_KEYS.USER.BY_EMAIL(email);
-
     return await this.cacheService.getOrSet(
       cacheKey,
       async () => {
@@ -125,7 +123,11 @@ export class UsersService {
   }
 
   async findByAuth0Id(auth0Id: string): Promise<User | null> {
-    return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    try {
+      return await this.cacheService.get(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+    } catch (error) {
+      return null
+    }
   }
 
   async findById(id: number): Promise<User | null> {
@@ -154,6 +156,13 @@ export class UsersService {
   }
 
 
+  public async resetUserCache(user: number): Promise<void> {
+    try {
+      await this.cacheService.reset()
+    } catch (error) {
+      // Don't throw - cache failure shouldn't break user operations
+    }
+  }
 
 
   async migrateSuccess(id: number): Promise<Boolean> {
@@ -198,14 +207,8 @@ export class UsersService {
       .update(users)
       .set({
         updatedAt: new Date(),
-        migratedAt: new Date(),
       })
       .where(eq(users.id, id))
-      .returning({
-        users: users.id,
-        email: users.email,
-        authID: users.auth0Id,
-      });
     this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));
     this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(result[0].authID));
     this.cacheService.delete(CACHE_KEYS.USER.BY_EMAIL(result[0].email));
@@ -229,7 +232,6 @@ export class UsersService {
         displayName: users.displayName,
         image: users.image,
         slug: users.slug,
-        authName: users.authName,
         type: users.type,
         country: users.country,
         url: users.url,
@@ -241,7 +243,8 @@ export class UsersService {
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         migratedAt: users.migratedAt,
-        planetRecord: users.planetRecord
+        existingPlanetUser: users.existingPlanetUser, flag: users.flag,
+        flagReason: users.flagReason
       });
 
     return result[0];
@@ -288,13 +291,7 @@ export class UsersService {
   //   }
   // }
 
-  private toPublicUser(user: User): PublicUser {
-    const {
-      id, auth0Id, supportPin, deletedAt, // Remove private fields
-      ...publicFields
-    } = user;
-    return publicFields;
-  }
+
 
 
   //  async updateLastLogin(userId: number): Promise<void> {

@@ -101,7 +101,6 @@ export class ScientificSpeciesService {
           scientificName: scientificSpecies.scientificName,
           commonName: scientificSpecies.commonName,
           description: scientificSpecies.description,
-          image: scientificSpecies.image,
         })
         .from(scientificSpecies)
         .where(ilike(scientificSpecies.scientificName, `%${trimmedSearch}%`))

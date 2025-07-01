@@ -9,7 +9,7 @@ import { Cache } from 'cache-manager';
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
 
   /**
    * Get value from cache
@@ -79,36 +79,31 @@ export class CacheService {
    */
   async reset(): Promise<void> {
     try {
-      const store = (this.cacheManager as any).store;
-      if (typeof store.reset === 'function') {
-        await store.reset();
-        this.logger.debug('Cache RESET - all keys deleted');
-      } else {
-        this.logger.warn('Cache store does not support reset() method.');
-      }
+      await this.cacheManager.clear();
+      this.logger.log('Cache store cleared');
     } catch (error) {
       this.logger.error('Cache RESET error:', error);
+      throw error;
     }
   }
-
   /**
    * Get or set pattern - if key doesn't exist, call factory function
    */
   async getOrSet<T>(
-    key: string, 
-    factory: () => Promise<T>, 
+    key: string,
+    factory: () => Promise<T>,
     ttl?: number
   ): Promise<T | null> {
     try {
       let value = await this.get<T>(key);
-      
+
       if (value === null) {
         value = await factory();
         if (value !== null && value !== undefined) {
           await this.set(key, value, ttl);
         }
       }
-      
+
       return value;
     } catch (error) {
       this.logger.error(`Cache GET_OR_SET error for key ${key}:`, error);
