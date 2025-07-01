@@ -204,3 +204,126 @@ export interface CsvExportDataResponse {
     survivalRate: number;
   }>;
 }
+
+export interface InterventionExportDto {
+  startDate: string; // ISO date string
+  endDate: string;   // ISO date string
+  includeDeleted?: boolean; // Optional - default false
+  interventionTypes?: string[]; // Optional - filter by intervention types
+}
+
+export interface ExportedIntervention {
+  // Basic Information
+  interventionId: string;
+  humanReadableId: string;
+  interventionType: string;
+  status: string;
+  isPrivate: boolean;
+  
+  // Dates and Timeline
+  registrationDate: string;
+  interventionStartDate: string;
+  interventionEndDate: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  
+  // Location and Geography
+  location: any; // This can be a GeoJSON object or similar structure
+  deviceLocation?: any;
+  
+  // Tree and Species Information
+  totalTreeCount: number;
+  sampleTreeCount: number;
+  speciesPlanted: Array<{
+    speciesId: string;
+    scientificSpeciesId?: number;
+    speciesName: string;
+    isUnknownSpecies: boolean;
+    otherSpeciesName?: string;
+    treeCount: number;
+    createdAt: string;
+  }>;
+  
+  // Capture Information
+  captureMode: string;
+  captureStatus: string;
+  imageUrl?: string | null
+  
+  // Project and Site Context
+  project: {
+    id: number;
+    name: string;
+    slug: string;
+  } | null;
+  site?: {
+    id: number;
+    name: string;
+  } | null;
+  
+  // User Information
+  createdBy: {
+    displayName: string | null;
+    email: string;
+  } | null;
+  
+
+  
+  // Associated Trees
+  trees: Array<{
+    treeId: string;
+    humanReadableId: string;
+    tag?: string | null;
+    treeType: string;
+    status: string;
+    speciesName?: string | null;
+    height?: number | null;
+    width?: number | null;
+    plantingDate?: string | null;
+    location?: {
+      coordinates: number[];
+      type: string;
+    };
+    lastMeasurementDate?: string;
+  }>;
+  
+  // Records and Updates
+  records: Array<{
+    recordId: string;
+    title?: string;
+    updatedBy: {
+      id: number;
+      displayName: string;
+    };
+    updatedAt: string;
+  }>;
+  
+  // Audit Information
+  isFlagged: boolean;
+  flagReasons?: Array<{
+    type: string;
+    level: string;
+    title: string;
+    message: string;
+    createdAt: string;
+  }>;
+  
+  // Migration Information (if applicable)
+  isMigrated: boolean;
+  
+  // Metadata
+  additionalMetadata?: any;
+}
+
+export interface InterventionExportResponse {
+  exportMetadata: {
+    exportedAt: string;
+    filters: {
+      projectId?: string;
+      interventionTypes?: string[];
+      includeDeleted: boolean;
+    };
+    totalRecords: number;
+    exportFormat: 'json';
+  };
+  interventions: ExportedIntervention[];
+}
