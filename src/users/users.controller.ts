@@ -1,94 +1,143 @@
-import { 
-  Controller, 
-  Get, 
-  Put, 
-  Request, 
-  Body, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
   Param,
-  HttpException,
-  HttpStatus
+  Delete,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+  HttpStatus,
+  HttpCode,
+  NotFoundException,
+  Put,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+  ApiExcludeEndpoint,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UserQueryDto } from './dto/user-query.dto';
+import { UserResponseDto } from './dto/user-response.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { User } from './entities/user.entity';
+import { CreatePresignedUrlDto } from './dto/signed-url.dto';
 
-// Define DTOs for type safety
-interface UpdateUserDto {
-  firstName?: string;
-  lastName?: string;
-  avatarUrl?: string;
-  preferences?: Record<string, any>;
-  emailVerified?: boolean;
-}
-
-interface UpdatePreferencesDto {
-  preferences: Record<string, any>;
-}
-
+@UseGuards(JwtAuthGuard)
 @Controller('users')
+@ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
-  
+  constructor(private readonly usersService: UsersService) { }
+
   @Get('me')
-  async getUsers(@Request() req) {
-    const user = await this.usersService.findOrCreateUser(req.user);
-    return user;
-  }
-
-  @Put('me')
-  async updateCurrentUser(
-    @Request() req,
-    @Body() updateData: UpdateUserDto
-  ) {
-    try {
-      const currentUser = await this.usersService.findOrCreateUser(req.user);
-      const updatedUser = await this.usersService.updateUser(
-        currentUser.user.id,
-        updateData
-      );
-      return updatedUser;
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Failed to update user',
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+  async getProfile(@CurrentUser() users: User) {
+    return {
+      uid: users.uid,
+      email: users.email,
+      firstname: users.firstname,
+      lastname: users.lastname,
+      displayName: users.displayName,
+      image: users.image,
+      slug: users.slug,
+      type: users.type,
+      country: users.country,
+      url: users.url,
+      isPrivate: users.isPrivate,
+      bio: users.bio,
+      locale: users.locale,
+      isActive: users.isActive,
+      migratedAt: users.migratedAt,
+      existingPlanetUser: users.existingPlanetUser
     }
   }
-
-  @Put('me/preferences')
-  async updateCurrentUserPreferences(
-    @Request() req,
-    @Body() { preferences }: UpdatePreferencesDto
-  ) {
-    try {
-      const currentUser = await this.usersService.findOrCreateUser(req.user);
-      const updatedUser = await this.usersService.updateUserPreferences(
-        currentUser.user.id,
-        preferences
-      );
-      return updatedUser;
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Failed to update preferences',
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
+  // @ApiExcludeEndpoint()
+  @Put('migrated')
+  async migrated(@CurrentUser() user: User) {
+    return await this.usersService.migrateSuccess(user.id);
   }
 
-  @Put(':userId')
-  async updateUser(
-    @Param('userId') userId: string,
-    @Body() updateData: UpdateUserDto
-  ) {
-    try {
-      const updatedUser = await this.usersService.updateUser(
-        userId,
-        updateData
-      );
-      return updatedUser;
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Failed to update user',
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
+  // @ApiExcludeEndpoint()
+  @Post('presign-url')
+  async getSignedUrl(
+    @Body() dto: CreatePresignedUrlDto,
+    @CurrentUser() user: User) {
+    return await this.usersService.generateR2Url(user.id, dto);
   }
+
+  // @Post()
+  // async create(@Body() createUserDto: CreateUserDto) {
+  //   return await this.usersService.create(createUserDto);
+  // }
+
+
+  // @Get('stats')
+  // async getStats() {
+  //   return await this.usersService.getUserStats();
+  // }
+
+  // @Get('check-email')
+  // async checkEmail(@Query('email') email: string) {
+  //   const exists = await this.usersService.checkEmailExists(email);
+  //   return { exists };
+  // }
+
+  // @Get('by-guid/:guid')
+  // async findByGuid(@Param('guid') guid: string) {
+  //   return await this.usersService.findByuid(guid);
+  // }
+
+  // @Get(':id')
+  // async findOne(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.findOne(id);
+  // }
+
+  // @Patch('me')
+  // async updateProfile(
+  //   @CurrentUser() user: User,
+  //   @Body() updateUserDto: UpdateUserDto,
+  // ) {
+  //   return await this.usersService.update(user.id, updateUserDto);
+  // }
+
+  // @Patch(':id')
+  // async update(
+  //   @Param('id', ParseIntPipe) id: number,
+  //   @Body() updateUserDto: UpdateUserDto,
+  // ) {
+  //   return await this.usersService.update(id, updateUserDto);
+  // }
+
+  // @Patch(':id/deactivate')
+  // async deactivate(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.deactivate(id);
+  // }
+
+  // @Patch(':id/activate')
+  // async activate(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.activate(id);
+  // }
+
+
+
+  // @Delete(':id')
+  // @HttpCode(HttpStatus.OK)
+  // async remove(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.remove(id);
+  // }
+
+  // @Delete(':id/hard')
+  // @HttpCode(HttpStatus.OK)
+  // async hardDelete(@Param('id', ParseIntPipe) id: number) {
+  //   return await this.usersService.hardDelete(id);
+  // }
 }

@@ -1,50 +1,42 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { RedisCacheModule } from './redis/redis.module';
 import { DatabaseModule } from './database/database.module';
-import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
-import { APP_GUARD } from '@nestjs/core';
-import { ProjectsModule } from './projects/projects.module';
-import { CommonModule } from './common/common.module';
-import { ProjectInviteModule } from './project-invite/project-invite.module';
-import { ProjectSitesModule } from './project-sites/project-sites.module';
 import { AuthModule } from './auth/auth.module';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { RolesGuard } from './auth/roles.guard';
-import { HealthModule } from './health/health.module';
-import { ProjectUsersModule } from './project-users/project-users.module';
+import { MemoryCacheMoudle } from './cache/cache.module';
+import { MigrationModule } from './migrate/migrate.module.ts';
+import { ProjectsModule } from './projects/projects.module';
 import { SpeciesModule } from './species/species.module';
-
+import { EmailModule } from './email/email.module';
+import { NotificationModule } from './notification/notification.module';
+import { SitesModule } from './sites/sites.module';
+import { InterventionsModule } from './interventions/interventions.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
-    CacheModule.register({
-      ttl: 3600, // Time to live in seconds (1 hour)
-      max: 100,  // Maximum number of items in cache
-      isGlobal: true // Make cache available everywhere
+    ConfigModule.forRoot({
+      isGlobal: true,
     }),
-    AuthModule,
-    ConfigModule.forRoot({ isGlobal: true }),
+    RedisCacheModule,
     DatabaseModule,
+    AuthModule,
     UsersModule,
+    MemoryCacheMoudle,
+    MigrationModule,
     ProjectsModule,
-    CommonModule,
-    ProjectInviteModule,
-    ProjectSitesModule,
-    HealthModule,
-    ProjectUsersModule,
-    SpeciesModule
+    SpeciesModule,
+    EmailModule,
+    NotificationModule,
+    SitesModule,
+    SpeciesModule,
+    InterventionsModule,
+    AnalyticsModule
   ],
-  controllers: [],
-  providers: [
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
-  ],
+  controllers: [AppController],
+  providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
