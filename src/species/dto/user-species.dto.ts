@@ -58,7 +58,7 @@ export class UpdateUserSpeciesDto {
   description?: string;
 
   @IsOptional()
-  metaData?: any;
+  metadata?: any;
 
   @IsOptional()
   @IsString()

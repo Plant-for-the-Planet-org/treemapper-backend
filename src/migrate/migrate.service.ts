@@ -99,10 +99,11 @@ export class MigrationService {
         })
       );
 
-      if (response.status === 303) {
+      if (response.status == 303) {
         await this.usersetvice.migrateSuccess(userId)
         await this.drizzleService.db.update(users).set({ existingPlanetUser: false, migratedAt: new Date() }).where(eq(users.id, userId))
         return { migrationNeeded: false, planetId: '' };
+        
       }
       return { migrationNeeded: true, planetId: response.data.id };
     } catch (error) {
@@ -290,7 +291,7 @@ export class MigrationService {
 
       await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
       await this.completeMigration(userMigrationRecord.id);
-      await this.usersetvice.resetUserCache(userId)
+      await this.usersetvice.resetUserCache()
       await this.drizzleService.db.update(users).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(users.id, userId))
       await this.notificationService.createNotification({
         userId: userId,
@@ -577,7 +578,6 @@ export class MigrationService {
             timeout: 30000 // 30 second timeout
           })
         );
-
         return response;
       } catch (error) {
         if (attempt === retries) {

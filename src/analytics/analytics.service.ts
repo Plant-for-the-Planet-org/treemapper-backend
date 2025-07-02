@@ -508,9 +508,7 @@ export class AnalyticsService {
         return `Created new site covering ${row.area_in_ha} ha`;
 
       case 'member':
-        return row.member_name
-          ? `Invited ${row.member_name} to project`
-          : `Joined the project`;
+        return  `Joined the project`;
 
       default:
         return 'Unknown activity';

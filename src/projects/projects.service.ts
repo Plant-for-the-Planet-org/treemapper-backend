@@ -520,16 +520,16 @@ export class ProjectsService {
   async createInviteLink(membership: ProjectGuardResponse, data: any): Promise<any> {
     try {
 
-      const validateRestriction = isValidEmailDomain(data.restriction)
-      if (!validateRestriction) {
-        return {
-          message: 'Failed to validate domain',
-          statusCode: 500,
-          error: "restriction",
-          data: null,
-          code: 'restriction',
-        };
-      }
+      data.restriction.forEach((el: string, index: number) => {
+        if (!isValidEmailDomain(el)) {
+          throw new BadRequestException(`Invalid email domain: ${el}`);
+        }
+        // Ensure all restrictions start with '@'
+        if (!el.startsWith('@')) {
+          data.restriction[index] = '@' + el;
+        }
+      })
+
       // Create invitation
       const expiryDate = new Date(data.expiry);
 
@@ -573,7 +573,6 @@ export class ProjectsService {
   }
 
   async getProjectInviteStatus(token: string, email: string): Promise<ProjectInviteStatusResponse> {
-    console.log("SDCC", token, email,)
     try {
       const inviteResult = await this.drizzleService.db
         .select({
@@ -609,7 +608,6 @@ export class ProjectsService {
         .where(eq(projectInvites.token, token))
         .orderBy(desc(projectInvites.createdAt))
         .limit(1);
-      console.log("SDC", inviteResult)
       if (!inviteResult.length) {
         throw new NotFoundException('Invitation not found');
       }
@@ -943,7 +941,7 @@ export class ProjectsService {
 
       try {
         const emailDomain = email.substring(email.indexOf('@'));
-        const targetDomain = invite.invite.restriction?.map(el=>el.startsWith('@') ? el: '@' + el)
+        const targetDomain = invite.invite.restriction
         if (!targetDomain?.includes(emailDomain)) {
           return {
             message: 'Please login with the email you have been invited with',

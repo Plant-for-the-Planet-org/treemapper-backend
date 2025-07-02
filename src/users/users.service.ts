@@ -156,7 +156,7 @@ export class UsersService {
   }
 
 
-  public async resetUserCache(user: number): Promise<void> {
+  public async resetUserCache(): Promise<void> {
     try {
       await this.cacheService.reset()
     } catch (error) {
@@ -203,15 +203,7 @@ export class UsersService {
   }
 
   async updateUseMigration(id: number): Promise<Boolean> {
-    const result = await this.drizzleService.db
-      .update(users)
-      .set({
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, id))
-    this.cacheService.delete(CACHE_KEYS.USER.BY_ID(id));
-    this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(result[0].authID));
-    this.cacheService.delete(CACHE_KEYS.USER.BY_EMAIL(result[0].email));
+    this.resetUserCache()
     return true;
   }
 
