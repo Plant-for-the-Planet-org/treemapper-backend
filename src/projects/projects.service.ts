@@ -1401,7 +1401,7 @@ export class ProjectsService {
     try {
       const projectQuery = await this.drizzleService.db
         .select({
-          id: projects.id,
+          uid: projects.uid,
           slug: projects.slug,
           projectName: projects.projectName,
           projectType: projects.projectType,
@@ -1418,6 +1418,7 @@ export class ProjectsService {
           url: projects.url,
           isActive: projects.isActive,
           isPublic: projects.isPublic,
+          isPersonal: projects.isPersonal,
           intensity: projects.intensity,
           revisionPeriodicityLevel: projects.revisionPeriodicityLevel,
           metadata: projects.metadata,

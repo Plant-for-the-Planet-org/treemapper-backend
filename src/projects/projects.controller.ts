@@ -163,9 +163,10 @@ export class ProjectsController {
 
 
   @Get(':id')
-  @Public()
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findOne(id);
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  findOne(@Membership() membership: ProjectGuardResponse) {
+    return this.projectsService.findOne(membership.projectId);
   }
 
   @Patch(':id')
