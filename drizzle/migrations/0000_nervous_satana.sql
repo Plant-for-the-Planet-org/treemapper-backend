@@ -1,12 +1,12 @@
-CREATE TYPE "public"."capture_mode" AS ENUM('on_site', 'off_site');--> statement-breakpoint
-CREATE TYPE "public"."capture_method" AS ENUM('app', 'map', 'survey', 'web_import');--> statement-breakpoint
+CREATE TYPE "public"."capture_mode" AS ENUM('on-site', 'off-site', 'external', 'unknown');--> statement-breakpoint
+CREATE TYPE "public"."capture_method" AS ENUM('app', 'map', 'survey', 'web-import');--> statement-breakpoint
 CREATE TYPE "public"."capture_status" AS ENUM('complete', 'partial', 'incomplete');--> statement-breakpoint
 CREATE TYPE "public"."coordinate_type" AS ENUM('gps', 'manual', 'estimated');--> statement-breakpoint
 CREATE TYPE "public"."entity_type" AS ENUM('users', 'projects', 'interventions', 'species', 'sites', 'images');--> statement-breakpoint
 CREATE TYPE "public"."image_entity" AS ENUM('projects', 'sites', 'users', 'interventions', 'trees');--> statement-breakpoint
 CREATE TYPE "public"."image_type" AS ENUM('before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record');--> statement-breakpoint
 CREATE TYPE "public"."intervention_discriminator" AS ENUM('plot', 'intervention');--> statement-breakpoint
-CREATE TYPE "public"."intervention_status" AS ENUM('planned', 'active', 'completed', 'failed', 'on_hold', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."intervention_status" AS ENUM('planned', 'active', 'completed', 'failed', 'on-hold', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."intervention_type" AS ENUM('assisting-seed-rain', 'control-livestock', 'direct-seeding', 'enrichment-planting', 'fencing', 'fire-patrol', 'fire-suppression', 'firebreaks', 'generic-tree-registration', 'grass-suppression', 'liberating-regenerant', 'maintenance', 'marking-regenerant', 'multi-tree-registration', 'other-intervention', 'plot-plant-registration', 'removal-invasive-species', 'sample-tree-registration', 'single-tree-registration', 'soil-improvement', 'stop-tree-harvesting');--> statement-breakpoint
 CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'declined', 'expired', 'discarded');--> statement-breakpoint
 CREATE TYPE "public"."log_level" AS ENUM('debug', 'info', 'warning', 'error', 'fatal');--> statement-breakpoint
@@ -36,7 +36,7 @@ CREATE TABLE "bulk_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
-	"domain_restriction" varchar(320) NOT NULL,
+	"restriction" varchar[] DEFAULT '{}',
 	"message" varchar(400),
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
 	"invited_by_id" integer NOT NULL,
@@ -114,6 +114,7 @@ CREATE TABLE "interventions" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"flag" boolean DEFAULT false,
+	"has_records" boolean DEFAULT false,
 	"flag_reason" jsonb,
 	"deleted_at" timestamp with time zone,
 	"migrated_intervention" boolean DEFAULT false,

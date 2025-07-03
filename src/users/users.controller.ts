@@ -71,7 +71,7 @@ export class UsersController {
   async getSignedUrl(
     @Body() dto: CreatePresignedUrlDto,
     @CurrentUser() user: User) {
-    return await this.usersService.generateR2Url(user.id, dto);
+    return await this.usersService.generateR2Url(dto);
   }
 
   // @Post()

@@ -1,1 +1,0 @@
-ALTER TABLE "bulk_invites" RENAME COLUMN "domain_restriction" TO "restriction";

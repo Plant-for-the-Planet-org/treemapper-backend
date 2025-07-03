@@ -111,16 +111,16 @@ export const recordTypeEnum = pgEnum('record_type', [
   'growth_monitoring'
 ]);
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
-export const captureModeEnum = pgEnum('capture_mode', ['on_site', 'off_site', 'external', 'unknown']);
+export const captureModeEnum = pgEnum('capture_mode', ['on-site', 'off-site', 'external', 'unknown']);
 export const captureStatusEnum = pgEnum('capture_status', ['complete', 'partial', 'incomplete']);
 export const imageEntityEnum = pgEnum('image_entity', ['projects', 'sites', 'users', 'interventions', 'trees']);
 
 export const interventionDiscriminatorEnum = pgEnum('intervention_discriminator', ['plot', 'intervention']);
 export const treeTypeEnum = pgEnum('tree_enum', ['single', 'sample', 'plot']);
 export const coordinateTypeEnum = pgEnum('coordinate_type', ['gps', 'manual', 'estimated']);
-export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'survey', 'web_import']);
+export const captureModeMethodEnum = pgEnum('capture_method', ['app', 'map', 'survey', 'web-import']);
 export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record']);
-export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 'active', 'completed', 'failed', 'on_hold', 'cancelled']);
+export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 'active', 'completed', 'failed', 'on-hold', 'cancelled']);
 export const migrationStatusEnum = pgEnum('migration_status', [
   'in_progress', 'completed', 'failed', 'started'
 ]);
@@ -531,6 +531,7 @@ export const interventions = pgTable('interventions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   flag: boolean('flag').default(false),
+  hasRecords:boolean('has_records').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedIntervention: boolean('migrated_intervention').default(false),
@@ -564,7 +565,7 @@ export const trees = pgTable('trees', {
   width: doublePrecision('width'),
   status: treeStatusEnum('status').default('alive').notNull(),
   statusReason: varchar('status_reason'),
-  plantingDate: date('planting_date'),
+  plantingDate: timestamp('planting_date', { withTimezone: true }),
   lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
   nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
   image: text('image'),

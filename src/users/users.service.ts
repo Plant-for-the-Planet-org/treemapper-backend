@@ -169,7 +169,7 @@ export class UsersService {
     return await this.updateUseMigration(id);
   }
 
-  async generateR2Url(udi: number, dto: CreatePresignedUrlDto): Promise<any> {
+  async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
     try {
       if (!dto.fileName || !dto.fileType) {
         throw new BadRequestException('fileName and fileType are required');
@@ -187,7 +187,7 @@ export class UsersService {
       const result = await this.r2Service.generatePresignedUrl({
         fileName: dto.fileName,
         fileType: dto.fileType,
-        folder: dto.folder || 'uploads', // default folder
+        folder: `development/${dto.folder}`,
       });
 
       return {

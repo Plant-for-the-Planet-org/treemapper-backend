@@ -1,6 +1,6 @@
 {
-  "id": "96c5219a-48b1-4475-a13e-cef122eee506",
-  "prevId": "ef00ce71-a1d5-4fc1-b821-d15be00b257b",
+  "id": "6dd7a01c-72e8-4144-b4bc-b00a24158bbe",
+  "prevId": "795e9996-951e-4a60-868b-2a4b0491cedd",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -172,11 +172,12 @@
           "primaryKey": false,
           "notNull": true
         },
-        "domain_restriction": {
-          "name": "domain_restriction",
-          "type": "varchar(320)",
+        "restriction": {
+          "name": "restriction",
+          "type": "varchar[]",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false,
+          "default": "'{}'"
         },
         "message": {
           "name": "message",
@@ -800,6 +801,13 @@
         },
         "flag": {
           "name": "flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "has_records": {
+          "name": "has_records",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
@@ -3460,7 +3468,7 @@
         },
         "planting_date": {
           "name": "planting_date",
-          "type": "date",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -4042,8 +4050,8 @@
       "name": "capture_mode",
       "schema": "public",
       "values": [
-        "on_site",
-        "off_site",
+        "on-site",
+        "off-site",
         "external",
         "unknown"
       ]
@@ -4055,7 +4063,7 @@
         "app",
         "map",
         "survey",
-        "web_import"
+        "web-import"
       ]
     },
     "public.capture_status": {
@@ -4130,7 +4138,7 @@
         "active",
         "completed",
         "failed",
-        "on_hold",
+        "on-hold",
         "cancelled"
       ]
     },

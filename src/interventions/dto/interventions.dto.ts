@@ -101,6 +101,7 @@ export class InterventionSpeciesDto {
 
 export class CreateInterventionDto {
 
+  @IsOptional()
   @IsEnum(InterventionType)
   type: InterventionType;
 
@@ -108,8 +109,8 @@ export class CreateInterventionDto {
   @IsString()
   captureMode?: string;
 
-
-  @IsObject() //TODO : fixed schema
+  @IsOptional()
+  @IsObject()
   deviceLocation?: any;
 
 
@@ -117,6 +118,7 @@ export class CreateInterventionDto {
   @IsGeoJSON({ message: 'Invalid GeoJSON format' })
   geometry?: any;
 
+  @IsOptional()
   @IsDateString()
   registrationDate: string;
 
