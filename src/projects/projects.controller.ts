@@ -196,7 +196,7 @@ export class ProjectsController {
 
 
   @Get(':id/members')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   getMembers(@Param('id', ParseIntPipe) id: number) {
     return this.projectsService.getMembers(id);

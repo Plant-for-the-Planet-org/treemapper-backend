@@ -42,7 +42,7 @@ export class ProjectSpeciesController {
   }
 
   @Get('/:id')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   async getAll(
     @Membership() membership: ProjectGuardResponse,
@@ -51,7 +51,7 @@ export class ProjectSpeciesController {
   }
 
   @Put('/:id/species/:species')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   async update(
     @Param('species') species: string,
@@ -66,7 +66,7 @@ export class ProjectSpeciesController {
   }
 
   @Delete('/:id/species/:species')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor')
+  @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
   async delete(
     @Param('species') species: string,
