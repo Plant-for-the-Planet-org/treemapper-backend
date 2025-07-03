@@ -17,6 +17,7 @@ import { generateUid } from 'src/util/uidGenerator';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { interventionConfigurationSeedData } from 'src/database/schema/interventionConfig';
+import { error } from 'console';
 
 
 type InterventionStatus = "planned" | "active" | "completed" | "failed" | "on_hold" | "cancelled";
@@ -84,7 +85,7 @@ export class InterventionsService {
       let projectSiteId: null | number = null;
       if (createInterventionDto.plantProjectSite) {
         const site = await this.drizzleService.db
-          .select({id: sites.id})
+          .select({ id: sites.id })
           .from(sites)
           .where(eq(sites.uid, createInterventionDto.plantProjectSite))
           .limit(1);
@@ -164,11 +165,9 @@ export class InterventionsService {
 
 
 
-  async bulk(createInterventionDto: CreateInterventionBulkDto[], membership: ProjectGuardResponse): Promise<any> {
+  async bulkInterventionUpload(createInterventionDto: CreateInterventionBulkDto[], membership: ProjectGuardResponse): Promise<any> {
     try {
-      console.log('Bulk create interventions:', createInterventionDto.length);
       let projectSiteId: null | number = null;
-      const failedUpload = [];
       if (createInterventionDto[0].plantProjectSite && !createInterventionDto[0].plantProject) {
         throw new NotFoundException('Project not found');
       }
@@ -183,17 +182,16 @@ export class InterventionsService {
         }
         projectSiteId = site[0].id;
       }
+      console.log("createInterventionDto s", createInterventionDto)
 
       const tranformedData: any = [];
       createInterventionDto.forEach(async (el: CreateInterventionBulkDto) => {
         let newHID = generateParentHID();
-        const uid = generateUid('inv');
         let failed = false;
         let failedReason: string[] = []
         const interventionConfig = interventionConfigurationSeedData.find(p => p.interventionType === el.type);
         if (!interventionConfig) {
-          failed = true;
-          failedReason = ['Invalid intervention type'];
+          throw 'One or more intervention dont have valid type'
         }
         if (el.species && el.species.length === 0) {
           failed = true;
@@ -202,63 +200,93 @@ export class InterventionsService {
         const geometry = this.getGeoJSONForPostGIS(el.geometry);
         const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
         tranformedData.push({
-          uid: uid,
+          uid: el.clientId,
           hid: newHID,
-          discr: 'intervention' as const,
           userId: membership.userId,
-          idempotencyKey: generateUid('r'),
+          idempotencyKey: generateUid('ide'),
           type: el.type,
           interventionStartDate: new Date(el.interventionStartDate),
           interventionEndDate: new Date(el.interventionEndDate),
+          registrationDate: new Date(),
           captureMode: 'external' as const,
           captureStatus: CaptureStatus.COMPLETE,
           location: locationValue,
           originalGeometry: el.geometry,
-          sampleTreeCount: 0,
           projectId: membership.projectId,
-          deviceLocation: null,
-          metaData: el.metadata || null,
           projectSiteId: projectSiteId || null,
-          geometryType: el.geometry.type || 'Point',
-          registrationDate: new Date(el.registrationDate),
-          treesPlanted: el.treesPlanted || null,
+          metaData: el.metadata || null,
+          geometryType: 'Point',
+          treesPlanted: el.type === 'single-tree-registration' ? 1 : el.treesPlanted || 1,
           species: el.species || [],
-          failedReason: failed ? failedReason : null,
-          failed: failed,
         })
       })
+      console.log("tranformedData s", tranformedData)
+
       const finalInterventionIDMapping: any = []
-      const filteredData = tranformedData.filter(el => !el.failed);
-      console.log('Filtered data for bulk insert:', filteredData.length);
       try {
-        await this.drizzleService.db
+        const result = await this.drizzleService.db
           .insert(interventions)
-          .values(filteredData)
+          .values(tranformedData)
           .returning({ id: interventions.id, uid: interventions.uid });
+        console.log("SKDLc", result)
+        const finalParentIntervention = result.map(el => ({ id: el.id, uid: el.uid, success: true, error: false }))
+        finalInterventionIDMapping.push(...finalParentIntervention)
       } catch (error) {
-        console.error('Error during bulk insert:', error);
-        const chunkResults = await this.insertChunkIndividually(filteredData);
+        const chunkResults = await this.insertChunkIndividually(tranformedData);
         finalInterventionIDMapping.push(...chunkResults.filter(res => res.error === null));
       }
-      finalInterventionIDMapping.push(...tranformedData.filter(el => el.failed).map(el => ({
-        id: el.uid,
-        uid: el.idempotencyKey,
-        success: false,
-        error: el.failedReason
-      })));
+      const singleTreeUpload: any = []
+      createInterventionDto.forEach(el => {
+        if (el.type === 'single-tree-registration') {
+          const parentId = finalInterventionIDMapping.find(obj => obj.uid === el.clientId);
+          if (parentId && parentId.id && el.species.length > 0) {
+            const geometry = this.getGeoJSONForPostGIS(el.geometry);
+            const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+            singleTreeUpload.push({
+              hid: generateParentHID(),
+              uid: generateUid('tree'),
+              interventionId: parentId.id,
+              interventionSpeciesId: el.species[0].uid,
+              speciesName: el.species[0].speciesName,
+              isUnknown: true,
+              createdById: membership.userId,
+              tag: el.tag || null,
+              treeType: 'single' as const,
+              altitude: null,
+              accuracy: null,
+              location: locationValue,
+              originalGeometry: el.geometry,
+              height: el.height,
+              width: el.width,
+              plantingDate: new Date(el.interventionStartDate),
+              metadata: el.metadata || null,
+            })
+          }
+        }
+      })
+      try {
+        await this.drizzleService.db
+          .insert(trees)
+          .values(singleTreeUpload)
+          .returning({ id: trees.id, uid: trees.uid });
+      } catch (error) {
+        console.log("LSKDc s", error)
+        await this.insertTreeChunkIndividually(singleTreeUpload);
+      }
+      const failedIntervention = finalInterventionIDMapping.filter(el => !el.success)
       return {
-        data: finalInterventionIDMapping,
-        message: 'Bulk intervention uploaed',
-        totalCreated: finalInterventionIDMapping.filter(el => el.success).length,
-        totalFailed: finalInterventionIDMapping.filter(el => !el.success).length
+        totalProccessed: finalInterventionIDMapping.length,
+        passed: finalInterventionIDMapping.length - failedIntervention.length,
+        failed: failedIntervention.length,
+        failedInterventionUid: failedIntervention
       }
     } catch (error) {
+      console.log("LSKDc", error)
       throw new BadRequestException(`Failed to create interventions: ${error.message}`);
     }
   }
 
   private async insertChunkIndividually(chunk: any[]) {
-    console.log('Inserting chunk of interventions:', chunk.length);
     const interventionIds: any = []
     for (let j = 0; j < chunk.length; j++) {
       try {
@@ -268,13 +296,39 @@ export class InterventionsService {
           .returning();
 
         interventionIds.push({
-          id: result[0].uid,
+          id: result[0].id,
           uid: chunk[j].uid,
           success: true,
           error: null
         });
       } catch (error) {
-        console.error(`Failed to add intervention with id ${chunk[j].uid}:`, error);
+        interventionIds.push({
+          id: null,
+          uid: chunk[j].uid,
+          success: false,
+          error: JSON.stringify(error)
+        });
+      }
+    }
+    return interventionIds;
+  }
+
+  private async insertTreeChunkIndividually(chunk: any[]) {
+    const interventionIds: any = []
+    for (let j = 0; j < chunk.length; j++) {
+      try {
+        const result = await this.drizzleService.db
+          .insert(trees)
+          .values(chunk[j])
+          .returning();
+
+        interventionIds.push({
+          id: result[0].id,
+          uid: chunk[j].uid,
+          success: true,
+          error: null
+        });
+      } catch (error) {
         interventionIds.push({
           id: null,
           uid: chunk[j].uid,

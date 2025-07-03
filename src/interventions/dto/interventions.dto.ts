@@ -216,8 +216,9 @@ export class CreateInterventionBulkDto {
   @IsString()
   plantProject?: string;
 
+
   @IsString()
-  idempotencyKey?: string;
+  clientId?: string;
 
 
 
@@ -225,11 +226,9 @@ export class CreateInterventionBulkDto {
   @IsString()
   plantProjectSite?: string;
 
-  @ApiProperty({ example: '2024-01-15T09:00:00Z' })
   @IsDateString()
   interventionStartDate: string;
 
-  @ApiProperty({ example: '2024-01-15T17:00:00Z' })
   @IsDateString()
   interventionEndDate: string;
 
@@ -254,7 +253,6 @@ export class CreateInterventionBulkDto {
   @IsOptional()
   @IsString()
   tag?: string;
-
 }
 
 // src/modules/interventions/dto/update-intervention.dto.ts

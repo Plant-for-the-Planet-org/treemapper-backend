@@ -45,11 +45,11 @@ export class InterventionsController {
   @Post('/projects/:id/bulk')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
-  async bulkUpload(
+  async bulkInterventionUpload(
     @Body() interventionData: CreateInterventionBulkDto[],
     @Membership() membership: any
   ): Promise<InterventionResponseDto> {
-    return this.interventionsService.bulk(interventionData, membership);
+    return this.interventionsService.bulkInterventionUpload(interventionData, membership);
   }
 
 }
