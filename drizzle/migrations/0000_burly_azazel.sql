@@ -95,7 +95,7 @@ CREATE TABLE "interventions" (
 	"parent_intervention_id" integer,
 	"type" "intervention_type" NOT NULL,
 	"idempotency_key" varchar(64) NOT NULL,
-	"capture_mode" "capture_mode" NOT NULL,
+	"capture_mode" varchar,
 	"capture_status" "capture_status" DEFAULT 'complete' NOT NULL,
 	"registration_date" timestamp with time zone NOT NULL,
 	"intervention_start_date" timestamp with time zone NOT NULL,

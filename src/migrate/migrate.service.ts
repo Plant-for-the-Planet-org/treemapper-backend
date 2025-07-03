@@ -103,7 +103,7 @@ export class MigrationService {
         await this.usersetvice.migrateSuccess(userId)
         await this.drizzleService.db.update(users).set({ existingPlanetUser: false, migratedAt: new Date() }).where(eq(users.id, userId))
         return { migrationNeeded: false, planetId: '' };
-        
+
       }
       return { migrationNeeded: true, planetId: response.data.id };
     } catch (error) {
@@ -844,9 +844,9 @@ export class MigrationService {
         await this.drizzleService.db
           .insert(sites)
           .values(insertValues)
-        .catch(() => {
-          throw ''
-        });
+          .catch(() => {
+            throw ''
+          });
       } catch (error) {
         this.addLog(migrationId, 'error', `Failed to insert site ${site.id} from project ${projectData.slug}: `, 'sites', JSON.stringify(site));
         stopProcess = true;
@@ -1058,6 +1058,8 @@ export class MigrationService {
         `/treemapper/interventions?limit=${batchSize}&_scope=extended&page=${currentPage}`,
         authToken
       );
+
+      console.log("interventionResponse", Boolean(interventionResponse))
       if (!interventionResponse || interventionResponse === null) {
         if (lastPage && currentPage > lastPage) {
           break;
@@ -1143,6 +1145,8 @@ export class MigrationService {
           });
         }
       } catch (error) {
+        console.log("Insdie bulk ", error)
+
         const chunkResults = await this.insertChunkIndividually(parentIntervention, migrationId);
         finalInterventionIDMapping.push(...chunkResults)
       }
@@ -1189,6 +1193,7 @@ export class MigrationService {
           error: null
         });
       } catch (error) {
+        console.log("Insdie indvidual ", error)
         interventionIds.push({
           id: null,
           uid: chunk[j].uid,
@@ -1262,6 +1267,8 @@ export class MigrationService {
 
 
   private async transformParentIntervention(parentData: any, newProjectId: number, userId: number, siteId: any, mgID: number) {
+    console.log("inside transofrm parent")
+
     let parentFinalData: any = {}
     let interventionSpecies: any = []
     const interventionSampleTree: any = []
@@ -1365,7 +1372,7 @@ export class MigrationService {
       parentFinalData['projectSiteId'] = siteId
       parentFinalData['type'] = parentData.type
       parentFinalData['idempotencyKey'] = parentData.idempotencyKey
-      parentFinalData['captureMode'] = 'on_site'
+      parentFinalData['captureMode'] = parentData.captureMode,
       parentFinalData['captureStatus'] = parentData.captureStatus
       parentFinalData['registrationDate'] = parentData.registrationDate ? new Date(parentData.registrationDate) : new Date()
       parentFinalData['interventionStartDate'] = parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date()
@@ -1472,6 +1479,8 @@ export class MigrationService {
         interventionSampleTree.push(treeFinalData)
       }
     } catch (error) {
+      console.log("error transofrm parent", error)
+
       this.addLog(mgID, 'error', "There is error in this intervention", 'interventions', JSON.stringify(error))
     }
     let transofrmedSample = []
@@ -1487,6 +1496,8 @@ export class MigrationService {
 
   private async transformSampleIntervention(parentData: any, userId: number, siteId: any, allSpecies) {
     try {
+      console.log("Insdie sample tranformer")
+
       const allTranformedSampleTrees: any = []
       for (const sampleIntervention of parentData.sampleInterventions) {
         let plantLocationDate = sampleIntervention.interventionStartDate || sampleIntervention.plantDate || sampleIntervention.registrationDate
@@ -1585,8 +1596,6 @@ export class MigrationService {
         } else {
           treeFinalData['isUnknown'] = true
         }
-
-
         treeFinalData['hid'] = sampleIntervention.hid
         treeFinalData['uid'] = sampleIntervention.id
         treeFinalData['createdById'] = userId
@@ -1605,6 +1614,7 @@ export class MigrationService {
       }
       return allTranformedSampleTrees
     } catch (error) {
+      console.log("Insdie sample tranformer", error)
       return []
     }
   }

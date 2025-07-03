@@ -512,7 +512,7 @@ export const interventions = pgTable('interventions', {
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
   type: interventionTypeEnum('type').notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 64 }).unique().notNull(),
-  captureMode: captureModeEnum('capture_mode').notNull(),
+  captureMode: varchar('capture_mode'),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
   registrationDate: timestamp('registration_date', { withTimezone: true }).notNull(),
   interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),

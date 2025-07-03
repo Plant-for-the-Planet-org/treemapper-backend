@@ -1,5 +1,5 @@
 {
-  "id": "d8d37c6e-f3ed-4b0e-b80e-d30abfc7a941",
+  "id": "2407a92a-927b-4e8a-828e-0998a4a2fb29",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -682,10 +682,9 @@
         },
         "capture_mode": {
           "name": "capture_mode",
-          "type": "capture_mode",
-          "typeSchema": "public",
+          "type": "varchar",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "capture_status": {
           "name": "capture_status",
