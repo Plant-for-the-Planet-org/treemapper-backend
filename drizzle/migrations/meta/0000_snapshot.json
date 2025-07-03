@@ -1,5 +1,5 @@
 {
-  "id": "795e9996-951e-4a60-868b-2a4b0491cedd",
+  "id": "d8d37c6e-f3ed-4b0e-b80e-d30abfc7a941",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3468,7 +3468,7 @@
         },
         "planting_date": {
           "name": "planting_date",
-          "type": "date",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

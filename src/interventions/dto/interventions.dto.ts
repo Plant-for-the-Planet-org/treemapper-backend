@@ -1,5 +1,5 @@
 // src/modules/interventions/dto/create-intervention.dto.ts
-import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean, IsArray, ValidateNested, IsObject, Min, Max, IsJSON } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean, IsArray, ValidateNested, IsObject, Min, Max, IsJSON, IsInt } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsGeoJSON } from 'src/common/decorator/validation.decorators';
@@ -492,4 +492,207 @@ export class InterventionResponseDto {
 
   @ApiProperty({ example: '2024-01-15T09:00:00Z' })
   updatedAt: string;
+}
+
+
+
+
+
+
+
+
+
+
+
+// Enums from your schema
+enum InterventionTypeEnum {
+  ASSISTING_SEED_RAIN = 'assisting-seed-rain',
+  CONTROL_LIVESTOCK = 'control-livestock',
+  DIRECT_SEEDING = 'direct-seeding',
+  ENRICHMENT_PLANTING = 'enrichment-planting',
+  FENCING = 'fencing',
+  FIRE_PATROL = 'fire-patrol',
+  FIRE_SUPPRESSION = 'fire-suppression',
+  FIREBREAKS = 'firebreaks',
+  GENERIC_TREE_REGISTRATION = 'generic-tree-registration',
+  GRASS_SUPPRESSION = 'grass-suppression',
+  LIBERATING_REGENERANT = 'liberating-regenerant',
+  MAINTENANCE = 'maintenance',
+  MARKING_REGENERANT = 'marking-regenerant',
+  MULTI_TREE_REGISTRATION = 'multi-tree-registration',
+  OTHER_INTERVENTION = 'other-intervention',
+  PLOT_PLANT_REGISTRATION = 'plot-plant-registration',
+  REMOVAL_INVASIVE_SPECIES = 'removal-invasive-species',
+  SAMPLE_TREE_REGISTRATION = 'sample-tree-registration',
+  SINGLE_TREE_REGISTRATION = 'single-tree-registration',
+  SOIL_IMPROVEMENT = 'soil-improvement',
+  STOP_TREE_HARVESTING = 'stop-tree-harvesting',
+}
+
+export enum CaptureModeEnum {
+  ON_SITE = 'on-site',
+  OFF_SITE = 'off-site',
+  EXTERNAL = 'external',
+  UNKNOWN = 'unknown',
+}
+
+export enum SortOrderEnum {
+  ASC = 'asc',
+  DESC = 'desc',
+}
+
+export class GetProjectInterventionsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  // Filters
+  @IsOptional()
+  @IsEnum(InterventionTypeEnum)
+  type?: InterventionTypeEnum;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @IsOptional()
+  @IsDateString()
+  interventionStartDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  registrationDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  projectSiteId?: number;
+
+  @IsOptional()
+  @IsEnum(CaptureModeEnum)
+  captureMode?: CaptureModeEnum;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => Array.isArray(value) ? value : [value])
+  species?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  flag?: boolean;
+
+  // Search
+  @IsOptional()
+  @IsString()
+  searchHid?: string;
+
+  // Sorting
+  @IsOptional()
+  @IsEnum(SortOrderEnum)
+  sortOrder?: SortOrderEnum = SortOrderEnum.DESC;
+}
+
+// Response DTOs
+export interface InterventionSpeciesDto {
+  uid: string;
+  scientificSpeciesId: number;
+  scientificSpeciesUid?: string;
+  speciesName?: string;
+  isUnknown: boolean;
+  otherSpeciesName?: string;
+  count: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SiteDto {
+  id: number;
+  uid: string;
+  name: string;
+  description?: string;
+  status: string;
+  location: any;
+  originalGeometry: any;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TreeRecordDto {
+  id: number;
+  uid: string;
+  recordType: string;
+  recordedAt: Date;
+  height?: number;
+  width?: number;
+  healthScore?: number;
+  status?: string;
+  notes?: string;
+  image?: string;
+}
+
+export interface TreeDto {
+  id: number;
+  uid: string;
+  hid: string;
+  speciesName?: string;
+  isUnknown: boolean;
+  tag?: string;
+  treeType: string;
+  location: any;
+  height?: number;
+  width?: number;
+  status: string;
+  plantingDate?: Date;
+  image?: string;
+  records?: TreeRecordDto[];
+}
+
+export interface InterventionDto {
+  id: number;
+  uid: string;
+  hid: string;
+  type: string;
+  captureMode: string;
+  captureStatus: string;
+  registrationDate: Date;
+  interventionStartDate: Date;
+  interventionEndDate: Date;
+  location: any;
+  treeCount: number;
+  sampleTreeCount: number;
+  interventionStatus?: string;
+  description?: string;
+  image?: string;
+  isPrivate: boolean;
+  species: InterventionSpeciesDto[];
+  flag: boolean;
+  hasRecords: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  site?: SiteDto;
+  trees?: TreeDto[];
+}
+
+export interface PaginationDto {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface GetProjectInterventionsResponseDto {
+  intervention: InterventionDto[];
+  pagination: PaginationDto;
 }

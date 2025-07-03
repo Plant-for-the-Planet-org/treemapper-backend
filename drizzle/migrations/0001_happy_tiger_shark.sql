@@ -1,1 +1,0 @@
-ALTER TABLE "trees" ALTER COLUMN "planting_date" SET DATA TYPE timestamp with time zone;

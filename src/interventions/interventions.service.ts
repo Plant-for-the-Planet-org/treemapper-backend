@@ -11,7 +11,13 @@ import {
 } from '../database/schema/index';
 import {
   InterventionResponseDto,
-  CreateInterventionBulkDto
+  CreateInterventionBulkDto,
+  GetProjectInterventionsQueryDto,
+  GetProjectInterventionsResponseDto,
+  InterventionDto,
+  InterventionSpeciesDto,
+  TreeDto,
+  SortOrderEnum
 } from './dto/interventions.dto';
 import { generateUid } from 'src/util/uidGenerator';
 import { generateParentHID } from 'src/util/hidGenerator';
@@ -106,17 +112,17 @@ export class InterventionsService {
         projectSiteId: projectSiteId || null,
         idempotencyKey: generateUid('ide'),
         type: createInterventionDto.type,
-        registrationDate: new Date(createInterventionDto.registrationDate),
+        registrationDate: new Date(),
         interventionStartDate: new Date(createInterventionDto.interventionStartDate),
         interventionEndDate: new Date(createInterventionDto.interventionEndDate),
         location: locationValue,
         originalGeometry: createInterventionDto.geometry,
         captureMode: createInterventionDto.captureMode,
         captureStatus: CaptureStatus.COMPLETE,
-        metaData: createInterventionDto.metadata || null,
+        metadata: createInterventionDto.metadata || null,
         geometryType: geometryType,
         image: createInterventionDto.image || null,
-        treeCount: createInterventionDto.sampleTreeCount || null,
+        treeCount: createInterventionDto.type === 'single-tree-registration' ? 1 : createInterventionDto.treeCount || 1,
         tag: createInterventionDto.tag,
         has_records: false,
         species: createInterventionDto.species || [],
@@ -141,6 +147,7 @@ export class InterventionsService {
           tag: createInterventionDto.tag,
           treeType: 'single' as const,
           altitude: null,
+          image: createInterventionDto.image || null,
           accuracy: null,
           location: locationValue,
           originalGeometry: createInterventionDto.geometry,
@@ -182,7 +189,6 @@ export class InterventionsService {
         }
         projectSiteId = site[0].id;
       }
-      console.log("createInterventionDto s", createInterventionDto)
 
       const tranformedData: any = [];
       createInterventionDto.forEach(async (el: CreateInterventionBulkDto) => {
@@ -214,9 +220,9 @@ export class InterventionsService {
           originalGeometry: el.geometry,
           projectId: membership.projectId,
           projectSiteId: projectSiteId || null,
-          metaData: el.metadata || null,
+          metadata: el.metadata || null,
           geometryType: 'Point',
-          treesPlanted: el.type === 'single-tree-registration' ? 1 : el.treesPlanted || 1,
+          treeCount: el.type === 'single-tree-registration' ? 1 : el.treesPlanted || 1,
           species: el.species || [],
         })
       })
@@ -342,240 +348,228 @@ export class InterventionsService {
 
 
 
-  async findAll(
-    membership: ProjectGuardResponse,
-    params: FindAllInterventionsParams = {}
-  ): Promise<PaginatedInterventionsResponse> {
+ async getProjectInterventions(
+    projectId: number,
+    queryDto: GetProjectInterventionsQueryDto,
+  ): Promise<GetProjectInterventionsResponseDto> {
     const {
-      page = 1,
       limit = 20,
-      status,
-      siteId
-    } = params;
+      page = 1,
+      type,
+      userId,
+      interventionStartDate,
+      registrationDate,
+      projectSiteId,
+      captureMode,
+      species,
+      flag,
+      searchHid,
+      sortOrder = SortOrderEnum.DESC,
+    } = queryDto;
 
-    // Calculate offset for pagination
     const offset = (page - 1) * limit;
 
     // Build where conditions
     const whereConditions = [
-      eq(interventions.projectId, membership.projectId),
-      // Only include non-deleted interventions
-      isNull(interventions.deletedAt)
+      eq(interventions.projectId, projectId),
+      isNull(interventions.deletedAt), // Exclude soft deleted
     ];
 
-    // Add status filter if provided
-    // if (status) {
-    //   whereConditions.push(eq(interventions.interventionStatus, status));
-    // }
-
-    // Add site filter if provided (if no siteId, it includes all sites)
-    if (siteId) {
-      whereConditions.push(eq(interventions.projectSiteId, siteId));
+    // Add filters
+    if (type) {
+      whereConditions.push(eq(interventions.type, type));
     }
 
-    // Get total count for pagination
-    const totalResult = await this.drizzleService.db
-      .select({
-        count: sql<number>`COUNT(*)::int`
-      })
+    if (userId) {
+      whereConditions.push(eq(interventions.userId, userId));
+    }
+
+    if (interventionStartDate) {
+      whereConditions.push(gte(interventions.interventionStartDate, new Date(interventionStartDate)));
+    }
+
+    if (registrationDate) {
+      whereConditions.push(gte(interventions.registrationDate, new Date(registrationDate)));
+    }
+
+    if (projectSiteId) {
+      whereConditions.push(eq(interventions.projectSiteId, projectSiteId));
+    }
+
+    if (captureMode) {
+      whereConditions.push(eq(interventions.captureMode, captureMode));
+    }
+
+    if (flag !== undefined) {
+      whereConditions.push(eq(interventions.flag, flag));
+    }
+
+    if (searchHid) {
+      whereConditions.push(like(interventions.hid, `%${searchHid}%`));
+    }
+
+    // Species filter - search in JSONB array
+    if (species && species.length > 0) {
+      const speciesConditions = species.map(speciesName => 
+        sql`EXISTS (
+          SELECT 1 FROM jsonb_array_elements(${interventions.species}) AS spec
+          WHERE spec->>'speciesName' ILIKE ${'%' + speciesName + '%'}
+        )`
+      );
+      whereConditions.push(sql`(${sql.join(speciesConditions, sql` OR `)})`);
+    }
+
+    // Get total count
+    const totalCountResult = await this.drizzleService.db
+      .select({ count: sql<number>`count(*)` })
       .from(interventions)
       .where(and(...whereConditions));
 
-    const total = totalResult[0]?.count || 0;
+    const total = totalCountResult[0]?.count || 0;
+    const totalPages = Math.ceil(total / limit);
 
-    // Get paginated interventions with basic info first
-    const allInterventions = await this.drizzleService.db
+    // Get interventions with related data
+    const interventionsData = await this.drizzleService.db
       .select({
-        id: interventions.id,
-        uid: interventions.uid,
-        hid: interventions.hid,
-        type: interventions.type,
-        interventionStatus: interventions.interventionStatus,
-        originalGeometry: interventions.originalGeometry,
-        treeCount: interventions.treeCount,
-        registrationDate: interventions.registrationDate,
-        interventionStartDate: interventions.interventionStartDate,
-        interventionEndDate: interventions.interventionEndDate,
-        description: interventions.description,
-        projectSiteId: interventions.projectSiteId,
-        captureMode: interventions.captureMode,
-        captureStatus: interventions.captureStatus,
-        isPrivate: interventions.isPrivate,
-        createdAt: interventions.createdAt,
-        updatedAt: interventions.updatedAt,
-        // Add user info
-        user: {
-          uid: users.uid,
-          displayName: users.displayName,
-          firstname: users.firstname,
-          lastname: users.lastname,
-          image: users.image
-        },
-        // Add site info if exists
-        site: {
-          uid: sites.uid,
-          name: sites.name,
-          status: sites.status
-        }
+        intervention: interventions,
+        site: sites,
       })
       .from(interventions)
-      .leftJoin(users, eq(interventions.userId, users.id))
       .leftJoin(sites, eq(interventions.projectSiteId, sites.id))
       .where(and(...whereConditions))
-      .orderBy(desc(interventions.registrationDate))
+      .orderBy(sortOrder === SortOrderEnum.DESC ? desc(interventions.createdAt) : asc(interventions.createdAt))
       .limit(limit)
       .offset(offset);
 
-    // Get intervention IDs for fetching related data
-    const interventionIds = allInterventions.map(intervention => intervention.id);
-
-    // Fetch intervention species for all interventions
-    // const interventionSpeciesData = interventionIds.length > 0 ? await this.drizzleService.db
-    //   .select({
-    //     interventionId: interventionSpecies.interventionId,
-    //     uid: interventionSpecies.uid,
-    //     scientificSpeciesId: interventionSpecies.scientificSpeciesId,
-    //     scientificSpeciesUid: interventionSpecies.scientificSpeciesUid,
-    //     speciesName: interventionSpecies.speciesName,
-    //     isUnknown: interventionSpecies.isUnknown,
-    //     otherSpeciesName: interventionSpecies.otherSpeciesName,
-    //     count: interventionSpecies.count,
-    //     createdAt: interventionSpecies.createdAt,
-    //     updatedAt: interventionSpecies.updatedAt,
-    //     // Include scientific species details
-    //     scientificSpecies: {
-    //       uid: scientificSpecies.uid,
-    //       scientificName: scientificSpecies.scientificName,
-    //       commonName: scientificSpecies.commonName,
-    //       family: scientificSpecies.family,
-    //       genus: scientificSpecies.genus
-    //     }
-    //   })
-    //   .from(interventionSpecies)
-    //   .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
-    //   .where(
-    //     and(
-    //       inArray(interventionSpecies.interventionId, interventionIds),
-    //       isNull(interventionSpecies.deletedAt),
-    //       isNull(scientificSpecies.deletedAt)
-    //     )
-    //   ) : [];
-
-    // Fetch trees and their records for all interventions
-    const treesWithRecords = interventionIds.length > 0 ? await this.drizzleService.db
-      .select({
-        interventionId: trees.interventionId,
-        tree: {
-          id: trees.id,
-          uid: trees.uid,
-          hid: trees.hid,
-          tag: trees.tag,
-          treeType: trees.treeType,
-          status: trees.status,
-          statusReason: trees.statusReason,
-          plantingDate: trees.plantingDate,
-          height: trees.height,
-          width: trees.width,
-          lastMeasurementDate: trees.lastMeasurementDate,
-          nextMeasurementDate: trees.nextMeasurementDate,
-          createdAt: trees.createdAt,
-          updatedAt: trees.updatedAt
-        },
-        treeRecord: {
-          uid: treeRecords.uid,
-          recordType: treeRecords.recordType,
-          recordedAt: treeRecords.recordedAt,
-          height: treeRecords.height,
-          width: treeRecords.width,
-          healthScore: treeRecords.healthScore,
-          vitalityScore: treeRecords.vitalityScore,
-          structuralIntegrity: treeRecords.structuralIntegrity,
-          previousStatus: treeRecords.previousStatus,
-          newStatus: treeRecords.newStatus,
-          statusReason: treeRecords.statusReason,
-          findings: treeRecords.findings,
-          findingsSeverity: treeRecords.findingsSeverity,
-          notes: treeRecords.notes,
-          isPublic: treeRecords.isPublic,
-          createdAt: treeRecords.createdAt
-        },
-        recordedBy: {
-          uid: users.uid,
-          displayName: users.displayName,
-          firstname: users.firstname,
-          lastname: users.lastname
-        }
-      })
-      .from(trees)
-      .leftJoin(treeRecords, eq(trees.id, treeRecords.treeId))
-      .leftJoin(users, eq(treeRecords.recordedById, users.id))
-      .where(
-        and(
+    // Get trees and their records for each intervention
+    const interventionIds = interventionsData.map(item => item.intervention.id);
+    
+    let treesWithRecords: any[] = [];
+    if (interventionIds.length > 0) {
+      treesWithRecords = await this.drizzleService.db
+        .select({
+          tree: trees,
+          record: treeRecords,
+        })
+        .from(trees)
+        .leftJoin(treeRecords, eq(trees.id, treeRecords.treeId))
+        .where(and(
           inArray(trees.interventionId, interventionIds),
           isNull(trees.deletedAt),
-          or(
-            isNull(treeRecords.deletedAt),
-            isNull(treeRecords.uid) // Handle case where no records exist
-          )
-        )
-      )
-      .orderBy(trees.id, desc(treeRecords.recordedAt)) : [];
+          isNull(treeRecords.deletedAt)
+        ))
+        .orderBy(desc(treeRecords.recordedAt));
+    }
 
-    // Group and structure the data
-    const interventionsWithRelatedData = allInterventions.map(intervention => {
-      // Group species by intervention
-      // const species = interventionSpeciesData.filter(
-      //   s => s.interventionId === intervention.id
-      // );
-
-      // Group trees and their records by intervention
-      const treesData = treesWithRecords.filter(
-        t => t.interventionId === intervention.id
-      );
-
-      // Structure trees with their records
-      const treesMap = new Map();
-      treesData.forEach(item => {
-        if (!treesMap.has(item.tree.id)) {
-          treesMap.set(item.tree.id, {
-            ...item.tree,
-            records: []
+    // Group trees and records by intervention
+    const treesByIntervention = new Map<number, Map<number, TreeDto>>();
+    
+    treesWithRecords.forEach(item => {
+      const tree = item.tree;
+      const record = item.record;
+      
+      if (!treesByIntervention.has(tree.interventionId)) {
+        treesByIntervention.set(tree.interventionId, new Map());
+      }
+      
+      const interventionTrees = treesByIntervention.get(tree.interventionId);
+      
+      if (interventionTrees) {
+        if (!interventionTrees.has(tree.id)) {
+          interventionTrees.set(tree.id, {
+            id: tree.id,
+            uid: tree.uid,
+            hid: tree.hid,
+            speciesName: tree.speciesName,
+            isUnknown: tree.isUnknown,
+            tag: tree.tag,
+            treeType: tree.treeType,
+            location: tree.location,
+            height: tree.height,
+            width: tree.width,
+            status: tree.status,
+            plantingDate: tree.plantingDate,
+            image: tree.image,
+            records: [],
           });
         }
-
-        // Only add record if it exists and has a uid
-        if (item.treeRecord?.uid) {
-          treesMap.get(item.tree.id).records.push({
-            ...item.treeRecord,
-            recordedBy: item.recordedBy
-          });
+        
+        if (record) {
+          const treeDto = interventionTrees.get(tree.id);
+          if (treeDto) {
+            if (!treeDto.records) {
+              treeDto.records = [];
+            }
+            treeDto.records.push({
+              id: record.id,
+              uid: record.uid,
+              recordType: record.recordType,
+              recordedAt: record.recordedAt,
+              height: record.height,
+              width: record.width,
+              healthScore: record.healthScore,
+              status: record.newStatus,
+              notes: record.notes,
+              image: record.image,
+            });
+          }
         }
-      });
+      }
+    });
 
-      const trees = Array.from(treesMap.values());
+    // Transform data to response format
+    const responseData: any[] = interventionsData.map(item => {
+      const intervention = item.intervention;
+      const site = item.site;
+      
+      const interventionTrees = treesByIntervention.get(intervention.id);
+      const treesArray = interventionTrees ? Array.from(interventionTrees.values()) : [];
 
       return {
-        ...intervention,
-        species: [],
-        trees
+        id: intervention.id,
+        uid: intervention.uid,
+        hid: intervention.hid,
+        type: intervention.type,
+        captureMode: intervention.captureMode,
+        captureStatus: intervention.captureStatus,
+        registrationDate: intervention.registrationDate,
+        interventionStartDate: intervention.interventionStartDate,
+        interventionEndDate: intervention.interventionEndDate,
+        originalGeometry: intervention.originalGeometry,
+        treeCount: intervention.treeCount,
+        sampleTreeCount: intervention.sampleTreeCount,
+        interventionStatus: intervention.interventionStatus,
+        description: intervention.description,
+        image: intervention.image,
+        isPrivate: intervention.isPrivate,
+        species: intervention.species as InterventionSpeciesDto[],
+        flag: intervention.flag,
+        hasRecords: intervention.hasRecords,
+        createdAt: intervention.createdAt,
+        updatedAt: intervention.updatedAt,
+        site: site ? {
+          id: site.id,
+          uid: site.uid,
+          name: site.name,
+          description: site.description,
+          status: site.status,
+          location: site.location,
+          originalGeometry: site.originalGeometry,
+          createdAt: site.createdAt,
+          updatedAt: site.updatedAt,
+        } : undefined,
+        trees: treesArray,
       };
     });
 
-    // Calculate pagination metadata
-    const totalPages = Math.ceil(total / limit);
-    const hasNext = page < totalPages;
-    const hasPrev = page > 1;
-
     return {
-      data: interventionsWithRelatedData,
+      intervention: responseData,
       pagination: {
+        total,
         page,
         limit,
-        total,
         totalPages,
-        hasNext,
-        hasPrev
-      }
+      },
     };
   }
 }

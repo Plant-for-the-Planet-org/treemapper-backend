@@ -5,17 +5,23 @@ import {
   Post,
   Body,
   UseGuards,
+  Param,
+  ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { InterventionsService, PaginatedInterventionsResponse } from './interventions.service';
 import {
   CreateInterventionDto,
   InterventionResponseDto,
   CreateInterventionBulkDto,
+  GetProjectInterventionsQueryDto,
+  GetProjectInterventionsResponseDto,
 } from './dto/interventions.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'; // Adjust import path
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard'; // Adjust import path
 import { ProjectRoles } from 'src/projects/decorators/project-roles.decorator';
 import { Membership } from 'src/projects/decorators/membership.decorator';
+import { ProjectGuardResponse } from 'src/projects/projects.service';
 
 
 @UseGuards(JwtAuthGuard)
@@ -37,10 +43,16 @@ export class InterventionsController {
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   async findAllintervention(
-    @Membership() membership: any
-  ): Promise<PaginatedInterventionsResponse> {
-    return this.interventionsService.findAll(membership);
+    @Membership() membership: ProjectGuardResponse,
+    @Query() queryDto: GetProjectInterventionsQueryDto,
+  ): Promise<GetProjectInterventionsResponseDto> {
+    return this.interventionsService.getProjectInterventions(membership.projectId, queryDto);
   }
+
+
+
+
+
 
   @Post('/projects/:id/bulk')
   @ProjectRoles('owner', 'admin')

@@ -383,7 +383,7 @@ CREATE TABLE "trees" (
 	"width" double precision,
 	"status" "tree_status" DEFAULT 'alive' NOT NULL,
 	"status_reason" varchar,
-	"planting_date" date,
+	"planting_date" timestamp with time zone,
 	"last_measurement_date" timestamp with time zone,
 	"next_measurement_date" timestamp with time zone,
 	"image" text,
