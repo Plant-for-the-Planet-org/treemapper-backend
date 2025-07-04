@@ -15,6 +15,7 @@ import { NotificationModule } from './notification/notification.module';
 import { SitesModule } from './sites/sites.module';
 import { InterventionsModule } from './interventions/interventions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { MobileModule } from './mobile/mobile.module';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     SitesModule,
     SpeciesModule,
     InterventionsModule,
-    AnalyticsModule
+    AnalyticsModule,
+    MobileModule
   ],
   controllers: [AppController],
   providers: [AppService],
