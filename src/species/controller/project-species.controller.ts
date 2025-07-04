@@ -29,7 +29,7 @@ export class ProjectSpeciesController {
   constructor(private readonly userSpeciesService: ProjectSpeciesService) { }
 
   @Post('/:id')
-  @ProjectRoles('owner', 'admin')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   async create(
     @Membership() membership: ProjectGuardResponse,
