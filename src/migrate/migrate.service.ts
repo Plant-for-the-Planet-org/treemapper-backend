@@ -1059,7 +1059,6 @@ export class MigrationService {
         authToken
       );
 
-      console.log("interventionResponse", Boolean(interventionResponse))
       if (!interventionResponse || interventionResponse === null) {
         if (lastPage && currentPage > lastPage) {
           break;
@@ -1145,13 +1144,13 @@ export class MigrationService {
           });
         }
       } catch (error) {
-        console.log("Insdie bulk ", error)
 
         const chunkResults = await this.insertChunkIndividually(parentIntervention, migrationId);
         finalInterventionIDMapping.push(...chunkResults)
       }
 
       finalInterventionIDMapping.forEach(async inv => {
+
         if (inv.error) {
         } else {
           const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
@@ -1193,7 +1192,6 @@ export class MigrationService {
           error: null
         });
       } catch (error) {
-        console.log("Insdie indvidual ", error)
         interventionIds.push({
           id: null,
           uid: chunk[j].uid,
@@ -1267,8 +1265,6 @@ export class MigrationService {
 
 
   private async transformParentIntervention(parentData: any, newProjectId: number, userId: number, siteId: any, mgID: number) {
-    console.log("inside transofrm parent")
-
     let parentFinalData: any = {}
     let interventionSpecies: any = []
     const interventionSampleTree: any = []
@@ -1373,7 +1369,7 @@ export class MigrationService {
       parentFinalData['type'] = parentData.type
       parentFinalData['idempotencyKey'] = parentData.idempotencyKey
       parentFinalData['captureMode'] = parentData.captureMode,
-      parentFinalData['captureStatus'] = parentData.captureStatus
+        parentFinalData['captureStatus'] = parentData.captureStatus
       parentFinalData['registrationDate'] = parentData.registrationDate ? new Date(parentData.registrationDate) : new Date()
       parentFinalData['interventionStartDate'] = parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date()
       parentFinalData['interventionEndDate'] = parentData.interventionEndDate !== null ? new Date(parentData.interventionEndDate) : new Date()
@@ -1479,7 +1475,6 @@ export class MigrationService {
         interventionSampleTree.push(treeFinalData)
       }
     } catch (error) {
-      console.log("error transofrm parent", error)
 
       this.addLog(mgID, 'error', "There is error in this intervention", 'interventions', JSON.stringify(error))
     }
@@ -1496,7 +1491,6 @@ export class MigrationService {
 
   private async transformSampleIntervention(parentData: any, userId: number, siteId: any, allSpecies) {
     try {
-      console.log("Insdie sample tranformer")
 
       const allTranformedSampleTrees: any = []
       for (const sampleIntervention of parentData.sampleInterventions) {
@@ -1607,14 +1601,13 @@ export class MigrationService {
         treeFinalData['status'] = sampleIntervention.status || 'alive'
         treeFinalData['statusReason'] = sampleIntervention.statusReason || null
         treeFinalData['metadata'] = sampleIntervention.metadata || null
-        treeFinalData['plantingDate'] = plantLocationDate || new Date()
-        treeFinalData['flag'] = singleTreeflag
+        treeFinalData['plantingDate'] = plantLocationDate ? new Date(plantLocationDate) : new Date(),
+          treeFinalData['flag'] = singleTreeflag
         treeFinalData['flagReason'] = singleTreeFlagreason
         allTranformedSampleTrees.push(treeFinalData);
       }
       return allTranformedSampleTrees
     } catch (error) {
-      console.log("Insdie sample tranformer", error)
       return []
     }
   }

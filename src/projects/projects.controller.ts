@@ -173,11 +173,10 @@ export class ProjectsController {
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateProjectDto: UpdateProjectDto,
-    @Req() req
+    @Body() updateProjectDto: any,
+    @Membership() membership: any,
   ): Promise<any> {
-    return this.projectsService.update(id, updateProjectDto, req.user.id);
+    return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
   }
 
   @Delete(':id')

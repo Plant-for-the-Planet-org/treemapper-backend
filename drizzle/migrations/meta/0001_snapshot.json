@@ -1,6 +1,6 @@
 {
-  "id": "5e5689cd-7f42-4d45-b2bd-46134faed645",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "abffd213-39d2-4e9c-8a5d-4c7af354588b",
+  "prevId": "5e5689cd-7f42-4d45-b2bd-46134faed645",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -716,13 +716,13 @@
           "name": "location",
           "type": "geometry(Geometry,4326)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "original_geometry": {
           "name": "original_geometry",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "device_location": {
           "name": "device_location",

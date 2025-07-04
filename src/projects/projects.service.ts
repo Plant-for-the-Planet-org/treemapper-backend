@@ -3,7 +3,7 @@ import { Injectable, NotFoundException, ForbiddenException, ConflictException, B
 import { DrizzleService } from '../database/drizzle.service';
 import { projects, projectMembers, users, projectInvites, bulkInvites } from '../database/schema';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { UpdateProjectDto } from './dto/update-project.dto';
+import { ProjectMembership, ServiceResponse, UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { UpdateProjectRoleDto } from './dto/update-project-role.dto';
 import { eq, and, desc, ne, asc, isNull } from 'drizzle-orm';
@@ -712,9 +712,9 @@ export class ProjectsService {
         email: '',
         role: result.invite.role,
         message: result.invite.message,
-        status: result.invite.status,
+        status: result.invite.status || '',
         expiresAt: result.invite.expiresAt,
-        createdAt: result.invite.createdAt,
+        createdAt: result.invite.createdAt || new Date(),
         isExpired,
         project: {
           uid: result.project.uid,
@@ -1460,77 +1460,147 @@ export class ProjectsService {
     }
   }
 
-  async update(projectId: number, updateProjectDto: UpdateProjectDto, userId: number): Promise<any> {
+async updateProject(
+    projectId: number, 
+    updateProjectDto: UpdateProjectDto, 
+    userId: number
+  ): Promise<ServiceResponse> {
     try {
-      // Check if user has permission (only owner/admin can update project details)
-      const membership = await this.getMemberRole(projectId, userId);
-
-      if (!membership || !['owner', 'admin'].includes(membership.role)) {
-        return {
-          message: 'You do not have permission to update this project',
-          statusCode: 403,
-          error: "forbidden",
-          data: null,
-          code: 'update_permission_denied',
-        };
-      }
-
-      let locationValue: any = undefined;
-      if (updateProjectDto.location) {
-        try {
-          const geometry = this.getGeoJSONForPostGIS(updateProjectDto.location);
-          locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
-        } catch (error) {
-          return {
-            message: 'Invalid GeoJSON provided',
-            statusCode: 400,
-            error: "invalid_geojson",
-            data: null,
-            code: 'invalid_update_geojson',
-          };
-        }
-      }
 
       // Prepare update data
-      const updateData: any = {
-        ...updateProjectDto,
-        updatedAt: new Date(),
-      };
+      const updateData = await this.prepareUpdateData(updateProjectDto);
 
-      if (locationValue !== undefined) {
-        updateData.location = locationValue;
-      }
-
-      // Remove undefined values
-      Object.keys(updateData).forEach(key =>
-        updateData[key] === undefined && delete updateData[key]
-      );
-
-      // Update project
-      const [result] = await this.drizzleService.db
+      // Perform the update
+      const [updatedProject] = await this.drizzleService.db
         .update(projects)
         .set(updateData)
         .where(eq(projects.id, projectId))
         .returning();
 
+      if (!updatedProject) {
+        return {
+          message: 'Failed to update project',
+          statusCode: 500,
+          error: 'internal_server_error',
+          data: null,
+          code: 'project_update_failed',
+        };
+      }
+
       return {
         message: 'Project updated successfully',
         statusCode: 200,
         error: null,
-        data: result,
+        data: updatedProject,
         code: 'project_updated',
       };
+
     } catch (error) {
       console.error('Error updating project:', error);
       return {
         message: 'Failed to update project',
         statusCode: 500,
-        error: error.message || "internal_server_error",
+        error: error.message || 'internal_server_error',
         data: null,
         code: 'project_update_failed',
       };
     }
   }
+
+
+  /**
+   * Prepare update data by cleaning and transforming the DTO
+   * @param updateProjectDto - The update DTO
+   * @returns Promise<object>
+   */
+  private async prepareUpdateData(updateProjectDto: UpdateProjectDto): Promise<any> {
+    const updateData: any = {
+      ...updateProjectDto,
+      updatedAt: new Date(),
+    };
+
+    // Handle location/geometry data
+    if (updateProjectDto.location) {
+      try {
+        const geometry = this.getGeoJSONForPostGIS(updateProjectDto.location);
+        updateData.location = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+      } catch (error) {
+        console.error('Invalid GeoJSON provided:', error);
+        delete updateData.location;
+      }
+    }
+
+    // Handle original geometry
+    if (updateProjectDto.originalGeometry) {
+      updateData.originalGeometry = updateProjectDto.originalGeometry;
+    }
+
+    // Handle metadata
+    if (updateProjectDto.metadata) {
+      updateData.metadata = updateProjectDto.metadata;
+    }
+
+    // Clean up undefined values
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
+    return updateData;
+  }
+
+
+
+
+  /**
+   * Validate project data before update
+   * @param projectId - The project ID
+   * @param updateProjectDto - The update data
+   * @returns Promise<ServiceResponse>
+   */
+  async validateUpdateData(
+    projectId: number, 
+    updateProjectDto: UpdateProjectDto
+  ): Promise<ServiceResponse> {
+    try {
+      const validationErrors = [];
+
+      // Check for duplicate project names (if updating projectName)
+
+
+      // Add more validation rules as needed
+
+      if (validationErrors.length > 0) {
+        return {
+          message: 'Validation failed',
+          statusCode: 400,
+          error: 'validation_failed',
+          data: { validationErrors },
+          code: 'validation_failed',
+        };
+      }
+
+      return {
+        message: 'Validation passed',
+        statusCode: 200,
+        error: null,
+        data: null,
+        code: 'validation_passed',
+      };
+
+    } catch (error) {
+      console.error('Error validating update data:', error);
+      return {
+        message: 'Validation error',
+        statusCode: 500,
+        error: error.message || 'internal_server_error',
+        data: null,
+        code: 'validation_error',
+      };
+    }
+  }
+
 
   async remove(projectId: number, userId: number) {
     try {

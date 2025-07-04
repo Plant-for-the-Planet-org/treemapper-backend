@@ -40,7 +40,7 @@ export class InterventionsController {
   }
 
   @Get('/projects/:id')
-  @ProjectRoles('owner', 'admin')
+  @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
   async findAllintervention(
     @Membership() membership: ProjectGuardResponse,

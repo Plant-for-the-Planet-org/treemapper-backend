@@ -28,9 +28,8 @@ export class CreateProjectDto {
   projectType?: string;
 
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  target?: number;
+  @IsString()
+  target?: string;
 
 
   @IsString()
@@ -70,9 +69,8 @@ export class CreateProjectDto {
 
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   projectWebsite?: string;
-
 
 
   @IsOptional()
@@ -85,13 +83,11 @@ export class CreateProjectDto {
   image?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   videoUrl?: string;
 
   @IsOptional()
   @IsString()
-  @Length(2, 2)
-  @Transform(({ value }) => value?.toUpperCase())
   country?: string;
 
 
@@ -124,6 +120,16 @@ export class CreateProjectDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean = true;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean = true;
+
+
+  @IsOptional()
+  @IsBoolean()
+  isPersonal?: boolean = true;
+
 
   @IsOptional()
   @IsString()
