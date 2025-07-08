@@ -67,7 +67,8 @@ export class ProjectSpeciesService {
         description: createDto.description || scientificSpeciesData.description,
         notes: createDto.notes,
         favourite: createDto.favourite || false,
-        metadata: createDto.metadata || null
+        metadata: createDto.metadata || null,
+        image: createDto.image || ''
       })
       .returning();
 
@@ -175,6 +176,7 @@ export class ProjectSpeciesService {
           description: projectSpecies.description,
           isNativeSpecies: projectSpecies.isNativeSpecies,
           disbaled: projectSpecies.isDisabled,
+          image: projectSpecies.image,
           favourite: projectSpecies.favourite,
           createdAt: projectSpecies.createdAt,
           scientificName: scientificSpecies.scientificName,

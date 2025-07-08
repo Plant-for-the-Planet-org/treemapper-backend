@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Query,
+  Delete,
 } from '@nestjs/common';
 import { InterventionsService, PaginatedInterventionsResponse } from './interventions.service';
 import {
@@ -50,10 +51,6 @@ export class InterventionsController {
   }
 
 
-
-
-
-
   @Post('/projects/:id/bulk')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
@@ -63,5 +60,18 @@ export class InterventionsController {
   ): Promise<InterventionResponseDto> {
     return this.interventionsService.bulkInterventionUpload(interventionData, membership);
   }
+
+
+  @Delete(':id/:intervention')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async delete(
+    @Param('intervention') intervention: string,
+    @Membership() membership: ProjectGuardResponse,
+  ) {
+    return this.interventionsService.deleteIntervention(intervention, membership);
+  }
+
+
 
 }

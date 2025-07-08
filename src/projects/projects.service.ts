@@ -1460,9 +1460,9 @@ export class ProjectsService {
     }
   }
 
-async updateProject(
-    projectId: number, 
-    updateProjectDto: UpdateProjectDto, 
+  async updateProject(
+    projectId: number,
+    updateProjectDto: UpdateProjectDto,
     userId: number
   ): Promise<ServiceResponse> {
     try {
@@ -1524,6 +1524,7 @@ async updateProject(
       try {
         const geometry = this.getGeoJSONForPostGIS(updateProjectDto.location);
         updateData.location = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+        updateData.originalGeometry = updateProjectDto.location
       } catch (error) {
         console.error('Invalid GeoJSON provided:', error);
         delete updateData.location;
@@ -1560,7 +1561,7 @@ async updateProject(
    * @returns Promise<ServiceResponse>
    */
   async validateUpdateData(
-    projectId: number, 
+    projectId: number,
     updateProjectDto: UpdateProjectDto
   ): Promise<ServiceResponse> {
     try {

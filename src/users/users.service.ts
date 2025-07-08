@@ -207,12 +207,33 @@ export class UsersService {
     return true;
   }
 
+    private async prepareUpdateData(updateProjectDto: any): Promise<any> {
+      const updateData: any = {
+        ...updateProjectDto,
+        updatedAt: new Date(),
+      };
+  
+
+
+  
+      // Clean up undefined values
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+      console.log("updateData",updateData)
+  
+      return updateData;
+    }
+  
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
+    const payload = this.prepareUpdateData(updateUserDto)
     const result = await this.drizzleService.db
       .update(users)
       .set({
-        ...updateUserDto,
+        ...payload,
         updatedAt: new Date(),
       })
       .where(eq(users.id, id))

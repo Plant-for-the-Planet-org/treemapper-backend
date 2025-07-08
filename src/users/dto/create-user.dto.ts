@@ -59,7 +59,6 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   @Length(2, 2)
-  @Transform(({ value }) => value?.toUpperCase())
   country?: string;
 
   @IsOptional()

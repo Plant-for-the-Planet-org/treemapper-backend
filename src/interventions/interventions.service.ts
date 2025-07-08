@@ -348,7 +348,7 @@ export class InterventionsService {
 
 
 
- async getProjectInterventions(
+  async getProjectInterventions(
     projectId: number,
     queryDto: GetProjectInterventionsQueryDto,
   ): Promise<GetProjectInterventionsResponseDto> {
@@ -410,7 +410,7 @@ export class InterventionsService {
 
     // Species filter - search in JSONB array
     if (species && species.length > 0) {
-      const speciesConditions = species.map(speciesName => 
+      const speciesConditions = species.map(speciesName =>
         sql`EXISTS (
           SELECT 1 FROM jsonb_array_elements(${interventions.species}) AS spec
           WHERE spec->>'speciesName' ILIKE ${'%' + speciesName + '%'}
@@ -443,7 +443,7 @@ export class InterventionsService {
 
     // Get trees and their records for each intervention
     const interventionIds = interventionsData.map(item => item.intervention.id);
-    
+
     let treesWithRecords: any[] = [];
     if (interventionIds.length > 0) {
       treesWithRecords = await this.drizzleService.db
@@ -463,17 +463,17 @@ export class InterventionsService {
 
     // Group trees and records by intervention
     const treesByIntervention = new Map<number, Map<number, TreeDto>>();
-    
+
     treesWithRecords.forEach(item => {
       const tree = item.tree;
       const record = item.record;
-      
+
       if (!treesByIntervention.has(tree.interventionId)) {
         treesByIntervention.set(tree.interventionId, new Map());
       }
-      
+
       const interventionTrees = treesByIntervention.get(tree.interventionId);
-      
+
       if (interventionTrees) {
         if (!interventionTrees.has(tree.id)) {
           interventionTrees.set(tree.id, {
@@ -493,7 +493,7 @@ export class InterventionsService {
             records: [],
           });
         }
-        
+
         if (record) {
           const treeDto = interventionTrees.get(tree.id);
           if (treeDto) {
@@ -521,7 +521,7 @@ export class InterventionsService {
     const responseData: any[] = interventionsData.map(item => {
       const intervention = item.intervention;
       const site = item.site;
-      
+
       const interventionTrees = treesByIntervention.get(intervention.id);
       const treesArray = interventionTrees ? Array.from(interventionTrees.values()) : [];
 
@@ -571,5 +571,32 @@ export class InterventionsService {
         totalPages,
       },
     };
+  }
+
+
+  async deleteIntervention(intervention: string, membership: ProjectGuardResponse) {
+    try {
+      const existingIntevention = await this.drizzleService.db
+        .select()
+        .from(interventions)
+        .where(eq(interventions.uid, intervention))
+
+      if (!existingIntevention) {
+        throw new BadRequestException('Intetvention does not existis');
+      }
+
+      await this.drizzleService.db
+        .delete(interventions)
+        .where(
+          and(
+            eq(interventions.id, existingIntevention[0].id),
+          ),
+        )
+        .returning();
+      return { message: 'Intervention deleted successfully' };
+    } catch (error) {
+      console.log("KLJSDc", error)
+      return ''
+    }
   }
 }
