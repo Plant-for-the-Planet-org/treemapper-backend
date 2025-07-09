@@ -18,45 +18,45 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) { }
 
   async onModuleInit() {
-    const redisConfig = this.configService.get('redis');
+    // const redisConfig = this.configService.get('redis');
 
-    this.redis = new Redis({
-      host: redisConfig.host,
-      port: redisConfig.port,
-      password: redisConfig.password,
-      db: redisConfig.db,
-      keyPrefix: `${redisConfig.keyPrefix}:`,
-      maxRetriesPerRequest: 2, // Reduce from 3
-      lazyConnect: redisConfig.lazyConnect,
-      connectTimeout: 10000, // 10 seconds
-      commandTimeout: 5000,  // 5 seconds
-      // Add connection pooling
-      family: 4,
-      keepAlive: 0, // 0 disables TCP keep-alive, or set to a positive number (ms) if needed
-    });
+    // this.redis = new Redis({
+    //   host: redisConfig.host,
+    //   port: redisConfig.port,
+    //   password: redisConfig.password,
+    //   db: redisConfig.db,
+    //   keyPrefix: `${redisConfig.keyPrefix}:`,
+    //   maxRetriesPerRequest: 2, // Reduce from 3
+    //   lazyConnect: redisConfig.lazyConnect,
+    //   connectTimeout: 10000, // 10 seconds
+    //   commandTimeout: 5000,  // 5 seconds
+    //   // Add connection pooling
+    //   family: 4,
+    //   keepAlive: 0, // 0 disables TCP keep-alive, or set to a positive number (ms) if needed
+    // });
 
-    this.redis.on('connect', () => {
-      this.logger.log('Redis connected successfully');
-    });
+    // this.redis.on('connect', () => {
+    //   this.logger.log('Redis connected successfully');
+    // });
 
-    this.redis.on('error', (error) => {
-      this.logger.error('Redis connection error:', error);
-      this.stats.errors++;
-    });
+    // this.redis.on('error', (error) => {
+    //   this.logger.error('Redis connection error:', error);
+    //   this.stats.errors++;
+    // });
 
-    this.redis.on('ready', () => {
-      this.logger.log('Redis ready to accept commands');
-    });
+    // this.redis.on('ready', () => {
+    //   this.logger.log('Redis ready to accept commands');
+    // });
 
-    this.redis.on('close', () => {
-      this.logger.warn('Redis connection closed');
-    });
+    // this.redis.on('close', () => {
+    //   this.logger.warn('Redis connection closed');
+    // });
 
-    try {
-      await this.redis.connect();
-    } catch (error) {
-      this.logger.error('Failed to connect to Redis:', error);
-    }
+    // try {
+    //   await this.redis.connect();
+    // } catch (error) {
+    //   this.logger.error('Failed to connect to Redis:', error);
+    // }
   }
 
   async onModuleDestroy() {

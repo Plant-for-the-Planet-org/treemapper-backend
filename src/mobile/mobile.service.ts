@@ -403,6 +403,7 @@ export class MobileService {
           description: projectSpecies.description,
           isNativeSpecies: projectSpecies.isNativeSpecies,
           disbaled: projectSpecies.isDisabled,
+          image: projectSpecies.image,
           favourite: projectSpecies.favourite,
           createdAt: projectSpecies.createdAt,
           scientificName: scientificSpecies.scientificName,

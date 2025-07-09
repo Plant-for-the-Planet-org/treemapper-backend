@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { DrizzleService } from '../database/drizzle.service';
@@ -20,8 +20,58 @@ import {
   InterventionExportDto,
   InterventionExportResponse,
 } from './dto/analytics.dto';
-import { interventions, projectMembers, trees, users } from '../database/schema';
+import { interventions, projectMembers, projects, trees, users } from '../database/schema';
 
+// DTOs for response
+export interface InterventionMapData {
+  id: number;
+  uid: string;
+  hid: string;
+  type: string;
+  description?: string;
+  treeCount: number;
+  interventionStatus: string;
+  registrationDate: string;
+  interventionStartDate: string;
+  interventionEndDate: string;
+  location: any; // GeoJSON geometry
+  image?: string;
+  species: Array<{
+    speciesName: string;
+    count: number;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TreeMapData {
+  id: number;
+  hid: string;
+  uid: string;
+  interventionId?: number;
+  speciesName?: string;
+  status: string;
+  height?: number;
+  width?: number;
+  plantingDate?: string;
+  location: any; // GeoJSON geometry
+  image?: string;
+  tag?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MapDataResponse {
+  interventions: InterventionMapData[];
+  trees: TreeMapData[];
+  projectInfo: {
+    id: number;
+    uid: string;
+    projectName: string;
+    totalInterventions: number;
+    totalTrees: number;
+  };
+}
 export interface RecentAdditionsDto {
   page: number;
   limit: number;
@@ -34,6 +84,7 @@ export interface RecentActivity {
     id: number;
     name: string;
     image: string | null;
+    uid: string
   };
   timeOfActivity: string; // ISO date string
   description: string;
@@ -359,78 +410,82 @@ export class AnalyticsService {
 
     // Get all activities using UNION ALL
     const activitiesQuery = sql`
-    (
-      SELECT 
-        i.uid as id,
-        'intervention' as activity_type,
-        i.created_at as time_of_activity,
-        u.id as user_id,
-        u.display_name as user_name,
-        u.image as user_image,
-        i.tree_count as tree_count,
-        NULL::numeric as area_in_ha,
-        NULL::text as species_name,
-        NULL::text as member_name
-      FROM ${interventions} i
-      JOIN ${users} u ON i.user_id = u.id
-      WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
-    )
-    UNION ALL
-    (
-      SELECT 
-        ps.uid as id,
-        'species' as activity_type,
-        ps.created_at as time_of_activity,
-        u.id as user_id,
-        u.display_name as user_name,
-        u.image as user_image,
-        NULL::integer as tree_count,
-        NULL::numeric as area_in_ha,
-        COALESCE(ps.common_name, ss.scientific_name) as species_name,
-        NULL::text as member_name
-      FROM ${schema.projectSpecies} ps
-      JOIN ${users} u ON ps.added_by_id = u.id
-      JOIN ${schema.scientificSpecies} ss ON ps.scientific_species_id = ss.id
-      WHERE ps.project_id = ${projectId} AND ps.deleted_at IS NULL
-    )
-    UNION ALL
-    (
-      SELECT 
-        s.uid as id,
-        'site' as activity_type,
-        s.created_at as time_of_activity,
-        u.id as user_id,
-        u.display_name as user_name,
-        u.image as user_image,
-        NULL::integer as tree_count,
-        ROUND((ST_Area(s.location::geography) / 10000.0)::numeric, 2) as area_in_ha,
-        NULL::text as species_name,
-        NULL::text as member_name
-      FROM ${schema.sites} s
-      JOIN ${users} u ON s.created_by_id = u.id
-      WHERE s.project_id = ${projectId} AND s.deleted_at IS NULL
-    )
-    UNION ALL
-    (
-      SELECT 
-        pm.uid as id,
-        'member' as activity_type,
-        pm.created_at as time_of_activity,
-        invited_by.id as user_id,
-        invited_by.display_name as user_name,
-        invited_by.image as user_image,
-        NULL::integer as tree_count,
-        NULL::numeric as area_in_ha,
-        NULL::text as species_name,
-        new_member.display_name as member_name
-      FROM ${projectMembers} pm
-      JOIN ${users} new_member ON pm.user_id = new_member.id
-      LEFT JOIN ${users} invited_by ON pm.user_id = invited_by.id
-      WHERE pm.project_id = ${projectId}
-    )
-    ORDER BY time_of_activity DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `;
+(
+  SELECT 
+    i.uid as id,
+    'intervention' as activity_type,
+    i.created_at as time_of_activity,
+    u.id as user_id,
+    u.uid as user_uid,
+    u.display_name as user_name,
+    u.image as user_image,
+    i.tree_count as tree_count,
+    NULL::numeric as area_in_ha,
+    NULL::text as species_name,
+    NULL::text as member_name
+  FROM ${interventions} i
+  JOIN ${users} u ON i.user_id = u.id
+  WHERE i.project_id = ${projectId} AND i.deleted_at IS NULL
+)
+UNION ALL
+(
+  SELECT 
+    ps.uid as id,
+    'species' as activity_type,
+    ps.created_at as time_of_activity,
+    u.id as user_id,
+    u.uid as user_uid,
+    u.display_name as user_name,
+    u.image as user_image,
+    NULL::integer as tree_count,
+    NULL::numeric as area_in_ha,
+    COALESCE(ps.common_name, ss.scientific_name) as species_name,
+    NULL::text as member_name
+  FROM ${schema.projectSpecies} ps
+  JOIN ${users} u ON ps.added_by_id = u.id
+  JOIN ${schema.scientificSpecies} ss ON ps.scientific_species_id = ss.id
+  WHERE ps.project_id = ${projectId} AND ps.deleted_at IS NULL
+)
+UNION ALL
+(
+  SELECT 
+    s.uid as id,
+    'site' as activity_type,
+    s.created_at as time_of_activity,
+    u.id as user_id,
+    u.uid as user_uid,
+    u.display_name as user_name,
+    u.image as user_image,
+    NULL::integer as tree_count,
+    ROUND((ST_Area(s.location::geography) / 10000.0)::numeric, 2) as area_in_ha,
+    NULL::text as species_name,
+    NULL::text as member_name
+  FROM ${schema.sites} s
+  JOIN ${users} u ON s.created_by_id = u.id
+  WHERE s.project_id = ${projectId} AND s.deleted_at IS NULL
+)
+UNION ALL
+(
+  SELECT 
+    pm.uid as id,
+    'member' as activity_type,
+    pm.created_at as time_of_activity,
+    invited_by.id as user_id,
+    invited_by.uid as user_uid,
+    invited_by.display_name as user_name,
+    invited_by.image as user_image,
+    NULL::integer as tree_count,
+    NULL::numeric as area_in_ha,
+    NULL::text as species_name,
+    new_member.display_name as member_name
+  FROM ${projectMembers} pm
+  JOIN ${users} new_member ON pm.user_id = new_member.id
+  LEFT JOIN ${users} invited_by ON pm.user_id = invited_by.id
+  WHERE pm.project_id = ${projectId}
+)
+ORDER BY time_of_activity DESC
+LIMIT ${limit} OFFSET ${offset}
+`;
 
     const countQuery = sql`
     SELECT COUNT(*) as total FROM (
@@ -460,6 +515,7 @@ export class AnalyticsService {
           id: row.user_id,
           name: row.user_name || 'Unknown User',
           image: row.user_image,
+          uid: row.user_uid,
         },
         timeOfActivity: new Date(row.time_of_activity).toISOString(),
         description: this.generateActivityDescription(row),
@@ -508,7 +564,7 @@ export class AnalyticsService {
         return `Created new site covering ${row.area_in_ha} ha`;
 
       case 'member':
-        return  `Joined the project`;
+        return `Joined the project`;
 
       default:
         return 'Unknown activity';
@@ -801,4 +857,137 @@ export class AnalyticsService {
     };
   }
 
+  async getProjectMapData(projectId: number): Promise<MapDataResponse> {
+    // First, verify the project exists
+    const project = await this.drizzleService.db
+      .select({
+        id: projects.id,
+        uid: projects.uid,
+        projectName: projects.projectName,
+      })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    if (!project.length) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    // Fetch interventions with spatial data
+    const interventionsData = await this.drizzleService.db
+      .select({
+        id: interventions.id,
+        uid: interventions.uid,
+        hid: interventions.hid,
+        type: interventions.type,
+        description: interventions.description,
+        treeCount: interventions.treeCount,
+        interventionStatus: interventions.interventionStatus,
+        registrationDate: interventions.registrationDate,
+        interventionStartDate: interventions.interventionStartDate,
+        interventionEndDate: interventions.interventionEndDate,
+        location: sql<string>`ST_AsGeoJSON(${interventions.location})`.as('location'),
+        image: interventions.image,
+        species: interventions.species,
+        createdAt: interventions.createdAt,
+        updatedAt: interventions.updatedAt,
+      })
+      .from(interventions)
+      .where(
+        and(
+          eq(interventions.projectId, projectId),
+          isNull(interventions.deletedAt)
+        )
+      );
+
+    // Fetch trees with spatial data
+    const treesData = await this.drizzleService.db
+      .select({
+        id: trees.id,
+        hid: trees.hid,
+        uid: trees.uid,
+        interventionId: trees.interventionId,
+        speciesName: trees.speciesName,
+        status: trees.status,
+        height: trees.height,
+        width: trees.width,
+        plantingDate: trees.plantingDate,
+        location: sql<string>`ST_AsGeoJSON(${trees.location})`.as('location'),
+        image: trees.image,
+        tag: trees.tag,
+        createdAt: trees.createdAt,
+        updatedAt: trees.updatedAt,
+      })
+      .from(trees)
+      .innerJoin(interventions, eq(trees.interventionId, interventions.id))
+      .where(
+        and(
+          eq(interventions.projectId, projectId),
+          isNull(trees.deletedAt),
+          isNull(interventions.deletedAt)
+        )
+      );
+
+    // Transform interventions data
+    const transformedInterventions: any[] = interventionsData.map(
+      (intervention) => ({
+        id: intervention.id,
+        uid: intervention.uid,
+        hid: intervention.hid,
+        type: intervention.type,
+        description: intervention.description,
+        treeCount: intervention.treeCount || 0,
+        interventionStatus: intervention.interventionStatus || 'active',
+        registrationDate: intervention.registrationDate?.toISOString() || '',
+        interventionStartDate: intervention.interventionStartDate?.toISOString() || '',
+        interventionEndDate: intervention.interventionEndDate?.toISOString() || '',
+        location: intervention.location ? JSON.parse(intervention.location) : null,
+        image: intervention.image,
+        species: this.transformSpeciesData(intervention.species),
+        createdAt: intervention.createdAt?.toISOString() || '',
+        updatedAt: intervention.updatedAt?.toISOString() || '',
+      })
+    );
+
+    // Transform trees data
+    const transformedTrees: TreeMapData[] = treesData.map((tree) => ({
+      id: tree.id,
+      hid: tree.hid,
+      uid: tree.uid,
+      interventionId: tree.interventionId === null ? undefined : tree.interventionId,
+      speciesName: tree.speciesName || '',
+      status: tree.status || 'unknown',
+      height: tree.height ? Number(tree.height) : undefined,
+      width: tree.width ? Number(tree.width) : undefined,
+      plantingDate: tree.plantingDate?.toISOString(),
+      location: tree.location ? JSON.parse(tree.location) : null,
+      image: tree.image || '',
+      tag: tree.tag || '',
+      createdAt: tree.createdAt?.toISOString() || '',
+      updatedAt: tree.updatedAt?.toISOString() || '',
+    }));
+
+    return {
+      interventions: transformedInterventions,
+      trees: transformedTrees,
+      projectInfo: {
+        id: project[0].id,
+        uid: project[0].uid,
+        projectName: project[0].projectName,
+        totalInterventions: transformedInterventions.length,
+        totalTrees: transformedTrees.length,
+      },
+    };
+  }
+
+  private transformSpeciesData(species: any): Array<{ speciesName: string; count: number }> {
+    if (!species || !Array.isArray(species)) {
+      return [];
+    }
+
+    return species.map((sp: any) => ({
+      speciesName: sp.speciesName || sp.otherSpeciesName || 'Unknown',
+      count: sp.count || 0,
+    }));
+  }
 }
