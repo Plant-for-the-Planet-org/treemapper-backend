@@ -181,6 +181,7 @@ export class ProjectSpeciesService {
           createdAt: projectSpecies.createdAt,
           scientificName: scientificSpecies.scientificName,
           updatedAt: projectSpecies.updatedAt,
+          metadata: projectSpecies.metadata,
           scientificSpecies: {
             id: scientificSpecies.id,
             uid: scientificSpecies.uid,
