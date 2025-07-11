@@ -29,7 +29,7 @@ export class ProjectSpeciesController {
   constructor(private readonly userSpeciesService: ProjectSpeciesService) { }
 
   @Post('/:id')
-  @ProjectRoles('owner', 'admin')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   async create(
     @Membership() membership: ProjectGuardResponse,
@@ -42,7 +42,7 @@ export class ProjectSpeciesController {
   }
 
   @Get('/:id')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   async getAll(
     @Membership() membership: ProjectGuardResponse,
@@ -50,30 +50,30 @@ export class ProjectSpeciesController {
     return this.userSpeciesService.getAll(membership);
   }
 
-  // @Put('/:id/species/:species')
-  // @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async update(
-  //   @Param('species') species: string,
-  //   @Membership() membership: ProjectGuardResponse,
-  //   @Body() updateDto: UpdateUserSpeciesDto,
-  // ) {
-  //   return this.userSpeciesService.update(
-  //     species,
-  //     membership,
-  //     updateDto,
-  //   );
-  // }
+  @Put('/:id/species/:species')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
+  @UseGuards(ProjectPermissionsGuard)
+  async update(
+    @Param('species') species: string,
+    @Membership() membership: ProjectGuardResponse,
+    @Body() updateDto: UpdateUserSpeciesDto,
+  ) {
+    return this.userSpeciesService.update(
+      species,
+      membership,
+      updateDto,
+    );
+  }
 
-  // @Delete('/:id/species/:species')
-  // @ProjectRoles('owner', 'admin', 'manager', 'contributor')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async delete(
-  //   @Param('species') species: string,
-  //   @Membership() membership: ProjectGuardResponse,
-  // ) {
-  //   return this.userSpeciesService.delete(species, membership);
-  // }
+  @Delete('/:id/species/:species')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async delete(
+    @Param('species') species: string,
+    @Membership() membership: ProjectGuardResponse,
+  ) {
+    return this.userSpeciesService.delete(species, membership);
+  }
 
 
   // @Get(':id')

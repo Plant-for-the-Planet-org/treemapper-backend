@@ -1,8 +1,8 @@
 import { IsEnum } from 'class-validator';
 
 export class UpdateProjectRoleDto {
-  @IsEnum(['admin', 'manager', 'contributor', 'observer', 'researcher'], {
-    message: 'Role must be one of: admin, manager, contributor, observer, researcher'
+  @IsEnum(['admin', 'contributor', 'observer'], {
+    message: 'Role must be one of: admin, contributor, observer'
   })
   role: 'admin' | 'contributor' | 'observer';
 }

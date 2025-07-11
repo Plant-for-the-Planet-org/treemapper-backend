@@ -69,7 +69,7 @@ export class SiteController {
     @Req() req: any
   ) {
     // Check permissions - only allow contributors and above
-    const allowedRoles = ['owner', 'admin', 'manager', 'contributor'];
+    const allowedRoles = ['owner', 'admin', 'contributor'];
     if (!allowedRoles.includes(req.userRole)) {
       throw new ForbiddenException('Insufficient permissions to update sites');
     }

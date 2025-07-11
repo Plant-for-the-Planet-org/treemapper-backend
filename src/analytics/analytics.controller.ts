@@ -57,6 +57,15 @@ export class AnalyticsController {
     return this.analyticsService.getProjectKPIs(dto, membership.projectId);
   }
 
+
+  @Get(':id/map')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectMapData(@Membership() membership: any): Promise<any> {
+    return this.analyticsService.getProjectMapData(membership.projectId);
+  }
+
+  
   @Post('/:id/export')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)

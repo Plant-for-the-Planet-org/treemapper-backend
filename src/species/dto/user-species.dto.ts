@@ -29,6 +29,10 @@ export class CreateUserSpeciesDto {
   @IsString()
   notes?: string;
 
+  @IsOptional()
+  @IsString()
+  image?: string;
+
   @IsBoolean()
   favourite?: boolean = false;
 
@@ -58,11 +62,15 @@ export class UpdateUserSpeciesDto {
   description?: string;
 
   @IsOptional()
-  metaData?: any;
+  metadata?: any;
 
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
 
   @IsOptional()
   @IsBoolean()

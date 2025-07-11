@@ -71,8 +71,17 @@ export class UsersController {
   async getSignedUrl(
     @Body() dto: CreatePresignedUrlDto,
     @CurrentUser() user: User) {
-    return await this.usersService.generateR2Url(user.id, dto);
+    return await this.usersService.generateR2Url(dto);
   }
+
+  @Patch('me')
+  async updateProfile(
+    @CurrentUser() user: User,
+    @Body() updateUserDto: any,
+  ) {
+    return await this.usersService.update(user.id, updateUserDto);
+  }
+
 
   // @Post()
   // async create(@Body() createUserDto: CreateUserDto) {
@@ -101,13 +110,6 @@ export class UsersController {
   //   return await this.usersService.findOne(id);
   // }
 
-  // @Patch('me')
-  // async updateProfile(
-  //   @CurrentUser() user: User,
-  //   @Body() updateUserDto: UpdateUserDto,
-  // ) {
-  //   return await this.usersService.update(user.id, updateUserDto);
-  // }
 
   // @Patch(':id')
   // async update(

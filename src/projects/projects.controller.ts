@@ -163,20 +163,20 @@ export class ProjectsController {
 
 
   @Get(':id')
-  @Public()
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findOne(id);
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  findOne(@Membership() membership: ProjectGuardResponse) {
+    return this.projectsService.findOne(membership.projectId);
   }
 
   @Patch(':id')
   @ProjectRoles('owner', 'admin')
   @UseGuards(ProjectPermissionsGuard)
   update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateProjectDto: UpdateProjectDto,
-    @Req() req
+    @Body() updateProjectDto: any,
+    @Membership() membership: any,
   ): Promise<any> {
-    return this.projectsService.update(id, updateProjectDto, req.user.id);
+    return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
   }
 
   @Delete(':id')
@@ -195,7 +195,7 @@ export class ProjectsController {
 
 
   @Get(':id/members')
-  @ProjectRoles('owner', 'admin', 'manager', 'contributor', 'observer', 'researcher')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
   @UseGuards(ProjectPermissionsGuard)
   getMembers(@Param('id', ParseIntPipe) id: number) {
     return this.projectsService.getMembers(id);

@@ -21,7 +21,7 @@ export class SpeciesRequestController {
   constructor(private readonly speciesRequestService: SpeciesRequestService) { }
 
   @Post('/:id')
-  @ProjectRoles('owner', 'admin')
+  @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
   async createRequest(
     @Body() createDto: CreateSpeciesRequestDto,
