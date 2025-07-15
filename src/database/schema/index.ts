@@ -141,6 +141,19 @@ export const entityEnum = pgEnum('entity_type', [
 ]);
 
 
+export const organizationRoleEnum = pgEnum('organization_role', [
+  'owner',
+  'admin',
+  'contributor',
+  'member'
+]);
+
+export const memberStatusEnum = pgEnum('member_status', [
+  'active',
+  'inactive',
+  'suspended',
+  'pending'
+]);
 
 
 // ============================================================================
@@ -201,6 +214,58 @@ export const migrationLogs = pgTable('migration_logs', {
   userMigrationIdx: index('user_migration_id_idx').on(table.userMigrationId)
 }))
 
+
+export const organizations = pgTable('organizations', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  logo: text('logo'),
+  primaryColor: varchar('primary_color', { length: 7 }),
+  secondaryColor: varchar('secondary_color', { length: 7 }),
+  domainRestriction: varchar('custom_domain', { length: 255 }).unique(),
+  email: varchar('email', { length: 320 }),
+  phone: varchar('phone', { length: 50 }),
+  website: text('website'),
+  address: text('address'),
+  country: char('country', { length: 2 }),
+  timezone: varchar('timezone', { length: 50 }).default('UTC'),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdById: integer('created_by_id').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  metadata: jsonb('metadata'),
+}, (table) => ({
+  nameIdx: index('organizations_name_idx').on(table.name),
+  slugIdx: index('organizations_slug_idx').on(table.slug),
+  createdByIdx: index('organizations_created_by_idx').on(table.createdById),
+}));
+
+export const organizationMembers = pgTable('organization_members', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: organizationRoleEnum('role').notNull().default('member'),
+  status: memberStatusEnum('status').default('active'),
+  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  invitedAt: timestamp('invited_at', { withTimezone: true }),
+  invitedById: integer('invited_by_id').references(() => users.id),
+  lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  metadata: jsonb('metadata'),
+}, (table) => ({
+  uniqueMember: unique('unique_organization_member').on(table.organizationId, table.userId),
+  organizationIdx: index('organization_members_org_idx').on(table.organizationId),
+  userIdx: index('organization_members_user_idx').on(table.userId),
+  roleIdx: index('organization_members_role_idx').on(table.role),
+  statusIdx: index('organization_members_status_idx').on(table.status),
+  invitedByIdx: index('organization_members_invited_by_idx').on(table.invitedById),
+}));
+
 // ============================================================================
 // USERS TABLE
 // ============================================================================
@@ -226,6 +291,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   flag: boolean('flag').default(false),
+
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
@@ -240,6 +306,7 @@ export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   createdById: integer('created_by_id').notNull().references(() => users.id),
+  organizationId: integer('organization_id').references(() => organizations.id),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   purpose: varchar('purpose', { length: 100 }),
   projectName: varchar('project_name', { length: 255 }).notNull(),
@@ -299,7 +366,7 @@ export const bulkInvites = pgTable('bulk_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
-  restriction: varchar('restriction').array().default([]), 
+  restriction: varchar('restriction').array().default([]),
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedById: integer('invited_by_id').notNull().references(() => users.id),
@@ -531,7 +598,7 @@ export const interventions = pgTable('interventions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   flag: boolean('flag').default(false),
-  hasRecords:boolean('has_records').default(false),
+  hasRecords: boolean('has_records').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedIntervention: boolean('migrated_intervention').default(false),
@@ -714,6 +781,9 @@ export const userRelations = relations(users, ({ many }) => ({
   speciesRequests: many(speciesRequests, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequests, { relationName: 'reviewedBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
+  organizationMemberships: many(organizationMembers),
+  createdOrganizations: many(organizations, { relationName: 'createdBy' }),
+  sentOrgInvites: many(organizationMembers, { relationName: 'invitedBy' }),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -728,6 +798,10 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   sites: many(sites),
   interventions: many(interventions),
   projectSpecies: many(projectSpecies),
+  organization: one(organizations, {
+    fields: [projects.organizationId],
+    references: [organizations.id],
+  }),
   speciesRequests: many(speciesRequests),
 }));
 
@@ -768,6 +842,32 @@ export const bulkInviteRelations = relations(bulkInvites, ({ one }) => ({
 
 export const scientificSpeciesRelations = relations(scientificSpecies, ({ many }) => ({
   projectSpecies: many(projectSpecies),
+}));
+
+export const organizationRelations = relations(organizations, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [organizations.createdById],
+    references: [users.id],
+    relationName: 'createdBy',
+  }),
+  members: many(organizationMembers),
+  projects: many(projects), // You'll need to add organizationId to projects table
+}));
+
+export const organizationMemberRelations = relations(organizationMembers, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationMembers.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [organizationMembers.userId],
+    references: [users.id],
+  }),
+  invitedBy: one(users, {
+    fields: [organizationMembers.invitedById],
+    references: [users.id],
+    relationName: 'invitedBy',
+  }),
 }));
 
 export const projectSpeciesRelations = relations(projectSpecies, ({ one, many }) => ({
