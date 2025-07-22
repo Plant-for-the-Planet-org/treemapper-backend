@@ -144,7 +144,6 @@ export const entityEnum = pgEnum('entity_type', [
 export const organizationRoleEnum = pgEnum('organization_role', [
   'owner',
   'admin',
-  'contributor',
   'member'
 ]);
 
@@ -291,7 +290,6 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   flag: boolean('flag').default(false),
-
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
