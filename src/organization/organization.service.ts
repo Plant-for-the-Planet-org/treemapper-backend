@@ -8,11 +8,16 @@ import { OrganizationResponseDto, SelectOrganizationDto, UserOrganizationRespons
 import { organizations, organizationMembers, users, projects } from '../database/schema/index';
 import { DrizzleService } from 'src/database/drizzle.service';
 import { generateUid } from 'src/util/uidGenerator';
+import { And } from 'typeorm';
+import { UsersService } from 'src/users/users.service';
+import { CacheService } from 'src/cache/cache.service';
+import { CACHE_KEYS } from 'src/cache/cache-keys';
 
 @Injectable()
 export class OrganizationsService {
   constructor(
-    private readonly drizzle: DrizzleService
+    private readonly drizzle: DrizzleService,
+    private cacheService: CacheService,
   ) { }
 
   /**
@@ -93,7 +98,7 @@ export class OrganizationsService {
   }
 
 
-  async selectOrg(createOrgDto: SelectOrganizationDto, userId: number): Promise<any> {
+  async selectOrg(createOrgDto: SelectOrganizationDto, userId: number, auth0Id: string): Promise<any> {
     try {
       const result = await this.drizzle.db.transaction(async (tx) => {
         let organizationId: number;
@@ -132,7 +137,7 @@ export class OrganizationsService {
               target: [organizationMembers.organizationId, organizationMembers.userId]
             })
         ]);
-
+        await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
         return { organizationId, userUpdated: userUpdate.status === 'fulfilled' };
       });
 
@@ -151,8 +156,6 @@ export class OrganizationsService {
   async findAllByUser(userId: number): Promise<any[]> {
     const userOrganizations = await this.drizzle.db
       .select({
-        // Organization fields
-        id: organizations.id,
         uid: organizations.uid,
         name: organizations.name,
         slug: organizations.slug,
@@ -177,37 +180,15 @@ export class OrganizationsService {
       })
       .from(organizationMembers)
       .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
-      .where(eq(organizationMembers.userId, userId))
+      .where(and(
+        eq(organizationMembers.userId, userId),
+        eq(organizations.type, 'private'),
+      ))
       .orderBy(organizations.name);
 
-    // Get member and project counts for each organization
-    const enrichedOrganizations = await Promise.all(
-      userOrganizations.map(async (org) => {
-        const counts = await this.getOrganizationCounts(org.id);
-        // Convert null fields to undefined to match DTO type
-        const orgWithUndefined = {
-          ...org,
-          description: org.description ?? undefined,
-          logo: org.logo ?? undefined,
-          primaryColor: org.primaryColor ?? undefined,
-          secondaryColor: org.secondaryColor ?? undefined,
-          email: org.email ?? undefined,
-          phone: org.phone ?? undefined,
-          website: org.website ?? undefined,
-          address: org.address ?? undefined,
-          country: org.country ?? undefined,
-          timezone: org.timezone ?? undefined,
-          deletedAt: org.deletedAt ?? undefined,
-        };
 
-        return {
-          ...orgWithUndefined,
-          ...counts,
-        };
-      })
-    );
 
-    return enrichedOrganizations;
+    return userOrganizations;
   }
 
   /**

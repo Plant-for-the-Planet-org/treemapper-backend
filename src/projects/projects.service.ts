@@ -167,6 +167,7 @@ export class ProjectsService {
           .values({
             uid: createProjectDto.uid ?? generateUid('prj'),
             createdById: userId,
+            organizationId: 1,
             slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
             projectName: createProjectDto.projectName ?? '',
             projectType: createProjectDto.projectType ?? '',
@@ -185,6 +186,7 @@ export class ProjectsService {
             projectId: project.id,
             uid: generateUid('mem'),
             userId: userId,
+            organizationId: 1,
             projectRole: 'owner',
             joinedAt: new Date(),
           });
@@ -217,15 +219,19 @@ export class ProjectsService {
     }
   }
 
-  async createPersonalProject(createProjectDto: CreateProjectDto, userId: number): Promise<any> {
+  async createPersonalProject(createProjectDto: CreateProjectDto, userId: number, primaryOrg: number): Promise<any> {
     try {
       const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
       const existingProject = await this.drizzleService.db
-        .select({ id: projects.id })
+        .select({ id: projects.id, isPersonal: projects.isPersonal })
         .from(projects)
         .where(eq(projects.slug, slug))
         .limit(1);
-
+      if (existingProject.length > 0) {
+        if (existingProject[0].isPersonal) {
+          throw 'Personal Project already exists'
+        }
+      }
       if (existingProject.length > 0) {
         const uniqueSlug = `${slug}-${Date.now()}`;
         createProjectDto.slug = uniqueSlug;
@@ -239,6 +245,7 @@ export class ProjectsService {
           .values({
             uid: createProjectDto.uid ?? generateUid('proj'),
             createdById: userId,
+            organizationId: primaryOrg,
             slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
             projectName: createProjectDto.projectName ?? '',
             projectType: createProjectDto.projectType ?? '',
@@ -253,6 +260,7 @@ export class ProjectsService {
             uid: generateUid('mem'),
             projectId: project[0].id,
             userId: userId,
+            organizationId: 1,
             projectRole: 'owner',
             joinedAt: new Date(),
             invitedAt: new Date()
@@ -285,7 +293,7 @@ export class ProjectsService {
     }
   }
 
-  async findAll(userId: number) {
+  async findAll(userId: number, primaryOrg: number) {
     try {
       const result = await this.drizzleService.db
         .select({
@@ -298,6 +306,7 @@ export class ProjectsService {
             description: projects.description,
             createdAt: projects.createdAt,
             updatedAt: projects.updatedAt,
+
             location: sql`ST_AsGeoJSON(${projects.location})::json`.as('location')
           },
           role: projectMembers.projectRole,
@@ -477,6 +486,7 @@ export class ProjectsService {
         .values({
           projectId: membership.projectId,
           uid: generateUid('inv'),
+          organizationId: 1,
           email,
           // Only allow roles supported by your schema
           projectRole: role as 'owner' | 'admin' | 'contributor' | 'observer',
@@ -543,6 +553,7 @@ export class ProjectsService {
           uid: generateUid('inv'),
           projectRole: 'contributor',
           expiresAt: expiryDate,
+          organizationId: 1,
           message: '',
           restriction: data.restriction
         })
@@ -861,6 +872,7 @@ export class ProjectsService {
             projectId: invite.invite.projectId,
             userId: userId,
             uid: generateUid('mem'),
+            organizationId: 1,
             projectRole: invite.invite.projectRole,
             joinedAt: new Date(),
           })
@@ -990,6 +1002,7 @@ export class ProjectsService {
           userId: userId,
           uid: generateUid('mem'),
           projectRole: 'contributor',
+          organizationId: 1,
           joinedAt: new Date(),
           bulkInviteId: invite.invite.id,
         })
@@ -1755,6 +1768,7 @@ export class ProjectsService {
         .insert(projectMembers)
         .values({
           projectId: projectId,
+          organizationId: 1,
           uid: uuidv4(),
           userId: userToAdd.id,
           projectRole: addMemberDto.role as 'owner' | 'admin' | 'contributor' | 'observer',

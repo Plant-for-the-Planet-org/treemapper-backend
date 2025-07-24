@@ -226,6 +226,7 @@ export const organizations = pgTable('organizations', {
   domainRestriction: varchar('custom_domain', { length: 255 }).unique(),
   email: varchar('email', { length: 320 }),
   phone: varchar('phone', { length: 50 }),
+  type: varchar('type', { length: 50 }).notNull().default('public'),
   website: text('website'),
   address: text('address'),
   country: char('country', { length: 2 }),
@@ -239,6 +240,7 @@ export const organizations = pgTable('organizations', {
 }, (table) => ({
   nameIdx: index('organizations_name_idx').on(table.name),
   slugIdx: index('organizations_slug_idx').on(table.slug),
+  typeIdx: index('organizations_type_idx').on(table.type),
   createdByIdx: index('organizations_created_by_idx').on(table.createdById),
 }));
 
@@ -305,7 +307,7 @@ export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   createdById: integer('created_by_id').notNull().references(() => users.id),
-  organizationId: integer('organization_id').references(() => organizations.id),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   purpose: varchar('purpose', { length: 100 }),
   projectName: varchar('project_name', { length: 255 }).notNull(),
@@ -337,6 +339,7 @@ export const projects = pgTable('projects', {
 }, (table) => ({
   locationIdx: index('projects_location_gist_idx').using('gist', table.location),
   createdByIdx: index('projects_created_by_idx').on(table.createdById),
+  orgIdx: index('projects_org_by_idx').on(table.organizationId),
 }));
 
 // ============================================================================
@@ -347,6 +350,7 @@ export const projectMembers = pgTable('project_members', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   userId: integer('user_id').notNull().references(() => users.id),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedAt: timestamp('invited_at', { withTimezone: true }),
@@ -365,6 +369,7 @@ export const bulkInvites = pgTable('bulk_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   restriction: varchar('restriction').array().default([]),
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
@@ -418,6 +423,7 @@ export const sites = pgTable('sites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   location: geometryWithGeoJSON(4326)('location'),
@@ -445,6 +451,7 @@ export const projectInvites = pgTable('project_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   email: varchar('email', { length: 320 }).notNull(),
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
@@ -511,6 +518,7 @@ export const projectSpecies = pgTable('project_species', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   isNativeSpecies: boolean('is_native_species').default(false),
   isEndangered: boolean('is_endangered').default(false),
   isDisabled: boolean('is_disabled').default(false),
@@ -572,6 +580,7 @@ export const interventions = pgTable('interventions', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   discr: interventionDiscriminatorEnum('discr').notNull().default('intervention'),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   userId: integer('user_id').notNull().references(() => users.id),
   projectId: integer('project_id').references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
@@ -617,6 +626,7 @@ export const trees = pgTable('trees', {
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').references(() => interventions.id),
+  organizationId: integer('organization_id').notNull().references(() => organizations.id),
   interventionSpeciesId: varchar('intervention_species_id'),
   speciesName: varchar('species_name'),
   isUnknown: boolean('is_unknown').default(false),
@@ -816,7 +826,11 @@ export const projectMemberRelations = relations(projectMembers, ({ one }) => ({
   user: one(users, {
     fields: [projectMembers.userId],
     references: [users.id],
-  })
+  }),
+  organization: one(organizations, {
+    fields: [projectMembers.organizationId],
+    references: [organizations.id],
+  }),
 }));
 
 export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
@@ -829,12 +843,20 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
     references: [users.id],
     relationName: 'invitedBy',
   }),
+  organization: one(organizations, {
+    fields: [projectInvites.organizationId],
+    references: [organizations.id],
+  }),
 }));
 
 export const bulkInviteRelations = relations(bulkInvites, ({ one }) => ({
   project: one(projects, {
     fields: [bulkInvites.projectId],
     references: [projects.id],
+  }),
+  organization: one(organizations, {
+    fields: [bulkInvites.organizationId],
+    references: [organizations.id],
   }),
   invitedBy: one(users, {
     fields: [bulkInvites.invitedById],
@@ -879,6 +901,10 @@ export const projectSpeciesRelations = relations(projectSpecies, ({ one, many })
     fields: [projectSpecies.projectId],
     references: [projects.id],
   }),
+  organization: one(organizations, {
+    fields: [projectSpecies.organizationId],
+    references: [organizations.id],
+  }),
   addedBy: one(users, {
     fields: [projectSpecies.addedById],
     references: [users.id],
@@ -896,6 +922,10 @@ export const siteRelations = relations(sites, ({ one, many }) => ({
     fields: [sites.projectId],
     references: [projects.id],
   }),
+  organization: one(organizations, {
+    fields: [sites.organizationId],
+    references: [organizations.id],
+  }),
   createdBy: one(users, {
     fields: [sites.createdById],
     references: [users.id],
@@ -910,6 +940,10 @@ export const interventionsRelations = relations(interventions, ({ one, many }) =
   project: one(projects, {
     fields: [interventions.projectId],
     references: [projects.id],
+  }),
+  organization: one(organizations, {
+    fields: [interventions.organizationId],
+    references: [organizations.id],
   }),
   projectSite: one(sites, {
     fields: [interventions.projectSiteId],
@@ -936,6 +970,10 @@ export const treesRelations = relations(trees, ({ one, many }) => ({
   intervention: one(interventions, {
     fields: [trees.interventionId],
     references: [interventions.id],
+  }),
+  organization: one(organizations, {
+    fields: [trees.organizationId],
+    references: [organizations.id],
   }),
   createdBy: one(users, {
     fields: [trees.createdById],

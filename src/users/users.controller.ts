@@ -57,7 +57,8 @@ export class UsersController {
       locale: users.locale,
       isActive: users.isActive,
       migratedAt: users.migratedAt,
-      existingPlanetUser: users.existingPlanetUser
+      existingPlanetUser: users.existingPlanetUser,
+      primaryOrg: users.primaryOrg
     }
   }
   // @ApiExcludeEndpoint()

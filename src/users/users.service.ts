@@ -48,7 +48,8 @@ export class UsersService {
     migratedAt: users.migratedAt,
     existingPlanetUser: users.existingPlanetUser,
     flag: users.flag,
-    flagReason: users.flagReason
+    flagReason: users.flagReason,
+    primaryOrg: users.primaryOrg
   } as const;
 
   // Public user selection (excludes sensitive fields)
@@ -143,11 +144,7 @@ export class UsersService {
   // Private helper methods
   private async cacheNewUser(user: User): Promise<void> {
     try {
-      await Promise.all([
-        this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), user, CACHE_TTL.MEDIUM),
-        this.cacheService.set(CACHE_KEYS.USER.BY_EMAIL(user.email), user, CACHE_TTL.MEDIUM),
-        this.cacheService.set(CACHE_KEYS.USER.BY_ID(user.id), user, CACHE_TTL.MEDIUM),
-      ]);
+      await this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), user, CACHE_TTL.MEDIUM)
       this.logger.debug(`Cached user: ${user.auth0Id}`);
     } catch (error) {
       this.logger.error(`Failed to cache user: ${user.auth0Id}`, error);
@@ -207,26 +204,26 @@ export class UsersService {
     return true;
   }
 
-    private async prepareUpdateData(updateProjectDto: any): Promise<any> {
-      const updateData: any = {
-        ...updateProjectDto,
-        updatedAt: new Date(),
-      };
-  
+  private async prepareUpdateData(updateProjectDto: any): Promise<any> {
+    const updateData: any = {
+      ...updateProjectDto,
+      updatedAt: new Date(),
+    };
 
 
-  
-      // Clean up undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          delete updateData[key];
-        }
-      });
-      console.log("updateData",updateData)
-  
-      return updateData;
-    }
-  
+
+
+    // Clean up undefined values
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+    console.log("updateData", updateData)
+
+    return updateData;
+  }
+
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
     const payload = this.prepareUpdateData(updateUserDto)

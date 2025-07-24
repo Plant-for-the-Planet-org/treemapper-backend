@@ -40,13 +40,13 @@ export class ProjectsController {
 
   @Post('/personal')
   createPersonal(@Body() createProjectDto: CreateProjectDto, @Req() req): Promise<any> {
-    return this.projectsService.createPersonalProject(createProjectDto, req.user.id);
+    return this.projectsService.createPersonalProject(createProjectDto, req.user.id, req.user.primaryOrg);
   }
 
 
   @Get()
   findAll(@Req() req) {
-    return this.projectsService.findAll(req.user.id);
+    return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
   }
 
   @Get(':id/allmembers')

@@ -38,6 +38,7 @@ CREATE TABLE "bulk_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"organization_id" integer NOT NULL,
 	"restriction" varchar[] DEFAULT '{}',
 	"message" varchar(400),
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
@@ -91,6 +92,7 @@ CREATE TABLE "interventions" (
 	"uid" varchar(50) NOT NULL,
 	"hid" varchar(16) NOT NULL,
 	"discr" "intervention_discriminator" DEFAULT 'intervention' NOT NULL,
+	"organization_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
 	"project_id" integer,
 	"project_site_id" integer,
@@ -194,6 +196,7 @@ CREATE TABLE "organizations" (
 	"custom_domain" varchar(255),
 	"email" varchar(320),
 	"phone" varchar(50),
+	"type" varchar(50) DEFAULT 'public' NOT NULL,
 	"website" text,
 	"address" text,
 	"country" char(2),
@@ -227,6 +230,7 @@ CREATE TABLE "project_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"organization_id" integer NOT NULL,
 	"email" varchar(320) NOT NULL,
 	"message" varchar(400),
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
@@ -246,6 +250,7 @@ CREATE TABLE "project_members" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"organization_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
 	"invited_at" timestamp with time zone,
@@ -261,6 +266,7 @@ CREATE TABLE "project_species" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"scientific_species_id" integer NOT NULL,
+	"organization_id" integer NOT NULL,
 	"is_native_species" boolean DEFAULT false,
 	"is_endangered" boolean DEFAULT false,
 	"is_disabled" boolean DEFAULT false,
@@ -282,7 +288,7 @@ CREATE TABLE "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"created_by_id" integer NOT NULL,
-	"organization_id" integer,
+	"organization_id" integer NOT NULL,
 	"slug" varchar(255) NOT NULL,
 	"purpose" varchar(100),
 	"project_name" varchar(255) NOT NULL,
@@ -336,6 +342,7 @@ CREATE TABLE "sites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"organization_id" integer NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"description" text,
 	"location" geometry(Geometry,4326),
@@ -417,6 +424,7 @@ CREATE TABLE "trees" (
 	"hid" varchar(16) NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"intervention_id" integer,
+	"organization_id" integer NOT NULL,
 	"intervention_species_id" varchar,
 	"species_name" varchar,
 	"is_unknown" boolean DEFAULT false,
@@ -474,6 +482,7 @@ CREATE TABLE "users" (
 	"firstname" varchar(255),
 	"lastname" varchar(255),
 	"display_name" varchar(400),
+	"primary_org" integer,
 	"image" text,
 	"slug" varchar(100),
 	"type" "user_type" DEFAULT 'individual',
@@ -499,10 +508,12 @@ CREATE TABLE "users" (
 --> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_changed_by_users_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -516,17 +527,21 @@ ALTER TABLE "organizations" ADD CONSTRAINT "organizations_created_by_id_users_id
 ALTER TABLE "project_audits" ADD CONSTRAINT "project_audits_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_audits" ADD CONSTRAINT "project_audits_modified_by_users_id_fk" FOREIGN KEY ("modified_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_members" ADD CONSTRAINT "project_members_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_bulk_invite_id_bulk_invites_id_fk" FOREIGN KEY ("bulk_invite_id") REFERENCES "public"."bulk_invites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_species" ADD CONSTRAINT "project_species_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_added_by_id_users_id_fk" FOREIGN KEY ("added_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sites" ADD CONSTRAINT "sites_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_requested_by_id_users_id_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -534,8 +549,10 @@ ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_reviewed_by_id_u
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_recorded_by_id_users_id_fk" FOREIGN KEY ("recorded_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trees" ADD CONSTRAINT "trees_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_migrations" ADD CONSTRAINT "user_migrations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_primary_org_organizations_id_fk" FOREIGN KEY ("primary_org") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "audit_logs_table_record_idx" ON "audit_logs" USING btree ("table_name","record_uid");--> statement-breakpoint
 CREATE INDEX "audit_logs_user_idx" ON "audit_logs" USING btree ("changed_by");--> statement-breakpoint
 CREATE INDEX "audit_logs_time_idx" ON "audit_logs" USING btree ("changed_at");--> statement-breakpoint
@@ -571,6 +588,7 @@ CREATE INDEX "organization_members_status_idx" ON "organization_members" USING b
 CREATE INDEX "organization_members_invited_by_idx" ON "organization_members" USING btree ("invited_by_id");--> statement-breakpoint
 CREATE INDEX "organizations_name_idx" ON "organizations" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "organizations_slug_idx" ON "organizations" USING btree ("slug");--> statement-breakpoint
+CREATE INDEX "organizations_type_idx" ON "organizations" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "organizations_created_by_idx" ON "organizations" USING btree ("created_by_id");--> statement-breakpoint
 CREATE INDEX "project_species_project_idx" ON "project_audits" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "modified_by_idx" ON "project_audits" USING btree ("modified_by");--> statement-breakpoint
@@ -587,6 +605,7 @@ CREATE INDEX "project_species_added_by_idx" ON "project_species" USING btree ("a
 CREATE INDEX "project_species_native_idx" ON "project_species" USING btree ("is_native_species");--> statement-breakpoint
 CREATE INDEX "projects_location_gist_idx" ON "projects" USING gist ("location");--> statement-breakpoint
 CREATE INDEX "projects_created_by_idx" ON "projects" USING btree ("created_by_id");--> statement-breakpoint
+CREATE INDEX "projects_org_by_idx" ON "projects" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "scientific_species_name_idx" ON "scientific_species" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "scientific_species_uid_idx" ON "scientific_species" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "sites_project_id_idx" ON "sites" USING btree ("project_id");--> statement-breakpoint

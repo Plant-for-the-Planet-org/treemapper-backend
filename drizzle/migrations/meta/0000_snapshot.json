@@ -1,5 +1,5 @@
 {
-  "id": "0ef7f6ed-aa66-46ee-acdc-e227cde75726",
+  "id": "59829119-139a-4eb5-af83-f589e69948fc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -172,6 +172,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "restriction": {
           "name": "restriction",
           "type": "varchar[]",
@@ -286,6 +292,19 @@
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bulk_invites_organization_id_organizations_id_fk": {
+          "name": "bulk_invites_organization_id_organizations_id_fk",
+          "tableFrom": "bulk_invites",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -643,6 +662,12 @@
           "notNull": true,
           "default": "'intervention'"
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "user_id": {
           "name": "user_id",
           "type": "integer",
@@ -961,6 +986,19 @@
         }
       },
       "foreignKeys": {
+        "interventions_organization_id_organizations_id_fk": {
+          "name": "interventions_organization_id_organizations_id_fk",
+          "tableFrom": "interventions",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "interventions_user_id_users_id_fk": {
           "name": "interventions_user_id_users_id_fk",
           "tableFrom": "interventions",
@@ -1806,6 +1844,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "type": {
+          "name": "type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'public'"
+        },
         "website": {
           "name": "website",
           "type": "text",
@@ -1892,6 +1937,21 @@
           "columns": [
             {
               "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "organizations_type_idx": {
+          "name": "organizations_type_idx",
+          "columns": [
+            {
+              "expression": "type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2124,6 +2184,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "email": {
           "name": "email",
           "type": "varchar(320)",
@@ -2265,6 +2331,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "project_invites_organization_id_organizations_id_fk": {
+          "name": "project_invites_organization_id_organizations_id_fk",
+          "tableFrom": "project_invites",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "project_invites_invited_by_id_users_id_fk": {
           "name": "project_invites_invited_by_id_users_id_fk",
           "tableFrom": "project_invites",
@@ -2331,6 +2410,12 @@
         },
         "project_id": {
           "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -2443,6 +2528,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "project_members_organization_id_organizations_id_fk": {
+          "name": "project_members_organization_id_organizations_id_fk",
+          "tableFrom": "project_members",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "project_members_user_id_users_id_fk": {
           "name": "project_members_user_id_users_id_fk",
           "tableFrom": "project_members",
@@ -2510,6 +2608,12 @@
         },
         "scientific_species_id": {
           "name": "scientific_species_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -2702,6 +2806,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "project_species_organization_id_organizations_id_fk": {
+          "name": "project_species_organization_id_organizations_id_fk",
+          "tableFrom": "project_species",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "project_species_project_id_projects_id_fk": {
           "name": "project_species_project_id_projects_id_fk",
           "tableFrom": "project_species",
@@ -2769,7 +2886,7 @@
           "name": "organization_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "slug": {
           "name": "slug",
@@ -2969,6 +3086,21 @@
           "columns": [
             {
               "expression": "created_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "projects_org_by_idx": {
+          "name": "projects_org_by_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3184,6 +3316,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "name": {
           "name": "name",
           "type": "varchar(255)",
@@ -3313,6 +3451,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "sites_organization_id_organizations_id_fk": {
+          "name": "sites_organization_id_organizations_id_fk",
+          "tableFrom": "sites",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "sites_created_by_id_users_id_fk": {
@@ -3850,6 +4001,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "intervention_species_id": {
           "name": "intervention_species_id",
           "type": "varchar",
@@ -4124,6 +4281,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "trees_organization_id_organizations_id_fk": {
+          "name": "trees_organization_id_organizations_id_fk",
+          "tableFrom": "trees",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "trees_created_by_id_users_id_fk": {
           "name": "trees_created_by_id_users_id_fk",
           "tableFrom": "trees",
@@ -4367,6 +4537,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "primary_org": {
+          "name": "primary_org",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "image": {
           "name": "image",
           "type": "text",
@@ -4481,7 +4657,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "users_primary_org_organizations_id_fk": {
+          "name": "users_primary_org_organizations_id_fk",
+          "tableFrom": "users",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "primary_org"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_uid_unique": {

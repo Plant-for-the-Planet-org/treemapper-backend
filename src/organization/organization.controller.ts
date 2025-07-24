@@ -29,6 +29,7 @@ interface AuthenticatedRequest extends Request {
     id: number;
     uid: string;
     email: string;
+    auth0Id: string
   };
 }
 
@@ -54,7 +55,7 @@ export class OrganizationsController {
     @Body(ValidationPipe) createOrganizationDto: SelectOrganizationDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<any> {
-    return this.organizationsService.selectOrg(createOrganizationDto, req.user.id);
+    return this.organizationsService.selectOrg(createOrganizationDto, req.user.id, req.user.auth0Id);
   }
 
   @Get()
