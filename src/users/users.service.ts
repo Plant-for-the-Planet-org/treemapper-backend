@@ -80,23 +80,22 @@ export class UsersService {
         .where(and(eq(users.auth0Id, auth0Id), isNull(users.deletedAt)))
         .limit(1);
       if (existingUser.length > 0) {
-        this.cacheNewUser(existingUser[0]);
+        if (existingUser[0].primaryOrg) {
+          this.cacheNewUser(existingUser[0]);
+        }
         return existingUser[0];
       }
-      const user = await this.drizzleService.db.transaction(async (tx) => {
-        const result = await tx
-          .insert(users)
-          .values({
-            uid: generateUid('usr'),
-            auth0Id: auth0Id,
-            email: email,
-            displayName: name || email.split('@')[0],
-            isActive: true,
-            lastLoginAt: new Date(),
-          })
-          .returning(this.FULL_USER_SELECT);
-        return result[0];
-      });
+      const user = await this.drizzleService.db
+        .insert(users)
+        .values({
+          uid: generateUid('usr'),
+          auth0Id: auth0Id,
+          email: email,
+          displayName: name || email.split('@')[0],
+          isActive: true,
+          lastLoginAt: new Date(),
+        })
+        .returning(this.FULL_USER_SELECT);
       if (!user) {
         throw new ConflictException(`User not created`);
       }
