@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsOptional, IsString, Length } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class OrganizationMemberDto {
   @ApiProperty({ example: 'usr_1234567890' })
@@ -108,4 +110,31 @@ export class UserOrganizationResponseDto extends OrganizationResponseDto {
     description: 'When the current user joined this organization'
   })
   joinedAt: Date;
+}
+
+export class SelectOrganizationDto {
+  @ApiProperty({ 
+    example: true, 
+    description: 'Enable development mode',
+    required: false,
+    default: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  devMode?: boolean;
+
+  @ApiProperty({ 
+    example: 'org_abc123',
+    description: 'Organization UID to select',
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100) // Adjust based on your UID length requirements
+  selectedOrg?: string;
 }

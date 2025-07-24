@@ -1,6 +1,6 @@
 {
-  "id": "0ef7f6ed-aa66-46ee-acdc-e227cde75726",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "90e3d340-0c61-4789-ba21-5e07004bdf4c",
+  "prevId": "0ef7f6ed-aa66-46ee-acdc-e227cde75726",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4367,6 +4367,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "primary_org": {
+          "name": "primary_org",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "image": {
           "name": "image",
           "type": "text",
@@ -4481,7 +4487,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "users_primary_org_organizations_id_fk": {
+          "name": "users_primary_org_organizations_id_fk",
+          "tableFrom": "users",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "primary_org"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_uid_unique": {

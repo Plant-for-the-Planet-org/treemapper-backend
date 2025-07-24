@@ -277,6 +277,7 @@ export const users = pgTable('users', {
   firstname: varchar('firstname', { length: 255 }),
   lastname: varchar('lastname', { length: 255 }),
   displayName: varchar('display_name', { length: 400 }),
+  primaryOrg: integer('primary_org').references(() => organizations.id),
   image: text('image'),
   slug: varchar('slug', { length: 100 }).unique(),
   type: userTypeEnum('type').default('individual'),
@@ -766,7 +767,7 @@ export const auditLogs = pgTable('audit_logs', {
 // RELATIONS
 // ============================================================================
 
-export const userRelations = relations(users, ({ many }) => ({
+export const userRelations = relations(users, ({ one, many }) => ({
   projectMemberships: many(projectMembers),
   createdProjects: many(projects, { relationName: 'createdBy' }),
   addedProjectSpecies: many(projectSpecies, { relationName: 'addedBy' }),
@@ -776,6 +777,10 @@ export const userRelations = relations(users, ({ many }) => ({
   bulkInvites: many(bulkInvites, { relationName: 'invitedBy' }),
   interventions: many(interventions, { relationName: 'userInterventions' }),
   notifications: many(notifications),
+  primaryOrg: one(organizations, {
+    fields: [users.primaryOrg],
+    references: [organizations.id],
+  }),
   speciesRequests: many(speciesRequests, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequests, { relationName: 'reviewedBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
@@ -849,7 +854,8 @@ export const organizationRelations = relations(organizations, ({ one, many }) =>
     relationName: 'createdBy',
   }),
   members: many(organizationMembers),
-  projects: many(projects), // You'll need to add organizationId to projects table
+  users: many(users),
+  projects: many(projects),
 }));
 
 export const organizationMemberRelations = relations(organizationMembers, ({ one }) => ({

@@ -4,9 +4,10 @@ import { eq, and, isNull, sql, count } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
-import { OrganizationResponseDto, UserOrganizationResponseDto } from './dto/organization-response.dto';
+import { OrganizationResponseDto, SelectOrganizationDto, UserOrganizationResponseDto } from './dto/organization-response.dto';
 import { organizations, organizationMembers, users, projects } from '../database/schema/index';
 import { DrizzleService } from 'src/database/drizzle.service';
+import { generateUid } from 'src/util/uidGenerator';
 
 @Injectable()
 export class OrganizationsService {
@@ -44,7 +45,7 @@ export class OrganizationsService {
       // Start transaction to create organization and add creator as owner
       const result = await this.drizzle.db.transaction(async (tx) => {
         // Create organization
-        const [newOrg] = await tx
+        const orgInsertResult = await tx
           .insert(organizations)
           .values({
             uid: orgUid,
@@ -63,6 +64,8 @@ export class OrganizationsService {
             createdById: userId,
           })
           .returning();
+
+        const [newOrg] = Array.isArray(orgInsertResult) ? orgInsertResult : [];
 
         // Add creator as organization owner
         await tx
@@ -89,11 +92,64 @@ export class OrganizationsService {
     }
   }
 
+
+  async selectOrg(createOrgDto: SelectOrganizationDto, userId: number): Promise<any> {
+    try {
+      const result = await this.drizzle.db.transaction(async (tx) => {
+        let organizationId: number;
+
+        if (createOrgDto.devMode) {
+          organizationId = 3;
+        } else if (createOrgDto.selectedOrg) {
+          const orgResult = await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.uid, createOrgDto.selectedOrg))
+            .limit(1);
+
+          if (orgResult.length === 0) {
+            throw new NotFoundException(`Organization not found`);
+          }
+          organizationId = orgResult[0].id;
+        } else {
+          organizationId = 2;
+        }
+
+        // Batch operations
+        const [userUpdate] = await Promise.allSettled([
+          tx.update(users)
+            .set({ primaryOrg: organizationId })
+            .where(eq(users.id, userId)),
+
+          tx.insert(organizationMembers)
+            .values({
+              uid: generateUid('orgm'),
+              organizationId,
+              userId,
+              createdAt: new Date(),
+            })
+            .onConflictDoNothing({
+              target: [organizationMembers.organizationId, organizationMembers.userId]
+            })
+        ]);
+
+        return { organizationId, userUpdated: userUpdate.status === 'fulfilled' };
+      });
+
+      return { success: true, ...result };
+    } catch (error) {
+      if (error.code === '23505') { // PostgreSQL unique constraint violation
+        throw new ConflictException('Organization with this name or slug already exists');
+      }
+      throw error;
+    }
+  }
+
   /**
    * Get all organizations that a user belongs to
    */
   async findAllByUser(userId: number): Promise<any[]> {
-    const userOrganizations = await this.drizzle.db 
+    const userOrganizations = await this.drizzle.db
       .select({
         // Organization fields
         id: organizations.id,
