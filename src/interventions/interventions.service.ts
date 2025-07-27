@@ -598,7 +598,6 @@ export class InterventionsService {
         .returning();
       return { message: 'Intervention deleted successfully' };
     } catch (error) {
-      console.log("KLJSDc", error)
       return ''
     }
   }

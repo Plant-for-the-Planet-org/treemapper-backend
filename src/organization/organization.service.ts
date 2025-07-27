@@ -125,7 +125,6 @@ export class OrganizationsService {
       });
       return { success: true };
     } catch (error) {
-      console.log("SDC", error)
       if (error.code === '23505') { // PostgreSQL unique constraint violation
         throw new ConflictException('Organization with this name or slug already exists');
       }
