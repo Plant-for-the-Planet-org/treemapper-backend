@@ -39,14 +39,19 @@ export class ProjectsController {
   }
 
   @Post('/personal')
-  createPersonal(@Body() createProjectDto: CreateProjectDto, @Req() req): Promise<any> {
-    return this.projectsService.createPersonalProject(createProjectDto, req.user.id, req.user.primaryOrg);
+  createPersonal(@Req() req): Promise<any> {
+    return this.projectsService.createPersonalProject(req.user.displayName, req.user.id, req.user.primaryWorkspace, req.user.auth0Id);
   }
 
 
   @Get()
   findAll(@Req() req) {
     return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
+  }
+
+  @Get('/workspace')
+  findProjectsAndWorkspace(@Req() req) {
+    return this.projectsService.findProjectsAndWorkspace(req.user.id);
   }
 
   @Get(':id/allmembers')

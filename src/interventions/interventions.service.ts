@@ -8,6 +8,7 @@ import {
   users,
   treeRecords,
   trees,
+  workspace,
 } from '../database/schema/index';
 import {
   InterventionResponseDto,
@@ -124,7 +125,7 @@ export class InterventionsService {
         image: createInterventionDto.image || null,
         treeCount: createInterventionDto.type === 'single-tree-registration' ? 1 : createInterventionDto.treeCount || 1,
         tag: createInterventionDto.tag,
-        organizationId: 1,
+        workspaceId: 1,
         has_records: false,
         species: createInterventionDto.species || [],
       }
@@ -151,7 +152,7 @@ export class InterventionsService {
           image: createInterventionDto.image || null,
           accuracy: null,
           location: locationValue,
-          organizationId: 1,
+          workspaceId: 1,
           originalGeometry: createInterventionDto.geometry,
           height: createInterventionDto.height,
           width: createInterventionDto.width,

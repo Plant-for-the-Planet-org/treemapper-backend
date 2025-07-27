@@ -1,15 +1,12 @@
 // src/organizations/organizations.service.ts
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, isNull, sql, count } from 'drizzle-orm';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
-import { OrganizationResponseDto, SelectOrganizationDto, UserOrganizationResponseDto } from './dto/organization-response.dto';
-import { organizations, organizationMembers, users, projects } from '../database/schema/index';
+import { OrganizationResponseDto, SelectOrganizationDto } from './dto/organization-response.dto';
+import { workspace, workspaceMembers, users, projects } from '../database/schema/index';
 import { DrizzleService } from 'src/database/drizzle.service';
 import { generateUid } from 'src/util/uidGenerator';
-import { And } from 'typeorm';
-import { UsersService } from 'src/users/users.service';
 import { CacheService } from 'src/cache/cache.service';
 import { CACHE_KEYS } from 'src/cache/cache-keys';
 
@@ -30,11 +27,11 @@ export class OrganizationsService {
     // Check if organization name already exists (globally unique)
     const existingOrg = await this.drizzle.db
       .select()
-      .from(organizations)
+      .from(workspace)
       .where(
         and(
-          eq(organizations.name, createOrgDto.name),
-          isNull(organizations.deletedAt)
+          eq(workspace.name, createOrgDto.name),
+          isNull(workspace.deletedAt)
         )
       )
       .limit(1);
@@ -51,7 +48,7 @@ export class OrganizationsService {
       const result = await this.drizzle.db.transaction(async (tx) => {
         // Create organization
         const orgInsertResult = await tx
-          .insert(organizations)
+          .insert(workspace)
           .values({
             uid: orgUid,
             name: createOrgDto.name,
@@ -74,10 +71,10 @@ export class OrganizationsService {
 
         // Add creator as organization owner
         await tx
-          .insert(organizationMembers)
+          .insert(workspaceMembers)
           .values({
             uid: memberUid,
-            organizationId: newOrg.id,
+            workspaceId: newOrg.id,
             userId: userId,
             role: 'owner',
             status: 'active',
@@ -107,9 +104,9 @@ export class OrganizationsService {
           organizationId = 3;
         } else if (createOrgDto.selectedOrg) {
           const orgResult = await tx
-            .select({ id: organizations.id })
-            .from(organizations)
-            .where(eq(organizations.uid, createOrgDto.selectedOrg))
+            .select({ id: workspace.id })
+            .from(workspace)
+            .where(eq(workspace.uid, createOrgDto.selectedOrg))
             .limit(1);
 
           if (orgResult.length === 0) {
@@ -126,15 +123,15 @@ export class OrganizationsService {
             .set({ primaryOrg: organizationId })
             .where(eq(users.id, userId)),
 
-          tx.insert(organizationMembers)
+          tx.insert(workspaceMembers)
             .values({
               uid: generateUid('orgm'),
-              organizationId,
+              workspaceId:organizationId,
               userId,
               createdAt: new Date(),
             })
             .onConflictDoNothing({
-              target: [organizationMembers.organizationId, organizationMembers.userId]
+              target: [workspaceMembers.workspaceId, workspaceMembers.userId]
             })
         ]);
         await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
@@ -156,35 +153,35 @@ export class OrganizationsService {
   async findAllByUser(userId: number): Promise<any[]> {
     const userOrganizations = await this.drizzle.db
       .select({
-        uid: organizations.uid,
-        name: organizations.name,
-        slug: organizations.slug,
-        description: organizations.description,
-        logo: organizations.logo,
-        primaryColor: organizations.primaryColor,
-        secondaryColor: organizations.secondaryColor,
-        email: organizations.email,
-        phone: organizations.phone,
-        website: organizations.website,
-        address: organizations.address,
-        country: organizations.country,
-        timezone: organizations.timezone,
-        isActive: organizations.isActive,
-        createdAt: organizations.createdAt,
-        updatedAt: organizations.updatedAt,
-        deletedAt: organizations.deletedAt,
+        uid: workspace.uid,
+        name: workspace.name,
+        slug: workspace.slug,
+        description: workspace.description,
+        logo: workspace.logo,
+        primaryColor: workspace.primaryColor,
+        secondaryColor: workspace.secondaryColor,
+        email: workspace.email,
+        phone: workspace.phone,
+        website: workspace.website,
+        address: workspace.address,
+        country: workspace.country,
+        timezone: workspace.timezone,
+        isActive: workspace.isActive,
+        createdAt: workspace.createdAt,
+        updatedAt: workspace.updatedAt,
+        deletedAt: workspace.deletedAt,
         // User's membership details
-        userRole: organizationMembers.role,
-        userStatus: organizationMembers.status,
-        joinedAt: organizationMembers.joinedAt,
+        userRole: workspaceMembers.role,
+        userStatus: workspaceMembers.status,
+        joinedAt: workspaceMembers.joinedAt,
       })
-      .from(organizationMembers)
-      .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
+      .from(workspaceMembers)
+      .innerJoin(workspace, eq(workspaceMembers.workspaceId, workspace.id))
       .where(and(
-        eq(organizationMembers.userId, userId),
-        eq(organizations.type, 'private'),
+        eq(workspaceMembers.userId, userId),
+        eq(workspace.type, 'private'),
       ))
-      .orderBy(organizations.name);
+      .orderBy(workspace.name);
 
 
 
@@ -204,8 +201,8 @@ export class OrganizationsService {
   async findByUid(orgUid: string): Promise<OrganizationResponseDto> {
     const org = await this.drizzle.db
       .select()
-      .from(organizations)
-      .where(eq(organizations.uid, orgUid))
+      .from(workspace)
+      .where(eq(workspace.uid, orgUid))
       .limit(1);
 
     if (org.length === 0) {
@@ -239,11 +236,11 @@ export class OrganizationsService {
     while (true) {
       const existing = await this.drizzle.db
         .select()
-        .from(organizations)
+        .from(workspace)
         .where(
           and(
-            eq(organizations.slug, slug),
-            isNull(organizations.deletedAt)
+            eq(workspace.slug, slug),
+            isNull(workspace.deletedAt)
           )
         )
         .limit(1);
@@ -269,8 +266,8 @@ export class OrganizationsService {
   private async getOrganizationWithCounts(orgId: number): Promise<any> {
     const [org] = await this.drizzle.db
       .select()
-      .from(organizations)
-      .where(eq(organizations.id, orgId))
+      .from(workspace)
+      .where(eq(workspace.id, orgId))
       .limit(1);
 
     if (!org) {
@@ -292,14 +289,14 @@ export class OrganizationsService {
     // Get member count
     const [memberCountResult] = await this.drizzle.db
       .select({ count: count() })
-      .from(organizationMembers)
-      .where(eq(organizationMembers.organizationId, orgId));
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, orgId));
 
     // Get project count (including soft-deleted projects in count as per your requirement)
     const [projectCountResult] = await this.drizzle.db
       .select({ count: count() })
       .from(projects)
-      .where(eq(projects.organizationId, orgId));
+      .where(eq(projects.workspaceId, orgId));
 
     return {
       memberCount: memberCountResult.count || 0,

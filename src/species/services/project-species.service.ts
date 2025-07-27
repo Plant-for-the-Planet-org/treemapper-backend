@@ -62,7 +62,7 @@ export class ProjectSpeciesService {
         addedById: membership.userId,
         scientificSpeciesId: createDto.scientificSpeciesId,
         commonName: createDto.commonName,
-        organizationId: 1,
+        workspaceId: 1,
         isNativeSpecies: createDto.isNativeSpecies || false,
         isDisabled: createDto.isDisbaledSpecies || false,
         description: createDto.description || scientificSpeciesData.description,
