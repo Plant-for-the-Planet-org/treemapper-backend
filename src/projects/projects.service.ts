@@ -223,12 +223,12 @@ export class ProjectsService {
     try {
       const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
       const existingProject = await this.drizzleService.db
-        .select({ id: projects.id, isPersonal: projects.isPersonal })
+        .select({ id: projects.id, isPersonal: projects.isPersonal, createdById: projects.createdById, orgId: projects.organizationId })
         .from(projects)
         .where(eq(projects.slug, slug))
         .limit(1);
       if (existingProject.length > 0) {
-        if (existingProject[0].isPersonal) {
+        if (existingProject[0].isPersonal && existingProject[0].createdById === userId && existingProject[0].orgId === primaryOrg) {
           throw 'Personal Project already exists'
         }
       }
@@ -260,7 +260,7 @@ export class ProjectsService {
             uid: generateUid('mem'),
             projectId: project[0].id,
             userId: userId,
-            organizationId: 1,
+            organizationId: primaryOrg,
             projectRole: 'owner',
             joinedAt: new Date(),
             invitedAt: new Date()
@@ -294,6 +294,7 @@ export class ProjectsService {
   }
 
   async findAll(userId: number, primaryOrg: number) {
+    console.log("Sdc",primaryOrg)
     try {
       const result = await this.drizzleService.db
         .select({
@@ -313,7 +314,7 @@ export class ProjectsService {
         })
         .from(projectMembers)
         .innerJoin(projects, eq(projectMembers.projectId, projects.id))
-        .where(eq(projectMembers.userId, userId));
+        .where(and(eq(projectMembers.userId, userId),eq(projectMembers.organizationId, primaryOrg)));
 
       return {
         message: 'User projects fetched successfully',

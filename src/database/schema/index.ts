@@ -267,6 +267,22 @@ export const organizationMembers = pgTable('organization_members', {
   invitedByIdx: index('organization_members_invited_by_idx').on(table.invitedById),
 }));
 
+export const survey = pgTable('survey', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  isCompleted: boolean('is_completed').notNull().default(false),
+  organizationName: text("organization_name"),
+  primaryGoal: text("primary_goal"),
+  role: text("role"),
+  wantsDemo: boolean().default(false),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('survey_user_idx').on(table.userId),
+}));
+
 // ============================================================================
 // USERS TABLE
 // ============================================================================
@@ -797,6 +813,14 @@ export const userRelations = relations(users, ({ one, many }) => ({
   organizationMemberships: many(organizationMembers),
   createdOrganizations: many(organizations, { relationName: 'createdBy' }),
   sentOrgInvites: many(organizationMembers, { relationName: 'invitedBy' }),
+  surveys: many(survey),
+}));
+
+export const surveyRelations = relations(survey, ({ one }) => ({
+  user: one(users, {
+    fields: [survey.userId],
+    references: [users.id],
+  }),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
