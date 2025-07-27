@@ -353,6 +353,7 @@ export class ProjectsService {
       const projectsResult = await this.drizzleService.db
         .select({
           project: {
+            id: projects.id,
             uid: projects.uid,
             slug: projects.slug,
             projectName: projects.projectName,
@@ -380,6 +381,7 @@ export class ProjectsService {
       const workspacesResult = await this.drizzleService.db
         .select({
           workspace: {
+            id: workspace.id,
             uid: workspace.uid,
             name: workspace.name,
             slug: workspace.slug,

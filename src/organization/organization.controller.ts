@@ -55,7 +55,7 @@ export class OrganizationsController {
     @Body(ValidationPipe) createOrganizationDto: SelectOrganizationDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<any> {
-    return this.organizationsService.selectOrg(createOrganizationDto, req.user.id, req.user.auth0Id);
+    return this.organizationsService.selectOrg(createOrganizationDto, req.user.id, req.user.auth0Id, req.user);
   }
 
   @Get()

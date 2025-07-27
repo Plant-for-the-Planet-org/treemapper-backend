@@ -91,21 +91,21 @@ export class OrganizationResponseDto {
 }
 
 export class UserOrganizationResponseDto extends OrganizationResponseDto {
-  @ApiProperty({ 
-    example: 'owner', 
+  @ApiProperty({
+    example: 'owner',
     enum: ['owner', 'admin', 'member'],
     description: 'Current user\'s role in this organization'
   })
   userRole: string;
 
-  @ApiProperty({ 
-    example: 'active', 
+  @ApiProperty({
+    example: 'active',
     enum: ['active', 'inactive', 'suspended', 'pending'],
     description: 'Current user\'s status in this organization'
   })
   userStatus: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     example: '2024-01-15T10:30:00Z',
     description: 'When the current user joined this organization'
   })
@@ -113,28 +113,10 @@ export class UserOrganizationResponseDto extends OrganizationResponseDto {
 }
 
 export class SelectOrganizationDto {
-  @ApiProperty({ 
-    example: true, 
-    description: 'Enable development mode',
-    required: false,
-    default: false 
-  })
-  @IsOptional()
-  @IsBoolean()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
-  devMode?: boolean;
 
-  @ApiProperty({ 
-    example: 'org_abc123',
-    description: 'Organization UID to select',
-    required: false 
-  })
-  @IsOptional()
   @IsString()
-  @Length(1, 100) // Adjust based on your UID length requirements
-  selectedOrg?: string;
+  workspaceUid: string
+
+  @IsString()
+  projectUid: string
 }

@@ -4,11 +4,12 @@ import { eq, and, isNull, sql, count } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { OrganizationResponseDto, SelectOrganizationDto } from './dto/organization-response.dto';
-import { workspace, workspaceMembers, users, projects } from '../database/schema/index';
+import { workspace, workspaceMembers, users, projects, } from '../database/schema/index';
 import { DrizzleService } from 'src/database/drizzle.service';
 import { generateUid } from 'src/util/uidGenerator';
 import { CacheService } from 'src/cache/cache.service';
-import { CACHE_KEYS } from 'src/cache/cache-keys';
+import { CACHE_KEYS, CACHE_TTL } from 'src/cache/cache-keys';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class OrganizationsService {
@@ -95,51 +96,36 @@ export class OrganizationsService {
   }
 
 
-  async selectOrg(createOrgDto: SelectOrganizationDto, userId: number, auth0Id: string): Promise<any> {
+  async selectOrg(createOrgDto: SelectOrganizationDto, userId: number, auth0Id: string, user: any): Promise<any> {
     try {
-      const result = await this.drizzle.db.transaction(async (tx) => {
-        let organizationId: number;
+      await this.drizzle.db.transaction(async (tx) => {
+        const existingProject = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.uid, createOrgDto.projectUid))
+          .limit(1);
+        console.log("LKSc existingProject", existingProject)
+        const existingWorksapce = await tx
+          .select({ id: workspace.id })
+          .from(workspace)
+          .where(eq(workspace.uid, createOrgDto.workspaceUid))
+          .limit(1);
+        console.log("LKSc existingWorksapce", existingWorksapce)
 
-        if (createOrgDto.devMode) {
-          organizationId = 3;
-        } else if (createOrgDto.selectedOrg) {
-          const orgResult = await tx
-            .select({ id: workspace.id })
-            .from(workspace)
-            .where(eq(workspace.uid, createOrgDto.selectedOrg))
-            .limit(1);
-
-          if (orgResult.length === 0) {
-            throw new NotFoundException(`Organization not found`);
-          }
-          organizationId = orgResult[0].id;
-        } else {
-          organizationId = 2;
+        if (existingProject.length > 0 && existingWorksapce.length > 0) {
+          await tx.update(users)
+            .set({ primaryWorkspace: existingWorksapce[0].id, primaryProject: existingProject[0].id })
+            .where(eq(users.id, userId))
+          await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
+          const updateUser = { ...user }
+          updateUser['primaryWorkspace'] = existingWorksapce[0].id
+          updateUser['primaryProject'] = existingProject[0].id
+          await this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), updateUser, CACHE_TTL.MEDIUM)
         }
-
-        // Batch operations
-        const [userUpdate] = await Promise.allSettled([
-          tx.update(users)
-            .set({ primaryOrg: organizationId })
-            .where(eq(users.id, userId)),
-
-          tx.insert(workspaceMembers)
-            .values({
-              uid: generateUid('orgm'),
-              workspaceId:organizationId,
-              userId,
-              createdAt: new Date(),
-            })
-            .onConflictDoNothing({
-              target: [workspaceMembers.workspaceId, workspaceMembers.userId]
-            })
-        ]);
-        await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
-        return { organizationId, userUpdated: userUpdate.status === 'fulfilled' };
       });
-
-      return { success: true, ...result };
+      return { success: true };
     } catch (error) {
+      console.log("SDC", error)
       if (error.code === '23505') { // PostgreSQL unique constraint violation
         throw new ConflictException('Organization with this name or slug already exists');
       }
