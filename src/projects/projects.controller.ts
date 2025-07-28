@@ -35,7 +35,7 @@ export class ProjectsController {
 
   @Post()
   create(@Body() createProjectDto: CreateProjectDto, @Req() req): Promise<any> {
-    return this.projectsService.create(createProjectDto, req.user.id);
+    return this.projectsService.create(createProjectDto, req.user.id, req.user);
   }
 
   @Post('/personal')

@@ -15,7 +15,7 @@ import { User } from 'src/users/entities/user.entity';
 import { NotificationType } from 'src/notification/dto/notification.dto';
 import { NotificationService } from 'src/notification/notification.service';
 import { isValidEmailDomain } from 'src/util/domainValidationHelper';
-import { CACHE_KEYS } from 'src/cache/cache-keys';
+import { CACHE_KEYS, CACHE_TTL } from 'src/cache/cache-keys';
 import { CacheService } from 'src/cache/cache.service';
 
 export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
@@ -127,7 +127,7 @@ export class ProjectsService {
       .substring(0, 255); // Ensure it fits in varchar(255)
   }
 
-  async create(createProjectDto: CreateProjectDto, userId: number): Promise<any> {
+  async create(createProjectDto: CreateProjectDto, userId: number, user: User): Promise<any> {
     try {
       let locationValue: any = null;
       if (createProjectDto.location) {
@@ -145,23 +145,6 @@ export class ProjectsService {
         }
       }
 
-      // Generate slug if not provided
-      const slug = createProjectDto.slug || this.generateSlug(createProjectDto.projectName);
-
-      // Check if slug is unique
-      const existingProject = await this.drizzleService.db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(eq(projects.slug, slug))
-        .limit(1);
-
-      if (existingProject.length > 0) {
-        // Generate unique slug by appending timestamp
-        const uniqueSlug = `${slug}-${Date.now()}`;
-        createProjectDto.slug = uniqueSlug;
-      } else {
-        createProjectDto.slug = slug;
-      }
 
       // Use transaction to ensure data consistency
       const result = await this.drizzleService.db.transaction(async (tx) => {
@@ -172,7 +155,7 @@ export class ProjectsService {
             uid: createProjectDto.uid ?? generateUid('prj'),
             createdById: userId,
             workspaceId: 1,
-            slug: createProjectDto.slug ?? this.generateSlug(createProjectDto.projectName),
+            slug: this.generateSlug(createProjectDto.projectName) + `-${Date.now()}`,
             projectName: createProjectDto.projectName ?? '',
             projectType: createProjectDto.projectType ?? '',
             projectWebsite: createProjectDto.projectWebsite ?? '',
@@ -194,10 +177,15 @@ export class ProjectsService {
             projectRole: 'owner',
             joinedAt: new Date(),
           });
-
+        await tx.update(users)
+          .set({ primaryWorkspace: user.primaryWorkspace, primaryProject: project.id })
+          .where(eq(users.id, userId));
+        const updatedUser = {...user}
+        await this.cacheService.delete(CACHE_KEYS.USER.BY_ID(userId));
+        updatedUser.primaryProject = project.id;
+        await this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), updatedUser, CACHE_TTL.MEDIUM)
         return project;
       });
-      console.log("IOSCJD", result)
       this.notificationService.createNotification({
         userId: userId,
         type: NotificationType.PROJECT_UPDATE,
@@ -223,7 +211,7 @@ export class ProjectsService {
     }
   }
 
-  async createPersonalProject(name: string, userId: number, primaryWorkspaceId: number, auth0Id: string): Promise<any> {   
+  async createPersonalProject(name: string, userId: number, primaryWorkspaceId: number, auth0Id: string): Promise<any> {
     try {
       const existingProject = await this.drizzleService.db
         .select({ id: projects.id })
