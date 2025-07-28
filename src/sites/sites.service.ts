@@ -43,7 +43,8 @@ export class SiteService {
 
   async createSite(
     membership: ProjectGuardResponse,
-    createSiteDto: CreateSiteDto
+    createSiteDto: CreateSiteDto,
+    primaryWorkspace: number
   ) {
     let locationValue: any = null;
     if (createSiteDto.location) {
@@ -68,7 +69,7 @@ export class SiteService {
         createdById: membership.userId,
         name: createSiteDto.name,
         description: createSiteDto.description,
-        workspaceId: 1,
+        workspaceId: primaryWorkspace,
         location: locationValue,
         originalGeometry: createSiteDto.location,
         status: createSiteDto.status || 'barren',
@@ -211,9 +212,6 @@ export class SiteService {
 
     if (updateSiteDto.name !== undefined) updateData.name = updateSiteDto.name;
     if (updateSiteDto.description !== undefined) updateData.description = updateSiteDto.description;
-    if (updateSiteDto.originalGeometry !== undefined) updateData.originalGeometry = updateSiteDto.originalGeometry;
-    if (updateSiteDto.status !== undefined) updateData.status = updateSiteDto.status;
-    if (updateSiteDto.metadata !== undefined) updateData.metadata = updateSiteDto.metadata;
 
     await this.drizzleService.db
       .update(sites)
