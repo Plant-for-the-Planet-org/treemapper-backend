@@ -10,12 +10,14 @@ import { generateUid } from 'src/util/uidGenerator';
 import { UserCacheService } from 'src/cache/user-cache.service';
 import { CACHE_KEYS, CACHE_TTL } from 'src/cache/cache-keys';
 import { User } from 'src/users/entities/user.entity';
+import { ProjectCacheService } from 'src/cache/project-cache.service';
 
 @Injectable()
 export class WorkspaceService {
   constructor(
     private readonly drizzle: DrizzleService,
     private userCacheService: UserCacheService,
+    private projectCacheService: ProjectCacheService, // Assuming this is the correct service for project caching
   ) { }
 
 
@@ -101,6 +103,38 @@ export class WorkspaceService {
     }
     return baseSlug;
   }
+
+
+  async cacheWorkspace(userData: User) {
+    try {
+      const workspacesResult = await this.drizzle.db
+        .select({
+          uid: workspace.uid,
+          id: workspace.id,
+        })
+        .from(workspace)
+        .where(eq(workspace.createdById, userData.id));
+
+      if (workspacesResult.length === 0) {
+        return "no workspaces found";
+      }
+
+      workspacesResult.forEach(async (workspaceData) => {
+        await this.projectCacheService.refreshWorspaceId(workspaceData.uid, workspaceData.id);
+      })
+      return "success"
+    } catch (error) {
+      console.error('Error fetching user projects and workspaces:', error);
+      return {
+        message: 'Failed to fetch user projects and workspaces',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'user_projects_workspaces_fetch_failed',
+      };
+    }
+  }
+
 
   //   /**
   //    * Get all organizations that a user belongs to

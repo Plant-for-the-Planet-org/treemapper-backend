@@ -19,6 +19,21 @@ export class ProjectCacheService {
         await this.cacheService.set(this.getUserProjectKey(`${projectId}-${userId}`), data, CACHE_TTL.MEDIUM);
     }
 
+
+    async refreshWorspaceId(workspaceUid: string, workspaceId: number): Promise<void> {
+       try{
+        console.log(`Refreshing workspace ID for ${workspaceUid} to ${workspaceId}`);
+         await this.cacheService.delete(`work:${workspaceUid}`)
+        await this.cacheService.set(`work:${workspaceUid}`, workspaceId, CACHE_TTL.FOREVER);
+       }catch (error) {
+           console.error(`Error refreshing workspace ID for ${workspaceUid}:`, error);
+       }
+    }
+
+    async getWorkspaceId(workspaceUid: string): Promise<number | null> {
+        return this.cacheService.get(`work:${workspaceUid}`);
+    }
+
     // async refreshAuthUser(user: User): Promise<void> {
     //     await this.cacheService.delete(this.getUseAuthrKey(user.auth0Id));
     //     await this.cacheService.set(this.getUseAuthrKey(user.auth0Id), user, CACHE_TTL.MEDIUM);

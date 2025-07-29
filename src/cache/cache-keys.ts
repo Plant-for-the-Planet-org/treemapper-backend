@@ -22,5 +22,6 @@ export const CACHE_TTL = {
   SHORT: 1200000,      // 5 minutes
   MEDIUM: 3000000,     // 15 minutes  
   LONG: 600000000,      // 1 hour
-  VERY_LONG: 2400000000 // 24 hours
+  VERY_LONG: 2400000000,// 24 hours
+  FOREVER: 240000000000
 } as const;

@@ -20,5 +20,5 @@ export class CreateNewWorkspaceDto {
   })
   @IsString()
   @Length(2, 255)
-  type: 'private' | 'public' | 'platform' | 'development';
+  type: 'private' | 'public' | 'platform' | 'development' | 'premium';
 }

@@ -59,6 +59,12 @@ export class WorkspaceController {
         return this.workspaceService.setPrimaryWorkspaceAndProject(createOrganizationDto, user);
     }
 
+
+    @Post('cache')
+    cacheWorkspace(@CurrentUser() user: User) {
+        return this.workspaceService.cacheWorkspace(user);
+    }
+
     // @Get()
     // async findAllByUser(@Req() req: AuthenticatedRequest): Promise<UserOrganizationResponseDto[]> {
     //     return this.organizationsService.findAllByUser(req.user.id);

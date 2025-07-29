@@ -17,6 +17,8 @@ import { NotificationService } from 'src/notification/notification.service';
 import { isValidEmailDomain } from 'src/util/domainValidationHelper';
 import { CACHE_KEYS, CACHE_TTL } from 'src/cache/cache-keys';
 import { CacheService } from 'src/cache/cache.service';
+import { ProjectCacheService } from 'src/cache/project-cache.service';
+import { UserCacheService } from 'src/cache/user-cache.service';
 
 export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string }
 
@@ -86,130 +88,138 @@ export class ProjectsService {
     private drizzleService: DrizzleService,
     private emailService: EmailService,
     private notificationService: NotificationService,
-    private cacheService: CacheService,
+    private projectCacheService: ProjectCacheService,
+    private userCacheService: UserCacheService,
 
   ) { }
 
-  // private getGeoJSONForPostGIS(locationInput: any): any {
-  //   if (!locationInput) {
-  //     return null;
-  //   }
+  private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
 
-  //   // If it's a Feature, extract the geometry
-  //   if (locationInput.type === 'Feature' && locationInput.geometry) {
-  //     return locationInput.geometry;
-  //   }
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
+    }
 
-  //   // If it's a FeatureCollection, extract the first geometry
-  //   if (locationInput.type === 'FeatureCollection' &&
-  //     locationInput.features &&
-  //     locationInput.features.length > 0 &&
-  //     locationInput.features[0].geometry) {
-  //     return locationInput.features[0].geometry;
-  //   }
-
-
-  //   // If it's already a geometry object, use it directly
-  //   if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
-  //     return locationInput;
-  //   }
-
-  //   throw new BadRequestException('Invalid GeoJSON format');
-  // }
-
-  // private generateSlug(projectName: string): string {
-  //   return projectName
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-  //     .replace(/\s+/g, '-')         // Replace spaces with hyphens
-  //     .replace(/-+/g, '-')          // Replace multiple hyphens with single
-  //     .trim()
-  //     .substring(0, 255); // Ensure it fits in varchar(255)
-  // }
-
-  // async create(createProjectDto: CreateProjectDto, userId: number, user: User): Promise<any> {
-  //   try {
-  //     let locationValue: any = null;
-  //     if (createProjectDto.location) {
-  //       try {
-  //         const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
-  //         locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
-  //       } catch (error) {
-  //         return {
-  //           message: 'Invalid GeoJSON provided',
-  //           statusCode: 400,
-  //           error: "invalid_geojson",
-  //           data: null,
-  //           code: 'invalid_project_geojson',
-  //         };
-  //       }
-  //     }
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' &&
+      locationInput.features &&
+      locationInput.features.length > 0 &&
+      locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
 
 
-  //     // Use transaction to ensure data consistency
-  //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  //       // Create project with updated schema fields
-  //       const [project] = await tx
-  //         .insert(projects)
-  //         .values({
-  //           uid: createProjectDto.uid ?? generateUid('prj'),
-  //           createdById: userId,
-  //           workspaceId: 1,
-  //           slug: this.generateSlug(createProjectDto.projectName) + `-${Date.now()}`,
-  //           projectName: createProjectDto.projectName ?? '',
-  //           projectType: createProjectDto.projectType ?? '',
-  //           projectWebsite: createProjectDto.projectWebsite ?? '',
-  //           description: createProjectDto.description ?? '',
-  //           location: locationValue,
-  //           isPrimary: false,
-  //           isPersonal: false,
-  //           originalGeometry: createProjectDto.location
-  //         })
-  //         .returning();
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
 
-  //       await tx
-  //         .insert(projectMembers)
-  //         .values({
-  //           projectId: project.id,
-  //           uid: generateUid('mem'),
-  //           userId: userId,
-  //           workspaceId: 1,
-  //           projectRole: 'owner',
-  //           joinedAt: new Date(),
-  //         });
-  //       await tx.update(users)
-  //         .set({ primaryWorkspace: user.primaryWorkspace, primaryProject: project.id })
-  //         .where(eq(users.id, userId));
-  //       const updatedUser = {...user}
-  //       await this.cacheService.delete(CACHE_KEYS.USER.BY_ID(userId));
-  //       updatedUser.primaryProject = project.id;
-  //       await this.cacheService.set(CACHE_KEYS.USER.BY_AUTH0_ID(user.auth0Id), updatedUser, CACHE_TTL.MEDIUM)
-  //       return project;
-  //     });
-  //     this.notificationService.createNotification({
-  //       userId: userId,
-  //       type: NotificationType.PROJECT_UPDATE,
-  //       title: 'New Project created',
-  //       message: `New Project with name ${createProjectDto.projectName} created.`
-  //     })
-  //     return {
-  //       message: 'Project created successfully',
-  //       statusCode: 201,
-  //       error: null,
-  //       data: result,
-  //       code: 'project_created',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error creating project:', error);
-  //     return {
-  //       message: 'Failed to create project',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'project_creation_failed',
-  //     };
-  //   }
-  // }
+    throw new BadRequestException('Invalid GeoJSON format');
+  }
+
+  private generateSlug(projectName: string): string {
+    return projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+      .replace(/\s+/g, '-')         // Replace spaces with hyphens
+      .replace(/-+/g, '-')          // Replace multiple hyphens with single
+      .trim()
+      .substring(0, 255); // Ensure it fits in varchar(255)
+  }
+
+  async createNewProject(createProjectDto: CreateProjectDto, userData: User): Promise<any> {
+    try {
+      let locationValue: any = null;
+      if (!userData.primaryWorkspace) {
+        throw new ForbiddenException('User does not have a primary workspace set');
+      }
+      const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspace);
+      console.log('Workspace ID:', workspaceId);
+      if (!workspaceId) {
+        throw new NotFoundException('Workspace not found');
+      }
+      if (createProjectDto.location) {
+        try {
+          const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
+          locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+        } catch (error) {
+          return {
+            message: 'Invalid GeoJSON provided',
+            statusCode: 400,
+            error: "invalid_geojson",
+            data: null,
+            code: 'invalid_project_geojson',
+          };
+        }
+      }
+
+
+      // Use transaction to ensure data consistency
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        // Create project with updated schema fields
+        const projectData = await tx
+          .insert(project)
+          .values({
+            uid: createProjectDto.uid ?? generateUid('proj'),
+            createdById: userData.id,
+            workspaceId: workspaceId,
+            slug: this.generateSlug(createProjectDto.projectName) + `-${Date.now()}`,
+            projectName: createProjectDto.projectName ?? '',
+            projectType: createProjectDto.projectType ?? '',
+            projectWebsite: createProjectDto.projectWebsite ?? '',
+            description: createProjectDto.description ?? '',
+            location: locationValue,
+            isPrimary: false,
+            isPersonal: false,
+            originalGeometry: createProjectDto.location
+          })
+          .returning();
+        if(!projectData || projectData.length === 0) {
+          throw new ConflictException('Project creation failed, please try again');
+        }
+        await tx
+          .insert(projectMember)
+          .values({
+            projectId: projectData[0].id,
+            uid: generateUid('projmem'),
+            userId: userData.id,
+            projectRole: 'owner',
+            joinedAt: new Date(),
+            siteAccess: 'all_sites',
+          });
+        await tx.update(user)
+          .set({ primaryWorkspace: user.primaryWorkspace, primaryProject: projectData[0].uid })
+          .where(eq(user.id, userData.id));
+        await this.userCacheService.refreshAuthUser({ ...userData, primaryProject: projectData[0].uid, primaryWorkspace: userData.primaryWorkspace });
+        return true;
+      });
+      // this.notificationService.createNotification({
+      //   userId: userId,
+      //   type: NotificationType.PROJECT_UPDATE,
+      //   title: 'New Project created',
+      //   message: `New Project with name ${createProjectDto.projectName} created.`
+      // })
+      return {
+        message: 'Project created successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'project_created',
+      };
+    } catch (error) {
+      console.error('Error creating project:', error);
+      return {
+        message: 'Failed to create project',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'project_creation_failed',
+      };
+    }
+  }
 
   // async createPersonalProject(name: string, userId: number, primaryWorkspaceId: number, auth0Id: string): Promise<any> {
   //   try {
@@ -334,6 +344,8 @@ export class ProjectsService {
   //     };
   //   }
   // }
+
+
 
   async findProjectsAndWorkspace(userData: User) {
     try {

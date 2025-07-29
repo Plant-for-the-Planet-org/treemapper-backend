@@ -3,11 +3,13 @@ import { Module } from '@nestjs/common';
 import { WorkspaceService } from './workspace.service';
 import { WorkspaceController } from './workspace.controller';
 import { DatabaseModule } from '../database/database.module';
+import { MemoryCacheMoudle } from 'src/cache/cache.module';
 
 
 @Module({
   imports: [
-    DatabaseModule
+    DatabaseModule,
+    MemoryCacheMoudle
   ],
   controllers: [WorkspaceController],
   providers: [WorkspaceService],

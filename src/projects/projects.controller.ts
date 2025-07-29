@@ -32,10 +32,10 @@ import { Membership } from './decorators/membership.decorator';
 export class ProjectsController {
     constructor(private readonly projectsService: ProjectsService) { }
 
-    //   @Post()
-    //   create(@Body() createProjectDto: CreateProjectDto, @Req() req): Promise<any> {
-    //     return this.projectsService.create(createProjectDto, req.user.id, req.user);
-    //   }
+    @Post()
+    create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
+        return this.projectsService.createNewProject(createProjectDto, user);
+    }
 
     //   @Post('/personal')
     //   createPersonal(@Req() req): Promise<any> {
