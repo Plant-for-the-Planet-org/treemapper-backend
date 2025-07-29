@@ -62,86 +62,91 @@ export class UsersController {
       primaryProject: users.primaryProject
     }
   }
-//   // @ApiExcludeEndpoint()
-//   @Put('migrated')
-//   async migrated(@CurrentUser() user: User) {
-//     return await this.usersService.migrateSuccess(user.id);
-//   }
-
-//   // @ApiExcludeEndpoint()
-//   @Post('presign-url')
-//   async getSignedUrl(
-//     @Body() dto: CreatePresignedUrlDto,
-//     @CurrentUser() user: User) {
-//     return await this.usersService.generateR2Url(dto);
-//   }
-
-//   @Patch('me')
-//   async updateProfile(
-//     @CurrentUser() user: User,
-//     @Body() updateUserDto: any,
-//   ) {
-//     return await this.usersService.update(user.id, updateUserDto);
-//   }
 
 
-//   @Post('onboarding')
-//   async create(@Body() createSurveyDto: CreateSurvey, @CurrentUser() user: User,) {
-//     return await this.usersService.createSurvey(user.id, user.auth0Id, createSurveyDto, );
-//   }
-
-
-//   @Get('stats')
-//   async getStats() {
-//     return await this.usersService.getUserStats();
-//   }
-
-//   @Get('check-email')
-//   async checkEmail(@Query('email') email: string) {
-//     const exists = await this.usersService.checkEmailExists(email);
-//     return { exists };
-//   }
-
-//   @Get('by-guid/:guid')
-//   async findByGuid(@Param('guid') guid: string) {
-//     return await this.usersService.findByuid(guid);
-//   }
-
-//   @Get(':id')
-//   async findOne(@Param('id', ParseIntPipe) id: number) {
-//     return await this.usersService.findOne(id);
-//   }
-
-
-//   @Patch(':id')
-//   async update(
-//     @Param('id', ParseIntPipe) id: number,
-//     @Body() updateUserDto: UpdateUserDto,
-//   ) {
-//     return await this.usersService.update(id, updateUserDto);
-//   }
-
-//   @Patch(':id/deactivate')
-//   async deactivate(@Param('id', ParseIntPipe) id: number) {
-//     return await this.usersService.deactivate(id);
-//   }
-
-//   @Patch(':id/activate')
-//   async activate(@Param('id', ParseIntPipe) id: number) {
-//     return await this.usersService.activate(id);
-//   }
+  @Post('onboarding')
+  async onBoardUser(@Body() createSurveyDto: CreateSurvey, @CurrentUser() user: User,) {
+    return await this.usersService.onBoardUser(createSurveyDto, user);
+  }
 
 
 
-//   @Delete(':id')
-//   @HttpCode(HttpStatus.OK)
-//   async remove(@Param('id', ParseIntPipe) id: number) {
-//     return await this.usersService.remove(id);
-//   }
+  //   // @ApiExcludeEndpoint()
+  //   @Put('migrated')
+  //   async migrated(@CurrentUser() user: User) {
+  //     return await this.usersService.migrateSuccess(user.id);
+  //   }
 
-//   @Delete(':id/hard')
-//   @HttpCode(HttpStatus.OK)
-//   async hardDelete(@Param('id', ParseIntPipe) id: number) {
-//     return await this.usersService.hardDelete(id);
-//   }
+  //   // @ApiExcludeEndpoint()
+  //   @Post('presign-url')
+  //   async getSignedUrl(
+  //     @Body() dto: CreatePresignedUrlDto,
+  //     @CurrentUser() user: User) {
+  //     return await this.usersService.generateR2Url(dto);
+  //   }
+
+  //   @Patch('me')
+  //   async updateProfile(
+  //     @CurrentUser() user: User,
+  //     @Body() updateUserDto: any,
+  //   ) {
+  //     return await this.usersService.update(user.id, updateUserDto);
+  //   }
+
+
+
+
+  //   @Get('stats')
+  //   async getStats() {
+  //     return await this.usersService.getUserStats();
+  //   }
+
+  //   @Get('check-email')
+  //   async checkEmail(@Query('email') email: string) {
+  //     const exists = await this.usersService.checkEmailExists(email);
+  //     return { exists };
+  //   }
+
+  //   @Get('by-guid/:guid')
+  //   async findByGuid(@Param('guid') guid: string) {
+  //     return await this.usersService.findByuid(guid);
+  //   }
+
+  //   @Get(':id')
+  //   async findOne(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.findOne(id);
+  //   }
+
+
+  //   @Patch(':id')
+  //   async update(
+  //     @Param('id', ParseIntPipe) id: number,
+  //     @Body() updateUserDto: UpdateUserDto,
+  //   ) {
+  //     return await this.usersService.update(id, updateUserDto);
+  //   }
+
+  //   @Patch(':id/deactivate')
+  //   async deactivate(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.deactivate(id);
+  //   }
+
+  //   @Patch(':id/activate')
+  //   async activate(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.activate(id);
+  //   }
+
+
+
+  //   @Delete(':id')
+  //   @HttpCode(HttpStatus.OK)
+  //   async remove(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.remove(id);
+  //   }
+
+  //   @Delete(':id/hard')
+  //   @HttpCode(HttpStatus.OK)
+  //   async hardDelete(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.hardDelete(id);
+  //   }
 }

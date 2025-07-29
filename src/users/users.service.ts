@@ -1,6 +1,6 @@
-import { Injectable, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Logger, InternalServerErrorException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { user } from '../database/schema';
+import { project, projectMember, survey, user, workspace, workspaceMember } from '../database/schema';
 import { CreateSurvey } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
@@ -100,75 +100,180 @@ export class UsersService {
         }
     }
 
-    //   async createSurvey(userId: number, auth0Id: string, surveyDetails: CreateSurvey): Promise<any> {
-    //     try {
-    //       if (!surveyDetails.skip) {
-    //         await this.drizzleService.db
-    //           .insert(survey)
-    //           .values({
-    //             uid: generateUid('srv'),
-    //             userId: userId,
-    //             organizationName: surveyDetails.organizationName,
-    //             primaryGoal: surveyDetails.primaryGoal,
-    //             role: surveyDetails.role,
-    //             requestedDemo: surveyDetails.requestedDemo ? true : false,
-    //             isCompleted: surveyDetails.complete ? true : false,
-    //           })
-    //       }
 
 
-    //       await this.drizzleService.db.transaction(async (tx) => {
-    //         let organizationId: number;
-    //         if (surveyDetails.devMode) {
-    //           organizationId = 3;
-    //         } else if (surveyDetails.forestCloud) {
-    //           organizationId = 1;
-    //         } else {
-    //           organizationId = 2;
-    //         }
-    //         const slug = this.generateSlug(surveyDetails.projectName);
-    //         await tx.insert(workspaceMembers)
-    //           .values({
-    //             uid: generateUid('worm'),
-    //             workspaceId: organizationId,
-    //             userId,
-    //             createdAt: new Date(),
-    //           })
-    //           .onConflictDoNothing({
-    //             target: [workspaceMembers.workspaceId, workspaceMembers.userId]
-    //           })
-    //         const projectDetails = await tx.insert(projects)
-    //           .values({
-    //             uid: generateUid('prj'),
-    //             workspaceId: organizationId,
-    //             createdById: userId,
-    //             slug: `${slug}-${Date.now()}`,
-    //             projectName: surveyDetails.projectName,
-    //             createdAt: new Date(),
-    //             isPrimary: true,
-    //             isPersonal: true,
-    //           }).returning()
-    //         await tx
-    //           .insert(projectMembers)
-    //           .values({
-    //             uid: generateUid('mem'),
-    //             projectId: projectDetails[0].id,
-    //             userId: userId,
-    //             workspaceId: organizationId,
-    //             projectRole: 'owner',
-    //             joinedAt: new Date(),
-    //             invitedAt: new Date()
-    //           });
-    //         await tx.update(users)
-    //           .set({ primaryWorkspace: organizationId, primaryProject: projectDetails[0].id })
-    //           .where(eq(users.id, userId)),
-    //           await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
-    //         return { message: 'success' }
-    //       })
-    //     } catch (error) {
-    //       throw error;
-    //     }
-    //   }
+    async onBoardUser(surveyDetails: CreateSurvey, userData: User): Promise<boolean> {
+        try {
+            this.validateOnboardingData(surveyDetails, userData);
+            const workspaceId = this.determineWorkspaceId(surveyDetails);
+            const projectSlug = this.generateUniqueProjectSlug(surveyDetails.projectName);
+            const now = new Date();
+            const uids = {
+                survey: generateUid('srv'),
+                workspaceMember: generateUid('workmem'),
+                project: generateUid('proj'),
+                projectMember: generateUid('projmem'),
+            };
+
+            const result = await this.drizzleService.db.transaction(async (tx) => {
+                const workspaceExists = await tx
+                    .select({ uid: workspace.uid })
+                    .from(workspace)
+                    .where(and(
+                        eq(workspace.id, workspaceId)
+                    ))
+                    .limit(1);
+
+                if (workspaceExists.length === 0) {
+                    throw new BadRequestException(`Active workspace with ID ${workspaceId} does not exist`);
+                }
+
+                if (!surveyDetails.skip) {
+                    await tx.insert(survey).values({
+                        uid: uids.survey,
+                        userId: userData.id,
+                        organizationName: surveyDetails.organizationName,
+                        primaryGoal: surveyDetails.primaryGoal,
+                        role: surveyDetails.role,
+                        requestedDemo: Boolean(surveyDetails.requestedDemo),
+                        isCompleted: this.isSurveyComplete(surveyDetails),
+                        createdAt: now,
+                        updatedAt: now,
+                    });
+                }
+                const workspaceMemberExists = await tx
+                    .select({ user: workspaceMember.userId })
+                    .from(workspaceMember)
+                    .where(eq(workspaceMember.userId, userData.id)).limit(1);
+                if (workspaceMemberExists.length === 0) {
+                    await tx.insert(workspaceMember)
+                        .values({
+                            uid: uids.workspaceMember,
+                            workspaceId,
+                            userId: userData.id,
+                            role: 'member',
+                            status: 'active',
+                            joinedAt: now,
+                            createdAt: now,
+                            updatedAt: now,
+                        })
+
+                }
+
+
+                const [newProject] = await tx.insert(project)
+                    .values({
+                        uid: uids.project,
+                        workspaceId,
+                        createdById: userData.id,
+                        slug: projectSlug,
+                        projectName: surveyDetails.projectName,
+                        isPrimary: true,
+                        isPersonal: true,
+                        isActive: true,
+                        isPublic: false,
+                        createdAt: now,
+                        updatedAt: now,
+                    })
+                    .returning({
+                        id: project.id,
+                        uid: project.uid,
+                    });
+
+                if (!newProject) {
+                    throw new InternalServerErrorException('Failed to create project');
+                }
+
+                await tx.insert(projectMember)
+                    .values({
+                        uid: uids.projectMember,
+                        projectId: newProject.id,
+                        userId: userData.id,
+                        projectRole: 'owner',
+                        joinedAt: now,
+                        siteAccess: 'all_sites',
+                        createdAt: now,
+                        updatedAt: now,
+                    });
+
+                await tx.update(user)
+                    .set({
+                        primaryWorkspace: workspaceExists[0].uid,
+                        primaryProject: newProject.uid,
+                        updatedAt: now,
+                    })
+                    .where(eq(user.id, userData.id));
+
+                return {
+                    workspaceUid: workspaceExists[0].uid,
+                    projectUid: newProject.uid,
+                };
+            });
+
+            await this.userCacheService.refreshAuthUser({
+                ...userData,
+                primaryWorkspace: result.workspaceUid,
+                primaryProject: result.projectUid,
+            });
+            return true;
+        } catch (error) {
+            console.log('Error during onboarding:', error);
+            await this.userCacheService.invalidateUser(userData);
+            // Re-throw known exceptions
+            if (error instanceof BadRequestException ||
+                error instanceof InternalServerErrorException) {
+                throw error;
+            }
+
+            // Handle database constraint violations
+            if (error.code === '23505') { // Unique constraint violation
+                throw new ConflictException('User is already onboarded or data conflicts exist');
+            }
+
+            if (error.code === '23503') { // Foreign key constraint violation
+                throw new BadRequestException('Referenced data does not exist');
+            }
+
+            // Generic error for unexpected cases
+            throw new InternalServerErrorException('Failed to onboard user');
+        }
+    }
+
+    private validateOnboardingData(surveyDetails: CreateSurvey, userData: User): void {
+        if (!userData?.id) {
+            throw new BadRequestException('Invalid user data');
+        }
+
+        if (!surveyDetails?.projectName?.trim()) {
+            throw new BadRequestException('Project name is required');
+        }
+
+        if (surveyDetails.projectName.length > 100) {
+            throw new BadRequestException('Project name is too long');
+        }
+    }
+
+    private determineWorkspaceId(surveyDetails: CreateSurvey): number {
+        if (surveyDetails.devMode) return 3;
+        if (surveyDetails.forestCloud) return 1;
+        return 2;
+    }
+
+    private generateUniqueProjectSlug(projectName: string): string {
+        const baseSlug = this.generateSlug(projectName);
+        return `${baseSlug}-${randomPastTimestamp()}`;
+    }
+
+    private isSurveyComplete(surveyDetails: CreateSurvey): boolean {
+        return Boolean(
+            surveyDetails.organizationName?.trim() &&
+            surveyDetails.primaryGoal?.trim() &&
+            surveyDetails.role?.trim()
+        );
+    }
+
+
+
 
 
 

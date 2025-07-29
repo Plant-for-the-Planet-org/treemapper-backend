@@ -23,6 +23,7 @@ import { WorkspaceService } from './workspace.service';
 import { CreateNewWorkspaceDto } from './dto/create-organization.dto';
 import { OrganizationResponseDto, SelectOrganizationDto, UserOrganizationResponseDto } from './dto/organization-response.dto';
 import { User } from 'src/users/entities/user.entity';
+import { CurrentUser } from 'src/auth/current-user.decorator';
 
 
 interface AuthenticatedRequest extends Request {
@@ -53,9 +54,9 @@ export class WorkspaceController {
     @Post('/primary')
     async setPrimaryOrg(
         @Body() createOrganizationDto: SelectOrganizationDto,
-        @Req() req: any,
+        @CurrentUser() user: User,
     ): Promise<any> {
-        return this.workspaceService.setPrimaryWorkspaceAndProject(createOrganizationDto, req.user);
+        return this.workspaceService.setPrimaryWorkspaceAndProject(createOrganizationDto, user);
     }
 
     // @Get()
