@@ -3,5 +3,12 @@
         "Hello",
         "Redis",
         "User"
+    ],
+    "python-envs.pythonProjects": [
+        {
+            "path": "drizzle/migrations",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
     ]
 }

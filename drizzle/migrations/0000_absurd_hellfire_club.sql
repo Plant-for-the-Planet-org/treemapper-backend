@@ -10,6 +10,7 @@ CREATE TYPE "public"."intervention_status" AS ENUM('planned', 'active', 'complet
 CREATE TYPE "public"."intervention_type" AS ENUM('assisting-seed-rain', 'control-livestock', 'direct-seeding', 'enrichment-planting', 'fencing', 'fire-patrol', 'fire-suppression', 'firebreaks', 'generic-tree-registration', 'grass-suppression', 'liberating-regenerant', 'maintenance', 'marking-regenerant', 'multi-tree-registration', 'other-intervention', 'plot-plant-registration', 'removal-invasive-species', 'sample-tree-registration', 'single-tree-registration', 'soil-improvement', 'stop-tree-harvesting');--> statement-breakpoint
 CREATE TYPE "public"."invite_status" AS ENUM('pending', 'accepted', 'declined', 'expired', 'discarded');--> statement-breakpoint
 CREATE TYPE "public"."log_level" AS ENUM('debug', 'info', 'warning', 'error', 'fatal');--> statement-breakpoint
+CREATE TYPE "public"."member_status" AS ENUM('active', 'inactive', 'suspended', 'pending');--> statement-breakpoint
 CREATE TYPE "public"."migration_status" AS ENUM('in_progress', 'completed', 'failed', 'started');--> statement-breakpoint
 CREATE TYPE "public"."project_role" AS ENUM('owner', 'admin', 'contributor', 'observer');--> statement-breakpoint
 CREATE TYPE "public"."record_type" AS ENUM('planting', 'measurement', 'status_change', 'inspection', 'maintenance', 'death', 'removal', 'health_assessment', 'growth_monitoring');--> statement-breakpoint
@@ -17,7 +18,8 @@ CREATE TYPE "public"."site_status" AS ENUM('planted', 'planting', 'barren', 'ref
 CREATE TYPE "public"."species_request_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TYPE "public"."tree_status" AS ENUM('alive', 'dead', 'unknown', 'removed', 'sick');--> statement-breakpoint
 CREATE TYPE "public"."tree_enum" AS ENUM('single', 'sample', 'plot');--> statement-breakpoint
-CREATE TYPE "public"."user_type" AS ENUM('individual', 'education', 'tpo', 'organization', 'student');--> statement-breakpoint
+CREATE TYPE "public"."user_type" AS ENUM('individual', 'education', 'tpo', 'workspace', 'student');--> statement-breakpoint
+CREATE TYPE "public"."workspace_role" AS ENUM('owner', 'admin', 'member');--> statement-breakpoint
 CREATE TABLE "audit_logs" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"table_name" varchar(100) NOT NULL,
@@ -36,6 +38,7 @@ CREATE TABLE "bulk_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"restriction" varchar[] DEFAULT '{}',
 	"message" varchar(400),
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
@@ -89,8 +92,9 @@ CREATE TABLE "interventions" (
 	"uid" varchar(50) NOT NULL,
 	"hid" varchar(16) NOT NULL,
 	"discr" "intervention_discriminator" DEFAULT 'intervention' NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
-	"project_id" integer,
+	"project_id" integer NOT NULL,
 	"project_site_id" integer,
 	"parent_intervention_id" integer,
 	"type" "intervention_type" NOT NULL,
@@ -100,8 +104,8 @@ CREATE TABLE "interventions" (
 	"registration_date" timestamp with time zone NOT NULL,
 	"intervention_start_date" timestamp with time zone NOT NULL,
 	"intervention_end_date" timestamp with time zone NOT NULL,
-	"location" geometry(Geometry,4326) NOT NULL,
-	"original_geometry" jsonb NOT NULL,
+	"location" geometry(Geometry,4326),
+	"original_geometry" jsonb,
 	"device_location" jsonb,
 	"tree_count" integer DEFAULT 0,
 	"sample_tree_count" integer DEFAULT 0,
@@ -180,6 +184,7 @@ CREATE TABLE "project_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"email" varchar(320) NOT NULL,
 	"message" varchar(400),
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
@@ -199,6 +204,7 @@ CREATE TABLE "project_members" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
 	"project_role" "project_role" DEFAULT 'contributor' NOT NULL,
 	"invited_at" timestamp with time zone,
@@ -214,6 +220,7 @@ CREATE TABLE "project_species" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"scientific_species_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"is_native_species" boolean DEFAULT false,
 	"is_endangered" boolean DEFAULT false,
 	"is_disabled" boolean DEFAULT false,
@@ -235,6 +242,7 @@ CREATE TABLE "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"created_by_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"slug" varchar(255) NOT NULL,
 	"purpose" varchar(100),
 	"project_name" varchar(255) NOT NULL,
@@ -288,6 +296,7 @@ CREATE TABLE "sites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"project_id" integer NOT NULL,
+	"workspace_id" integer NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"description" text,
 	"location" geometry(Geometry,4326),
@@ -322,6 +331,21 @@ CREATE TABLE "species_requests" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "species_requests_uid_unique" UNIQUE("uid")
+);
+--> statement-breakpoint
+CREATE TABLE "survey" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"user_id" integer NOT NULL,
+	"is_completed" boolean DEFAULT false NOT NULL,
+	"organizationName" text,
+	"primary_goal" text,
+	"role" text,
+	"requested_demo" boolean DEFAULT false,
+	"metadata" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "survey_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
 CREATE TABLE "tree_records" (
@@ -369,6 +393,7 @@ CREATE TABLE "trees" (
 	"hid" varchar(16) NOT NULL,
 	"uid" varchar(50) NOT NULL,
 	"intervention_id" integer,
+	"workspace_id" integer NOT NULL,
 	"intervention_species_id" varchar,
 	"species_name" varchar,
 	"is_unknown" boolean DEFAULT false,
@@ -426,6 +451,8 @@ CREATE TABLE "users" (
 	"firstname" varchar(255),
 	"lastname" varchar(255),
 	"display_name" varchar(400),
+	"primary_workspace" integer,
+	"primary_project" integer,
 	"image" text,
 	"slug" varchar(100),
 	"type" "user_type" DEFAULT 'individual',
@@ -449,12 +476,60 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
+CREATE TABLE "workspace" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"slug" varchar(100) NOT NULL,
+	"description" text,
+	"logo" text,
+	"primary_color" varchar(7),
+	"secondary_color" varchar(7),
+	"custom_domain" varchar(255),
+	"email" varchar(320),
+	"phone" varchar(50),
+	"type" varchar(50) DEFAULT 'public' NOT NULL,
+	"website" text,
+	"address" text,
+	"country" char(2),
+	"timezone" varchar(50) DEFAULT 'UTC',
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_by_id" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	"metadata" jsonb,
+	CONSTRAINT "workspace_uid_unique" UNIQUE("uid"),
+	CONSTRAINT "workspace_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "workspace_custom_domain_unique" UNIQUE("custom_domain")
+);
+--> statement-breakpoint
+CREATE TABLE "workspace_members" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" varchar(50) NOT NULL,
+	"workspace_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"role" "workspace_role" DEFAULT 'member' NOT NULL,
+	"status" "member_status" DEFAULT 'active',
+	"joined_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"invited_at" timestamp with time zone,
+	"invited_by_id" integer,
+	"last_active_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"metadata" jsonb,
+	CONSTRAINT "workspace_members_uid_unique" UNIQUE("uid"),
+	CONSTRAINT "unique_workspace_member" UNIQUE("workspace_id","user_id")
+);
+--> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_changed_by_users_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bulk_invites" ADD CONSTRAINT "bulk_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "intervention_records" ADD CONSTRAINT "intervention_records_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "interventions" ADD CONSTRAINT "interventions_project_site_id_sites_id_fk" FOREIGN KEY ("project_site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -464,25 +539,38 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" F
 ALTER TABLE "project_audits" ADD CONSTRAINT "project_audits_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_audits" ADD CONSTRAINT "project_audits_modified_by_users_id_fk" FOREIGN KEY ("modified_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_invites" ADD CONSTRAINT "project_invites_discarded_by_users_id_fk" FOREIGN KEY ("discarded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_members" ADD CONSTRAINT "project_members_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_bulk_invite_id_bulk_invites_id_fk" FOREIGN KEY ("bulk_invite_id") REFERENCES "public"."bulk_invites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_species" ADD CONSTRAINT "project_species_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_species" ADD CONSTRAINT "project_species_added_by_id_users_id_fk" FOREIGN KEY ("added_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "projects" ADD CONSTRAINT "projects_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sites" ADD CONSTRAINT "sites_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sites" ADD CONSTRAINT "sites_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_requested_by_id_users_id_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "species_requests" ADD CONSTRAINT "species_requests_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "survey" ADD CONSTRAINT "survey_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_tree_id_trees_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."trees"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_records" ADD CONSTRAINT "tree_records_recorded_by_id_users_id_fk" FOREIGN KEY ("recorded_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_intervention_id_interventions_id_fk" FOREIGN KEY ("intervention_id") REFERENCES "public"."interventions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trees" ADD CONSTRAINT "trees_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trees" ADD CONSTRAINT "trees_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_migrations" ADD CONSTRAINT "user_migrations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_primary_workspace_workspace_id_fk" FOREIGN KEY ("primary_workspace") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_primary_project_projects_id_fk" FOREIGN KEY ("primary_project") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace" ADD CONSTRAINT "workspace_created_by_id_users_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "audit_logs_table_record_idx" ON "audit_logs" USING btree ("table_name","record_uid");--> statement-breakpoint
 CREATE INDEX "audit_logs_user_idx" ON "audit_logs" USING btree ("changed_by");--> statement-breakpoint
 CREATE INDEX "audit_logs_time_idx" ON "audit_logs" USING btree ("changed_at");--> statement-breakpoint
@@ -526,11 +614,13 @@ CREATE INDEX "project_species_added_by_idx" ON "project_species" USING btree ("a
 CREATE INDEX "project_species_native_idx" ON "project_species" USING btree ("is_native_species");--> statement-breakpoint
 CREATE INDEX "projects_location_gist_idx" ON "projects" USING gist ("location");--> statement-breakpoint
 CREATE INDEX "projects_created_by_idx" ON "projects" USING btree ("created_by_id");--> statement-breakpoint
+CREATE INDEX "projects_workpsace_by_idx" ON "projects" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "scientific_species_name_idx" ON "scientific_species" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "scientific_species_uid_idx" ON "scientific_species" USING btree ("uid");--> statement-breakpoint
 CREATE INDEX "sites_project_id_idx" ON "sites" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "sites_location_gist_idx" ON "sites" USING gist ("location");--> statement-breakpoint
 CREATE INDEX "species_requests_requested_by_idx" ON "species_requests" USING btree ("requested_by_id");--> statement-breakpoint
+CREATE INDEX "survey_user_idx" ON "survey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "tree_records_tree_id_idx" ON "tree_records" USING btree ("tree_id");--> statement-breakpoint
 CREATE INDEX "tree_records_recorded_by_idx" ON "tree_records" USING btree ("recorded_by_id");--> statement-breakpoint
 CREATE INDEX "trees_intervention_idx" ON "trees" USING btree ("intervention_id");--> statement-breakpoint
@@ -540,4 +630,13 @@ CREATE INDEX "trees_type_idx" ON "trees" USING btree ("treeType");--> statement-
 CREATE INDEX "trees_planting_date_idx" ON "trees" USING btree ("planting_date");--> statement-breakpoint
 CREATE INDEX "trees_last_measurement_idx" ON "trees" USING btree ("last_measurement_date");--> statement-breakpoint
 CREATE INDEX "trees_location_gist_idx" ON "trees" USING gist ("location");--> statement-breakpoint
-CREATE INDEX "user_id_idx" ON "user_migrations" USING btree ("user_id");
+CREATE INDEX "user_id_idx" ON "user_migrations" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "workspace_name_idx" ON "workspace" USING btree ("name");--> statement-breakpoint
+CREATE INDEX "workspace_slug_idx" ON "workspace" USING btree ("slug");--> statement-breakpoint
+CREATE INDEX "workspace_type_idx" ON "workspace" USING btree ("type");--> statement-breakpoint
+CREATE INDEX "workspace_created_by_idx" ON "workspace" USING btree ("created_by_id");--> statement-breakpoint
+CREATE INDEX "workspace_members_idx" ON "workspace_members" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "workspace_members_user_idx" ON "workspace_members" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "workspace_members_role_idx" ON "workspace_members" USING btree ("role");--> statement-breakpoint
+CREATE INDEX "workspace_members_status_idx" ON "workspace_members" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "workspace_members_invited_by_idx" ON "workspace_members" USING btree ("invited_by_id");

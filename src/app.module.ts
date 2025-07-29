@@ -16,6 +16,7 @@ import { SitesModule } from './sites/sites.module';
 import { InterventionsModule } from './interventions/interventions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { MobileModule } from './mobile/mobile.module';
+import { OrganizationsModule } from './organization/organization.module';
 
 @Module({
   imports: [
@@ -36,7 +37,8 @@ import { MobileModule } from './mobile/mobile.module';
     SpeciesModule,
     InterventionsModule,
     AnalyticsModule,
-    MobileModule
+    MobileModule,
+    OrganizationsModule
   ],
   controllers: [AppController],
   providers: [AppService],
