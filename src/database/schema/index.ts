@@ -73,7 +73,7 @@ const geometryWithGeoJSON = (srid?: number) =>
 
 export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'contributor', 'observer']);
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined', 'expired', 'discarded']);
-export const userTypeEnum = pgEnum('user_type', ['individual', 'education', 'tpo', 'organization', 'student']);
+export const userTypeEnum = pgEnum('user_type', ['individual', 'education', 'tpo', 'workspace', 'student']);
 export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'barren', 'reforestation']);
 export const interventionTypeEnum = pgEnum('intervention_type', [
   'assisting-seed-rain',
@@ -141,6 +141,18 @@ export const entityEnum = pgEnum('entity_type', [
 ]);
 
 
+export const workspaceRoleEnum = pgEnum('workspace_role', [
+  'owner',
+  'admin',
+  'member'
+]);
+
+export const memberStatusEnum = pgEnum('member_status', [
+  'active',
+  'inactive',
+  'suspended',
+  'pending'
+]);
 
 
 // ============================================================================
@@ -201,6 +213,76 @@ export const migrationLogs = pgTable('migration_logs', {
   userMigrationIdx: index('user_migration_id_idx').on(table.userMigrationId)
 }))
 
+
+export const workspace = pgTable('workspace', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  logo: text('logo'),
+  primaryColor: varchar('primary_color', { length: 7 }),
+  secondaryColor: varchar('secondary_color', { length: 7 }),
+  domainRestriction: varchar('custom_domain', { length: 255 }).unique(),
+  email: varchar('email', { length: 320 }),
+  phone: varchar('phone', { length: 50 }),
+  type: varchar('type', { length: 50 }).notNull().default('public'),
+  website: text('website'),
+  address: text('address'),
+  country: char('country', { length: 2 }),
+  timezone: varchar('timezone', { length: 50 }).default('UTC'),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdById: integer('created_by_id').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  metadata: jsonb('metadata'),
+}, (table) => ({
+  nameIdx: index('workspace_name_idx').on(table.name),
+  slugIdx: index('workspace_slug_idx').on(table.slug),
+  typeIdx: index('workspace_type_idx').on(table.type),
+  createdByIdx: index('workspace_created_by_idx').on(table.createdById),
+}));
+
+export const workspaceMembers = pgTable('workspace_members', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: workspaceRoleEnum('role').notNull().default('member'),
+  status: memberStatusEnum('status').default('active'),
+  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  invitedAt: timestamp('invited_at', { withTimezone: true }),
+  invitedById: integer('invited_by_id').references(() => users.id),
+  lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  metadata: jsonb('metadata'),
+}, (table) => ({
+  uniqueMember: unique('unique_workspace_member').on(table.workspaceId, table.userId),
+  workspaceIdx: index('workspace_members_idx').on(table.workspaceId),
+  userIdx: index('workspace_members_user_idx').on(table.userId),
+  roleIdx: index('workspace_members_role_idx').on(table.role),
+  statusIdx: index('workspace_members_status_idx').on(table.status),
+  invitedByIdx: index('workspace_members_invited_by_idx').on(table.invitedById),
+}));
+
+export const survey = pgTable('survey', {
+  id: serial('id').primaryKey(),
+  uid: varchar('uid', { length: 50 }).notNull().unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  isCompleted: boolean('is_completed').notNull().default(false),
+  organizationName: text("organizationName"),
+  primaryGoal: text("primary_goal"),
+  role: text("role"),
+  requestedDemo: boolean('requested_demo').default(false),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('survey_user_idx').on(table.userId),
+}));
+
 // ============================================================================
 // USERS TABLE
 // ============================================================================
@@ -213,6 +295,8 @@ export const users = pgTable('users', {
   firstname: varchar('firstname', { length: 255 }),
   lastname: varchar('lastname', { length: 255 }),
   displayName: varchar('display_name', { length: 400 }),
+  primaryWorkspace: integer('primary_workspace').references(() => workspace.id),
+  primaryProject: integer('primary_project').references(() => projects.id),
   image: text('image'),
   slug: varchar('slug', { length: 100 }).unique(),
   type: userTypeEnum('type').default('individual'),
@@ -240,6 +324,7 @@ export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   createdById: integer('created_by_id').notNull().references(() => users.id),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   purpose: varchar('purpose', { length: 100 }),
   projectName: varchar('project_name', { length: 255 }).notNull(),
@@ -271,6 +356,7 @@ export const projects = pgTable('projects', {
 }, (table) => ({
   locationIdx: index('projects_location_gist_idx').using('gist', table.location),
   createdByIdx: index('projects_created_by_idx').on(table.createdById),
+  workspaceIdx: index('projects_workpsace_by_idx').on(table.workspaceId),
 }));
 
 // ============================================================================
@@ -281,6 +367,7 @@ export const projectMembers = pgTable('project_members', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   userId: integer('user_id').notNull().references(() => users.id),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedAt: timestamp('invited_at', { withTimezone: true }),
@@ -299,7 +386,8 @@ export const bulkInvites = pgTable('bulk_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id),
-  restriction: varchar('restriction').array().default([]), 
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
+  restriction: varchar('restriction').array().default([]),
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
   invitedById: integer('invited_by_id').notNull().references(() => users.id),
@@ -352,6 +440,7 @@ export const sites = pgTable('sites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   location: geometryWithGeoJSON(4326)('location'),
@@ -379,6 +468,7 @@ export const projectInvites = pgTable('project_invites', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   email: varchar('email', { length: 320 }).notNull(),
   message: varchar('message', { length: 400 }),
   projectRole: projectRoleEnum('project_role').notNull().default('contributor'),
@@ -445,6 +535,7 @@ export const projectSpecies = pgTable('project_species', {
   id: serial('id').primaryKey(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   scientificSpeciesId: integer('scientific_species_id').notNull().references(() => scientificSpecies.id),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   isNativeSpecies: boolean('is_native_species').default(false),
   isEndangered: boolean('is_endangered').default(false),
   isDisabled: boolean('is_disabled').default(false),
@@ -506,8 +597,9 @@ export const interventions = pgTable('interventions', {
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   discr: interventionDiscriminatorEnum('discr').notNull().default('intervention'),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   userId: integer('user_id').notNull().references(() => users.id),
-  projectId: integer('project_id').references(() => projects.id),
+  projectId: integer('project_id').notNull().references(() => projects.id),
   projectSiteId: integer('project_site_id').references(() => sites.id),
   parentInterventionId: integer('parent_intervention_id').references(() => interventions.id),
   type: interventionTypeEnum('type').notNull(),
@@ -531,7 +623,7 @@ export const interventions = pgTable('interventions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   flag: boolean('flag').default(false),
-  hasRecords:boolean('has_records').default(false),
+  hasRecords: boolean('has_records').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedIntervention: boolean('migrated_intervention').default(false),
@@ -551,6 +643,7 @@ export const trees = pgTable('trees', {
   hid: varchar('hid', { length: 16 }).notNull().unique(),
   uid: varchar('uid', { length: 50 }).notNull().unique(),
   interventionId: integer('intervention_id').references(() => interventions.id),
+  workspaceId: integer('workspace_id').notNull().references(() => workspace.id),
   interventionSpeciesId: varchar('intervention_species_id'),
   speciesName: varchar('species_name'),
   isUnknown: boolean('is_unknown').default(false),
@@ -701,7 +794,7 @@ export const auditLogs = pgTable('audit_logs', {
 // RELATIONS
 // ============================================================================
 
-export const userRelations = relations(users, ({ many }) => ({
+export const userRelations = relations(users, ({ one, many }) => ({
   projectMemberships: many(projectMembers),
   createdProjects: many(projects, { relationName: 'createdBy' }),
   addedProjectSpecies: many(projectSpecies, { relationName: 'addedBy' }),
@@ -711,9 +804,28 @@ export const userRelations = relations(users, ({ many }) => ({
   bulkInvites: many(bulkInvites, { relationName: 'invitedBy' }),
   interventions: many(interventions, { relationName: 'userInterventions' }),
   notifications: many(notifications),
+  primaryWrokspace: one(workspace, {
+    fields: [users.primaryWorkspace],
+    references: [workspace.id],
+  }),
+  primaryProject: one(projects, {
+    fields: [users.primaryProject],
+    references: [projects.id],
+  }),
   speciesRequests: many(speciesRequests, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequests, { relationName: 'reviewedBy' }),
   createdTrees: many(trees, { relationName: 'createdBy' }),
+  workspaceMemberships: many(workspaceMembers),
+  createdworkspaces: many(workspace, { relationName: 'createdBy' }),
+  sentWorkspaceInvites: many(workspaceMembers, { relationName: 'invitedBy' }),
+  surveys: many(survey),
+}));
+
+export const surveyRelations = relations(survey, ({ one }) => ({
+  user: one(users, {
+    fields: [survey.userId],
+    references: [users.id],
+  }),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -728,6 +840,10 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   sites: many(sites),
   interventions: many(interventions),
   projectSpecies: many(projectSpecies),
+  workspace: one(workspace, {
+    fields: [projects.workspaceId],
+    references: [workspace.id],
+  }),
   speciesRequests: many(speciesRequests),
 }));
 
@@ -739,7 +855,11 @@ export const projectMemberRelations = relations(projectMembers, ({ one }) => ({
   user: one(users, {
     fields: [projectMembers.userId],
     references: [users.id],
-  })
+  }),
+  workspace: one(workspace, {
+    fields: [projectMembers.workspaceId],
+    references: [workspace.id],
+  }),
 }));
 
 export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
@@ -752,12 +872,20 @@ export const projectInviteRelations = relations(projectInvites, ({ one }) => ({
     references: [users.id],
     relationName: 'invitedBy',
   }),
+  workspace: one(workspace, {
+    fields: [projectInvites.workspaceId],
+    references: [workspace.id],
+  }),
 }));
 
 export const bulkInviteRelations = relations(bulkInvites, ({ one }) => ({
   project: one(projects, {
     fields: [bulkInvites.projectId],
     references: [projects.id],
+  }),
+  workspace: one(workspace, {
+    fields: [bulkInvites.workspaceId],
+    references: [workspace.id],
   }),
   invitedBy: one(users, {
     fields: [bulkInvites.invitedById],
@@ -770,10 +898,41 @@ export const scientificSpeciesRelations = relations(scientificSpecies, ({ many }
   projectSpecies: many(projectSpecies),
 }));
 
+export const workspaceRelations = relations(workspace, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [workspace.createdById],
+    references: [users.id],
+    relationName: 'createdBy',
+  }),
+  members: many(workspaceMembers),
+  users: many(users),
+  projects: many(projects),
+}));
+
+export const workspaceMemberRelations = relations(workspaceMembers, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [workspaceMembers.workspaceId],
+    references: [workspace.id],
+  }),
+  user: one(users, {
+    fields: [workspaceMembers.userId],
+    references: [users.id],
+  }),
+  invitedBy: one(users, {
+    fields: [workspaceMembers.invitedById],
+    references: [users.id],
+    relationName: 'invitedBy',
+  }),
+}));
+
 export const projectSpeciesRelations = relations(projectSpecies, ({ one, many }) => ({
   project: one(projects, {
     fields: [projectSpecies.projectId],
     references: [projects.id],
+  }),
+  workspace: one(workspace, {
+    fields: [projectSpecies.workspaceId],
+    references: [workspace.id],
   }),
   addedBy: one(users, {
     fields: [projectSpecies.addedById],
@@ -792,6 +951,10 @@ export const siteRelations = relations(sites, ({ one, many }) => ({
     fields: [sites.projectId],
     references: [projects.id],
   }),
+  workspace: one(workspace, {
+    fields: [sites.workspaceId],
+    references: [workspace.id],
+  }),
   createdBy: one(users, {
     fields: [sites.createdById],
     references: [users.id],
@@ -806,6 +969,10 @@ export const interventionsRelations = relations(interventions, ({ one, many }) =
   project: one(projects, {
     fields: [interventions.projectId],
     references: [projects.id],
+  }),
+  workspace: one(workspace, {
+    fields: [interventions.workspaceId],
+    references: [workspace.id],
   }),
   projectSite: one(sites, {
     fields: [interventions.projectSiteId],
@@ -832,6 +999,10 @@ export const treesRelations = relations(trees, ({ one, many }) => ({
   intervention: one(interventions, {
     fields: [trees.interventionId],
     references: [interventions.id],
+  }),
+  workspace: one(workspace, {
+    fields: [trees.workspaceId],
+    references: [workspace.id],
   }),
   createdBy: one(users, {
     fields: [trees.createdById],

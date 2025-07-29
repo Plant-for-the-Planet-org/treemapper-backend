@@ -21,21 +21,22 @@ async function bootstrap() {
         ignoreTrailingSlash: true,
       })
     );
+
     app.use((req, res, next) => {
       console.log(`${req.method} ${req.url}`);
       next();
     });
 
+    // Updated CORS configuration for monorepo deployment
+    const isProduction = process.env.NODE_ENV === 'production';
+
 
     app.enableCors({
-      origin: process.env.NODE_ENV === 'production'
-        ? ['https://treemapper-dashboard-1944c398f284.herokuapp.com']
-        : ['http://localhost:3000', 'http://localhost:3001'],
+      origin: ['http://127.0.0.1:3000', 'http://localhost:3000'],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
-
     app.setGlobalPrefix('api');
 
     app.useGlobalPipes(new ValidationPipe({
@@ -51,7 +52,7 @@ async function bootstrap() {
     app.useGlobalGuards(app.get(JwtAuthGuard));
 
     // Swagger setup (development only)
-    if (process.env.NODE_ENV !== 'production') {
+    if (!isProduction) {
       const config = new DocumentBuilder()
         .setTitle('TreeMapper API')
         .setDescription('The TreeMapper Backend API')
@@ -64,15 +65,18 @@ async function bootstrap() {
       logger.log('📚 Swagger documentation available at /api/docs');
     }
 
-    const port = process.env.PORT || 3001;
+    // Port configuration for monorepo deployment
+    const port = process.env.PORT || (isProduction ? 3001 : 3001);
     await app.listen(port, '0.0.0.0');
 
-    const baseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://treemapper-backend-abb922f4cbd0.herokuapp.com'
+    // Updated base URL logic
+    const baseUrl = isProduction
+      ? `https://${process.env.HEROKU_APP_NAME || 'your-monorepo-app'}.herokuapp.com`
       : `http://localhost:${port}`;
 
-    logger.log(`🚀 Application running on: ${baseUrl}`);
-    if (process.env.NODE_ENV !== 'production') {
+    logger.log(`🚀 Server running on port: ${port}`);
+    logger.log(`🌐 Base URL: ${baseUrl}`);
+    if (!isProduction) {
       logger.log(`📚 API Documentation: ${baseUrl}/api/docs`);
     }
     logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
