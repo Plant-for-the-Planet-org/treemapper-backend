@@ -272,6 +272,31 @@ export class UsersService {
         );
     }
 
+      async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
+        try {
+          if (!dto.fileName || !dto.fileType) {
+            throw new BadRequestException('fileName and fileType are required');
+          }
+          const allowedTypes = ['image/'];
+          if (!allowedTypes.some(type => dto.fileType.startsWith(type))) {
+            throw new BadRequestException('File type not allowed');
+          }
+          const result = await this.r2Service.generatePresignedUrl({
+            fileName: dto.fileName,
+            fileType: dto.fileType,
+            folder: `${process.env.IS_PRODUCTION?"producation":"development"}/${dto.folder}`,
+          });
+          return {
+            success: true,
+            data: result,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            data: null,
+          }
+        }
+      }
 
 
 
@@ -331,38 +356,7 @@ export class UsersService {
     //     return await this.updateUseMigration(id);
     //   }
 
-    //   async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
-    //     try {
-    //       if (!dto.fileName || !dto.fileType) {
-    //         throw new BadRequestException('fileName and fileType are required');
-    //       }
-
-    //       // Validate file type (optional)
-    //       const allowedTypes = ['image/'];
-    //       if (!allowedTypes.some(type => dto.fileType.startsWith(type))) {
-    //         throw new BadRequestException('File type not allowed');
-    //       }
-
-    //       // Validate file size through filename or add size parameter
-    //       // This is a simple check - you might want more sophisticated validation
-
-    //       const result = await this.r2Service.generatePresignedUrl({
-    //         fileName: dto.fileName,
-    //         fileType: dto.fileType,
-    //         folder: `development/${dto.folder}`,
-    //       });
-
-    //       return {
-    //         success: true,
-    //         data: result,
-    //       };
-    //     } catch (error) {
-    //       return {
-    //         success: false,
-    //         data: null,
-    //       }
-    //     }
-    //   }
+    
 
     //   async updateUseMigration(id: number): Promise<Boolean> {
     //     this.resetUserCache()

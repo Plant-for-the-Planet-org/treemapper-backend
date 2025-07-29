@@ -77,13 +77,12 @@ export class UsersController {
   //     return await this.usersService.migrateSuccess(user.id);
   //   }
 
-  //   // @ApiExcludeEndpoint()
-  //   @Post('presign-url')
-  //   async getSignedUrl(
-  //     @Body() dto: CreatePresignedUrlDto,
-  //     @CurrentUser() user: User) {
-  //     return await this.usersService.generateR2Url(dto);
-  //   }
+    @Post('presign-url')
+    async getSignedUrl(
+      @Body() dto: CreatePresignedUrlDto,
+      @CurrentUser() user: User) {
+      return await this.usersService.generateR2Url(dto);
+    }
 
   //   @Patch('me')
   //   async updateProfile(

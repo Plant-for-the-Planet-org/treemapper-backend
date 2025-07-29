@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 
-type UidPrefix = 'usr' | 'work' | 'workmem' | 'srv' | 'proj' | 'projmem' | 'noti' | 'note' | 'event' | 'chat' | 'msg' | 'notif' | 'doc';
+type UidPrefix = 'usr' | 'work' | 'workmem' | 'srv' | 'proj' | 'projmem' | 'noti' | 'invi' | 'event' | 'chat' | 'msg' | 'notif' | 'doc';
 
 
 export function generateUid(prefix: UidPrefix) {

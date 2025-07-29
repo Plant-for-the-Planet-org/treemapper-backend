@@ -24,7 +24,6 @@ export class ProjectPermissionsGuard implements CanActivate {
       return false;
     }
 
-
     let membership = await this.projectCacheService.getUserProject(projectUid, userId);
     if (!membership) {
       membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
