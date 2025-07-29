@@ -22,7 +22,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "ts-node src/database/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "set-user-role": "ts-node scripts/create-admin.ts"
+    "set-user-role": "ts-node scripts/create-admin.ts",
+    "clean:deep": "rm -rf node_modules && rm -rf yarn.lock && find . -name 'node_modules' -type d -prune -exec rm -rf '{}' + && find . -name '.next' -type d -prune -exec rm -rf '{}' + && find . -name 'dist' -type d -prune -exec rm -rf '{}' + && find . -name '.turbo' -type d -prune -exec rm -rf '{}' + && find . -name 'build' -type d -prune -exec rm -rf '{}' +"
   },
   "engines": {
     "node": "23.x",
