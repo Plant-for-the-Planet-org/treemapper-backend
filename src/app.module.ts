@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MemoryCacheMoudle } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -17,9 +18,10 @@ import { WorkspaceModule } from './workspace/workspace.module';
     AuthModule,
     UsersModule,
     MemoryCacheMoudle,
-    WorkspaceModule
+    WorkspaceModule,
+    ProjectsModule,
+
     // MigrationModule,
-    // ProjectsModule,
     // SpeciesModule,
     // EmailModule,
     // NotificationModule,

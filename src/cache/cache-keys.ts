@@ -12,7 +12,10 @@ export const CACHE_KEYS = {
   },
   SESSION: {
     USER: (userId: number) => `session:user:${userId}`,
-  }
+  },
+  PROJECT: {
+    BY_PID_UID: (d: string) => `project:user:${d}`,
+  },
 } as const;
 
 export const CACHE_TTL = {

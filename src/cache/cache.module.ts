@@ -3,6 +3,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheService } from './cache.service';
 import { UserCacheService } from './user-cache.service';
+import { ProjectCacheService } from './project-cache.service';
 
 
 @Global()
@@ -17,7 +18,7 @@ import { UserCacheService } from './user-cache.service';
             isGlobal: true,
         }),
     ],
-    providers: [CacheService, UserCacheService,],
-    exports: [CacheService, CacheModule, UserCacheService,],
+    providers: [CacheService, UserCacheService, ProjectCacheService],
+    exports: [CacheService, CacheModule, UserCacheService, ProjectCacheService],
 })
 export class MemoryCacheMoudle { }

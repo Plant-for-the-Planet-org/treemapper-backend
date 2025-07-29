@@ -1,13 +1,14 @@
-// src/projects/guards/project-permissions.guard.ts
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-// import { ProjectsService } from '../projects.service';
+import { ProjectsService } from '../projects.service';
+import { ProjectCacheService } from 'src/cache/project-cache.service';
 
 @Injectable()
 export class ProjectPermissionsGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    // private projectsService: ProjectsService,
+    private projectsService: ProjectsService,
+    private projectCacheService: ProjectCacheService,
   ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -23,18 +24,21 @@ export class ProjectPermissionsGuard implements CanActivate {
       return false;
     }
 
-    // const membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
 
-    // if (!membership) {
-    //   throw new ForbiddenException('You do not have access to this project');
-    // }
+    let membership = await this.projectCacheService.getUserProject(projectUid, userId);
+    if (!membership) {
+      membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
+    }
+    if (!membership) {
+      throw new ForbiddenException('You do not have access to this project');
+    }
 
-    // const hasPermission = roles.includes(membership.role);
+    const hasPermission = roles.includes(membership.role);
 
-    // if (!hasPermission) {
-    //   throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
-    // }
-    // request.membership = membership;
+    if (!hasPermission) {
+      throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
+    }
+    request.membership = membership;
     return true;
   }
 }
