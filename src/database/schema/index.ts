@@ -93,7 +93,9 @@ export interface InterventionSpeciesEntry {
 
 
 
-export const userTypeEnum = pgEnum('user_type', ['individual', 'tpo', "organization", 'other', "school"]);
+export const userTypeEnum = pgEnum('user_type', ['individual', 'tpo', "organization", 'other', "school", "superadmin"]);
+export const workspaceTypeEnum = pgEnum('workspace_type', ['platform', "private", 'development', 'premium']);
+
 export const logLevelEnum = pgEnum('log_level', [
   'debug',
   'info',
@@ -113,7 +115,7 @@ export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'contri
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined', 'expired', 'discarded']);
 export const imageUploadDeviceEnum = pgEnum('image_upload_device', ['web', 'mobile']);
 export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'barren', 'reforestation']);
-export const siteAccessEnum = pgEnum('site_access', ['all_sites','deny_all', 'read_only', 'limited_access']);
+export const siteAccessEnum = pgEnum('site_access', ['all_sites', 'deny_all', 'read_only', 'limited_access']);
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
 export const interventionDiscriminatorEnum = pgEnum('intervention_discriminator', ['plot', 'intervention']);
 export const captureModeEnum = pgEnum('capture_mode', ['on-site', 'off-site', 'external', 'unknown']);
@@ -259,8 +261,8 @@ export const user = pgTable('user', {
   firstname: text('firstname'),
   lastname: text('lastname'),
   displayName: text('display_name').notNull(),
-  primaryWorkspace: integer('primary_workspace').references(() => workspace.id),
-  primaryProject: integer('primary_project').references(() => project.id),
+  primaryWorkspace: text('primary_workspace').references(() => workspace.uid),
+  primaryProject: text('primary_project').references(() => project.uid),
   image: text('image'),
   slug: text('slug').unique().notNull(),
   type: userTypeEnum('type').default('individual'),
@@ -288,7 +290,7 @@ export const workspace = pgTable('workspace', {
   uid: text('uid').notNull().unique(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
-  type: text('type').notNull().default('public'),
+  type: workspaceTypeEnum('type').notNull(),
   description: text('description'),
   image: text('logo'),
   primaryColor: text('primary_color'),
@@ -823,11 +825,11 @@ export const userRelations = relations(user, ({ one, many }) => ({
   migrations: many(migration),
   primaryWorkspace: one(workspace, {
     fields: [user.primaryWorkspace],
-    references: [workspace.id],
+    references: [workspace.uid],
   }),
   primaryProject: one(project, {
     fields: [user.primaryProject],
-    references: [project.id],
+    references: [project.uid],
   }),
   speciesRequests: many(speciesRequest, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequest, { relationName: 'reviewedBy' }),

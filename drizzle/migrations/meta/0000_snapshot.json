@@ -1,5 +1,5 @@
 {
-  "id": "328b73cb-9124-4968-8f86-0141b63384c4",
+  "id": "9a2d6d80-2e85-49dc-a1af-f47f38c7e229",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -4211,13 +4211,13 @@
         },
         "primary_workspace": {
           "name": "primary_workspace",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "primary_project": {
           "name": "primary_project",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -4336,28 +4336,28 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "user_primary_workspace_workspace_id_fk": {
-          "name": "user_primary_workspace_workspace_id_fk",
+        "user_primary_workspace_workspace_uid_fk": {
+          "name": "user_primary_workspace_workspace_uid_fk",
           "tableFrom": "user",
           "tableTo": "workspace",
           "columnsFrom": [
             "primary_workspace"
           ],
           "columnsTo": [
-            "id"
+            "uid"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "user_primary_project_project_id_fk": {
-          "name": "user_primary_project_project_id_fk",
+        "user_primary_project_project_uid_fk": {
+          "name": "user_primary_project_project_uid_fk",
           "tableFrom": "user",
           "tableTo": "project",
           "columnsFrom": [
             "primary_project"
           ],
           "columnsTo": [
-            "id"
+            "uid"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -4437,10 +4437,10 @@
         },
         "type": {
           "name": "type",
-          "type": "text",
+          "type": "workspace_type",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'public'"
+          "notNull": true
         },
         "description": {
           "name": "description",
@@ -5104,7 +5104,8 @@
         "tpo",
         "organization",
         "other",
-        "school"
+        "school",
+        "superadmin"
       ]
     },
     "public.workspace_role": {
@@ -5114,6 +5115,16 @@
         "owner",
         "admin",
         "member"
+      ]
+    },
+    "public.workspace_type": {
+      "name": "workspace_type",
+      "schema": "public",
+      "values": [
+        "platform",
+        "private",
+        "development",
+        "premium"
       ]
     }
   },

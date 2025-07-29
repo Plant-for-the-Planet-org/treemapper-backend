@@ -3,7 +3,7 @@ import { DrizzleService } from '../database/drizzle.service';
 import { user } from '../database/schema';
 import { CreateSurvey } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User, PublicUser } from './entities/user.entity';
+import { User } from './entities/user.entity';
 import { eq, and, isNull } from 'drizzle-orm';
 import { generateUid } from 'src/util/uidGenerator';
 import { UserCacheService } from '../cache/user-cache.service';
@@ -21,7 +21,6 @@ export class UsersService {
         private readonly r2Service: R2Service
     ) { }
 
-    // Consistent user selection for full user data
     private readonly FULL_USER_SELECT = {
         id: user.id,
         uid: user.uid,

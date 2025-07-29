@@ -19,8 +19,8 @@ export class UserCacheService {
         await this.cacheService.set(this.getUseAuthrKey(auth0Id), user, CACHE_TTL.MEDIUM);
     }
 
-    // async invalidateUser(user: User): Promise<void> {
-    //     await this.cacheService.delete(this.getUserKey(user.id));
-    //     await this.cacheService.delete(this.getUserKey(user.email));
-    // }
+    async refreshAuthUser(user: User): Promise<void> {
+        await this.cacheService.delete(this.getUseAuthrKey(user.auth0Id));
+        await this.cacheService.set(this.getUseAuthrKey(user.auth0Id), user, CACHE_TTL.MEDIUM);
+    }
 }

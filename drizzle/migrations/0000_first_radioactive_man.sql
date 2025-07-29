@@ -21,8 +21,9 @@ CREATE TYPE "public"."site_status" AS ENUM('planted', 'planting', 'barren', 'ref
 CREATE TYPE "public"."species_request_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TYPE "public"."tree_status" AS ENUM('alive', 'dead', 'unknown', 'removed', 'sick');--> statement-breakpoint
 CREATE TYPE "public"."tree_enum" AS ENUM('single', 'sample', 'plot');--> statement-breakpoint
-CREATE TYPE "public"."user_type" AS ENUM('individual', 'tpo', 'organization', 'other', 'school');--> statement-breakpoint
+CREATE TYPE "public"."user_type" AS ENUM('individual', 'tpo', 'organization', 'other', 'school', 'superadmin');--> statement-breakpoint
 CREATE TYPE "public"."workspace_role" AS ENUM('owner', 'admin', 'member');--> statement-breakpoint
+CREATE TYPE "public"."workspace_type" AS ENUM('platform', 'private', 'development', 'premium');--> statement-breakpoint
 CREATE TABLE "audit_log" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" text NOT NULL,
@@ -470,8 +471,8 @@ CREATE TABLE "user" (
 	"firstname" text,
 	"lastname" text,
 	"display_name" text NOT NULL,
-	"primary_workspace" integer,
-	"primary_project" integer,
+	"primary_workspace" text,
+	"primary_project" text,
 	"image" text,
 	"slug" text NOT NULL,
 	"type" "user_type" DEFAULT 'individual',
@@ -502,7 +503,7 @@ CREATE TABLE "workspace" (
 	"uid" text NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
-	"type" text DEFAULT 'public' NOT NULL,
+	"type" "workspace_type" NOT NULL,
 	"description" text,
 	"logo" text,
 	"primary_color" text,
@@ -572,8 +573,8 @@ ALTER TABLE "tree" ADD CONSTRAINT "tree_intervention_id_intervention_id_fk" FORE
 ALTER TABLE "tree" ADD CONSTRAINT "tree_created_by_id_user_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_record" ADD CONSTRAINT "tree_record_tree_id_tree_id_fk" FOREIGN KEY ("tree_id") REFERENCES "public"."tree"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tree_record" ADD CONSTRAINT "tree_record_recorded_by_id_user_id_fk" FOREIGN KEY ("recorded_by_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user" ADD CONSTRAINT "user_primary_workspace_workspace_id_fk" FOREIGN KEY ("primary_workspace") REFERENCES "public"."workspace"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user" ADD CONSTRAINT "user_primary_project_project_id_fk" FOREIGN KEY ("primary_project") REFERENCES "public"."project"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT "user_primary_workspace_workspace_uid_fk" FOREIGN KEY ("primary_workspace") REFERENCES "public"."workspace"("uid") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT "user_primary_project_project_uid_fk" FOREIGN KEY ("primary_project") REFERENCES "public"."project"("uid") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace" ADD CONSTRAINT "workspace_created_by_id_user_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
