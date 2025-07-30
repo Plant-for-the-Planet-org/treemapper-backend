@@ -8,6 +8,9 @@ import { UsersModule } from './users/users.module';
 import { MemoryCacheMoudle } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { ProjectsModule } from './projects/projects.module';
+import { SitesModule } from './sites/sites.module';
+import { InterventionsModule } from './interventions/interventions.module';
+import { SpeciesModule } from './species/species.module';
 
 @Module({
   imports: [
@@ -20,7 +23,9 @@ import { ProjectsModule } from './projects/projects.module';
     MemoryCacheMoudle,
     WorkspaceModule,
     ProjectsModule,
-
+    SitesModule,
+    InterventionsModule,
+    SpeciesModule
     // MigrationModule,
     // SpeciesModule,
     // EmailModule,

@@ -1,6 +1,6 @@
 {
-  "id": "7e37fcaf-d933-4681-8ac1-1ffd2c2f8e9e",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "4c3ab2ad-4b69-428c-9d59-e09a27849440",
+  "prevId": "7e37fcaf-d933-4681-8ac1-1ffd2c2f8e9e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1232,10 +1232,6 @@
         "valid_date_range": {
           "name": "valid_date_range",
           "value": "intervention_start_date <= intervention_end_date"
-        },
-        "registration_date_logical": {
-          "name": "registration_date_logical",
-          "value": "registration_date <= intervention_start_date"
         }
       },
       "isRLSEnabled": false

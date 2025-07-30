@@ -42,6 +42,7 @@ export class ProjectsController {
   findProjectsAndWorkspace(@CurrentUser() user: User) {
     return this.projectsService.findProjectsAndWorkspace(user);
   }
+  
 
   @Get(':id/allmembers')
   @ProjectRoles('owner', 'admin')

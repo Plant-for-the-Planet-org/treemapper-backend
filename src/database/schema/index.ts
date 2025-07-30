@@ -717,7 +717,6 @@ export const intervention = pgTable('intervention', {
   treeCountNonNegative: check('tree_count_non_negative', sql`tree_count >= 0`),
   sampleTreeCountNonNegative: check('sample_tree_count_non_negative', sql`sample_tree_count >= 0`),
   validDateRange: check('valid_date_range', sql`intervention_start_date <= intervention_end_date`),
-  registrationDateLogical: check('registration_date_logical', sql`registration_date <= intervention_start_date`),
 }));
 
 export const tree = pgTable('tree', {
