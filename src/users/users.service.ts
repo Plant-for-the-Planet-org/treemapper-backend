@@ -274,6 +274,7 @@ export class UsersService {
 
     async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
         try {
+            console.log("SC",process.env.IS_PRODUCTION )
             if (!dto.fileName || !dto.fileType) {
                 throw new BadRequestException('fileName and fileType are required');
             }
@@ -284,7 +285,7 @@ export class UsersService {
             const result = await this.r2Service.generatePresignedUrl({
                 fileName: dto.fileName,
                 fileType: dto.fileType,
-                folder: `${process.env.IS_PRODUCTION ? "producation" : "development"}/${dto.folder}`,
+                folder: `${process.env.IS_PRODUCTION ? "production" : "development"}/${dto.folder}`,
             });
             return {
                 success: true,
