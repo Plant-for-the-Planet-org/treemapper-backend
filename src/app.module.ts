@@ -11,6 +11,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { SitesModule } from './sites/sites.module';
 import { InterventionsModule } from './interventions/interventions.module';
 import { SpeciesModule } from './species/species.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -25,7 +26,9 @@ import { SpeciesModule } from './species/species.module';
     ProjectsModule,
     SitesModule,
     InterventionsModule,
-    SpeciesModule
+    SpeciesModule,
+    AnalyticsModule,
+
     // MigrationModule,
     // SpeciesModule,
     // EmailModule,
@@ -33,7 +36,6 @@ import { SpeciesModule } from './species/species.module';
     // SitesModule,
     // SpeciesModule,
     // InterventionsModule,
-    // AnalyticsModule,
     // MobileModule,
     // OrganizationsModule
   ],
