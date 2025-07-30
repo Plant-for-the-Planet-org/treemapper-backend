@@ -3,7 +3,7 @@ import { DrizzleService } from '../database/drizzle.service';
 import { project, projectMember, survey, user, workspace, workspaceMember } from '../database/schema';
 import { CreateSurvey } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
+import { PublicUser, User } from './entities/user.entity';
 import { eq, and, isNull } from 'drizzle-orm';
 import { generateUid } from 'src/util/uidGenerator';
 import { UserCacheService } from '../cache/user-cache.service';
@@ -272,34 +272,99 @@ export class UsersService {
         );
     }
 
-      async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
+    async generateR2Url(dto: CreatePresignedUrlDto): Promise<any> {
         try {
-          if (!dto.fileName || !dto.fileType) {
-            throw new BadRequestException('fileName and fileType are required');
-          }
-          const allowedTypes = ['image/'];
-          if (!allowedTypes.some(type => dto.fileType.startsWith(type))) {
-            throw new BadRequestException('File type not allowed');
-          }
-          const result = await this.r2Service.generatePresignedUrl({
-            fileName: dto.fileName,
-            fileType: dto.fileType,
-            folder: `${process.env.IS_PRODUCTION?"producation":"development"}/${dto.folder}`,
-          });
-          return {
-            success: true,
-            data: result,
-          };
+            if (!dto.fileName || !dto.fileType) {
+                throw new BadRequestException('fileName and fileType are required');
+            }
+            const allowedTypes = ['image/'];
+            if (!allowedTypes.some(type => dto.fileType.startsWith(type))) {
+                throw new BadRequestException('File type not allowed');
+            }
+            const result = await this.r2Service.generatePresignedUrl({
+                fileName: dto.fileName,
+                fileType: dto.fileType,
+                folder: `${process.env.IS_PRODUCTION ? "producation" : "development"}/${dto.folder}`,
+            });
+            return {
+                success: true,
+                data: result,
+            };
         } catch (error) {
-          return {
-            success: false,
-            data: null,
-          }
+            return {
+                success: false,
+                data: null,
+            }
         }
-      }
+    }
 
+    async updateUserAvatar(avatar: string, userData: User): Promise<Boolean> {
+        const result = await this.drizzleService.db
+            .update(user)
+            .set({
+                image: avatar,
+                updatedAt: new Date(),
+            })
+            .where(eq(user.id, userData.id))
+            .returning({
+                id: user.id,
+            })
 
+        if (result.length === 0) {
+            throw new BadRequestException(`User with ID ${userData.id} not found`);
+        }
+        await this.userCacheService.refreshAuthUser({ ...userData, image: avatar });
+        return true;
+    }
 
+    async update(id: number, updateUserDto: UpdateUserDto): Promise<any> {
+        const payload = this.prepareUpdateData(updateUserDto)
+        const result = await this.drizzleService.db
+            .update(user)
+            .set({
+                ...payload,
+                updatedAt: new Date(),
+            })
+            .where(eq(user.id, id))
+            .returning({
+                uid: user.uid,
+                email: user.email,
+                firstname: user.firstname,
+                lastname: user.lastname,
+                displayName: user.displayName,
+                image: user.image,
+                slug: user.slug,
+                type: user.type,
+                country: user.country,
+                isPrivate: user.isPrivate,
+                bio: user.bio,
+                locale: user.locale,
+                isActive: user.isActive,
+                lastLoginAt: user.lastLoginAt,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+                migratedAt: user.migratedAt,
+                existingPlanetUser: user.existingPlanetUser, flag: user.flag,
+                flagReason: user.flagReason,
+            });
+
+        return result[0];
+    }
+
+    private async prepareUpdateData(updateProjectDto: any): Promise<any> {
+        const updateData: any = {
+            ...updateProjectDto,
+            updatedAt: new Date(),
+        };
+        Object.keys(updateData).forEach(key => {
+            if (updateData[key] === undefined) {
+                delete updateData[key];
+            }
+        });
+        console.log("updateData", updateData)
+
+        return updateData;
+    }
 
 
     //   async findByEmail(email: string): Promise<User | null> {
@@ -356,68 +421,21 @@ export class UsersService {
     //     return await this.updateUseMigration(id);
     //   }
 
-    
+
 
     //   async updateUseMigration(id: number): Promise<Boolean> {
     //     this.resetUserCache()
     //     return true;
     //   }
 
-    //   private async prepareUpdateData(updateProjectDto: any): Promise<any> {
-    //     const updateData: any = {
-    //       ...updateProjectDto,
-    //       updatedAt: new Date(),
-    //     };
 
 
 
 
-    //     // Clean up undefined values
-    //     Object.keys(updateData).forEach(key => {
-    //       if (updateData[key] === undefined) {
-    //         delete updateData[key];
-    //       }
-    //     });
-    //     console.log("updateData", updateData)
-
-    //     return updateData;
-    //   }
 
 
-    //   async update(id: number, updateUserDto: UpdateUserDto): Promise<PublicUser> {
-    //     const payload = this.prepareUpdateData(updateUserDto)
-    //     const result = await this.drizzleService.db
-    //       .update(users)
-    //       .set({
-    //         ...payload,
-    //         updatedAt: new Date(),
-    //       })
-    //       .where(eq(users.id, id))
-    //       .returning({
-    //         uid: users.uid,
-    //         email: users.email,
-    //         firstname: users.firstname,
-    //         lastname: users.lastname,
-    //         displayName: users.displayName,
-    //         image: users.image,
-    //         slug: users.slug,
-    //         type: users.type,
-    //         country: users.country,
-    //         url: users.url,
-    //         isPrivate: users.isPrivate,
-    //         bio: users.bio,
-    //         locale: users.locale,
-    //         isActive: users.isActive,
-    //         lastLoginAt: users.lastLoginAt,
-    //         createdAt: users.createdAt,
-    //         updatedAt: users.updatedAt,
-    //         migratedAt: users.migratedAt,
-    //         existingPlanetUser: users.existingPlanetUser, flag: users.flag,
-    //         flagReason: users.flagReason,
-    //       });
 
-    //     return result[0];
-    //   }
+
 
 
     // private async updateLastLoginInCache(userId: number): Promise<void> {

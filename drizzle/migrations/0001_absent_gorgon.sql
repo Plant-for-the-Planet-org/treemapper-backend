@@ -1,1 +1,0 @@
-ALTER TABLE "intervention" DROP CONSTRAINT "registration_date_logical";

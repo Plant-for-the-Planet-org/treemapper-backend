@@ -24,7 +24,7 @@ import {
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateSurvey, CreateUserDto } from './dto/create-user.dto';
+import { AvatarDTO, CreateSurvey, CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -69,6 +69,10 @@ export class UsersController {
     return await this.usersService.onBoardUser(createSurveyDto, user);
   }
 
+  @Put('avatar')
+  async updateUserAvatar(@Body() avatarDto: AvatarDTO, @CurrentUser() user: User,) {
+    return await this.usersService.updateUserAvatar(avatarDto.avatarUrl, user);
+  }
 
 
   //   // @ApiExcludeEndpoint()
@@ -77,20 +81,20 @@ export class UsersController {
   //     return await this.usersService.migrateSuccess(user.id);
   //   }
 
-    @Post('presign-url')
-    async getSignedUrl(
-      @Body() dto: CreatePresignedUrlDto,
-      @CurrentUser() user: User) {
-      return await this.usersService.generateR2Url(dto);
-    }
+  @Post('presign-url')
+  async getSignedUrl(
+    @Body() dto: CreatePresignedUrlDto,
+    @CurrentUser() user: User) {
+    return await this.usersService.generateR2Url(dto);
+  }
 
-  //   @Patch('me')
-  //   async updateProfile(
-  //     @CurrentUser() user: User,
-  //     @Body() updateUserDto: any,
-  //   ) {
-  //     return await this.usersService.update(user.id, updateUserDto);
-  //   }
+  @Patch('me')
+  async updateProfile(
+    @CurrentUser() user: User,
+    @Body() updateUserDto: any,
+  ) {
+    return await this.usersService.update(user.id, updateUserDto);
+  }
 
 
 

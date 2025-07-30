@@ -227,15 +227,12 @@ export class InterventionsService {
           species: el.species || [],
         })
       })
-      console.log("tranformedData s", tranformedData)
-
       const finalInterventionIDMapping: any = []
       try {
         const result = await this.drizzleService.db
           .insert(intervention)
           .values(tranformedData)
           .returning({ id: intervention.id, uid: intervention.uid });
-        console.log("SKDLc", result)
         const finalParentIntervention = result.map(el => ({ id: el.id, uid: el.uid, success: true, error: false }))
         finalInterventionIDMapping.push(...finalParentIntervention)
       } catch (error) {
