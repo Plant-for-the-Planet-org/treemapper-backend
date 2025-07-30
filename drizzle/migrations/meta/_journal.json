@@ -15,6 +15,13 @@
       "when": 1753835145577,
       "tag": "0001_absent_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1753844799151,
+      "tag": "0002_careful_roxanne_simpson",
+      "breakpoints": true
     }
   ]
 }
