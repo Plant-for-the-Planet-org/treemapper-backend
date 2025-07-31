@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from './entities/user.entity';
 import { CreatePresignedUrlDto } from './dto/signed-url.dto';
+import { user } from 'src/database/schema';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -59,7 +60,8 @@ export class UsersController {
       migratedAt: users.migratedAt,
       existingPlanetUser: users.existingPlanetUser,
       primaryWorkspace: users.primaryWorkspace,
-      primaryProject: users.primaryProject
+      primaryProject: users.primaryProject,
+      workspace: users.workspace
     }
   }
 

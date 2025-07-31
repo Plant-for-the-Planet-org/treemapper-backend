@@ -279,7 +279,8 @@ export const user = pgTable('user', {
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
-  existingPlanetUser: boolean('existing_planet_user').default(false)
+  existingPlanetUser: boolean('existing_planet_user').default(false),
+  workspace: workspaceRoleEnum('role').notNull().default('member'),
 }, (table) => ({
   emailFormat: check('email_format', sql`email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'`),
   slugFormat: check('slug_format', sql`slug ~* '^[a-z0-9-]+$' AND length(slug) >= 3`),

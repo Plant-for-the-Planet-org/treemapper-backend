@@ -47,7 +47,8 @@ export class UsersService {
         flag: user.flag,
         flagReason: user.flagReason,
         primaryWorkspace: user.primaryWorkspace,
-        primaryProject: user.primaryProject
+        primaryProject: user.primaryProject,
+        workspace: user.workspace
     } as const;
 
     private generateSlug(name: string): string {
