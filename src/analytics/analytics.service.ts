@@ -358,50 +358,50 @@ export class AnalyticsService {
     return result;
   }
 
-async getProjectKPIs(projectId: number): Promise<ProjectKPIsResponse> {
-  const now = new Date();
-  
-  // Current month boundaries
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  
-  // Previous month boundaries
-  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  async getProjectKPIs(projectId: number): Promise<ProjectKPIsResponse> {
+    const now = new Date();
 
-  // Current month KPIs
-  const currentMonthStats = await this.getMonthlyStats(projectId, currentMonthStart, currentMonthEnd);
-  
-  // Previous month KPIs
-  const previousMonthStats = await this.getMonthlyStats(projectId, previousMonthStart, previousMonthEnd);
+    // Current month boundaries
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  // Calculate changes
-  const treesChange = this.calculateChange(previousMonthStats.totalTrees, currentMonthStats.totalTrees);
-  const speciesChange = this.calculateChange(previousMonthStats.uniqueSpecies, currentMonthStats.uniqueSpecies);
-  const areaChange = this.calculateChange(previousMonthStats.totalArea, currentMonthStats.totalArea);
-  const contributorsChange = this.calculateChange(previousMonthStats.totalContributors, currentMonthStats.totalContributors);
+    // Previous month boundaries
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-  return {
-    kpis: {
-      totalTreesPlanted: currentMonthStats.totalTrees,
-      totalTreesPlantedChange: treesChange,
-      totalSpeciesPlanted: currentMonthStats.uniqueSpecies,
-      totalSpeciesPlantedChange: speciesChange,
-      totalAreaCovered: Math.round(currentMonthStats.totalArea),
-      totalAreaCoveredChange: areaChange,
-      totalContributors: currentMonthStats.totalContributors,
-      totalContributorsChange: contributorsChange,
-    },
-  };
-}
+    // Current month KPIs
+    const currentMonthStats = await this.getMonthlyStats(projectId, currentMonthStart, currentMonthEnd);
 
-private async getMonthlyStats(projectId: number, startDate: Date, endDate: Date) {
-  // Intervention stats query
-  const interventionStats = await this.drizzleService.db
-    .select({
-      totalTrees: sql<number>`COALESCE(SUM(${intervention.treeCount}), 0)`,
-      totalArea: sql<number>`COALESCE(SUM(ST_Area(${intervention.location}::geography)), 0)`,
-      uniqueSpecies: sql<number>`(
+    // Previous month KPIs
+    const previousMonthStats = await this.getMonthlyStats(projectId, previousMonthStart, previousMonthEnd);
+
+    // Calculate changes
+    const treesChange = this.calculateChange(previousMonthStats.totalTrees, currentMonthStats.totalTrees);
+    const speciesChange = this.calculateChange(previousMonthStats.uniqueSpecies, currentMonthStats.uniqueSpecies);
+    const areaChange = this.calculateChange(previousMonthStats.totalArea, currentMonthStats.totalArea);
+    const contributorsChange = this.calculateChange(previousMonthStats.totalContributors, currentMonthStats.totalContributors);
+
+    return {
+      kpis: {
+        totalTreesPlanted: currentMonthStats.totalTrees,
+        totalTreesPlantedChange: treesChange,
+        totalSpeciesPlanted: currentMonthStats.uniqueSpecies,
+        totalSpeciesPlantedChange: speciesChange,
+        totalAreaCovered: Math.round(currentMonthStats.totalArea),
+        totalAreaCoveredChange: areaChange,
+        totalContributors: currentMonthStats.totalContributors,
+        totalContributorsChange: contributorsChange,
+      },
+    };
+  }
+
+  private async getMonthlyStats(projectId: number, startDate: Date, endDate: Date) {
+    // Intervention stats query
+    const interventionStats = await this.drizzleService.db
+      .select({
+        totalTrees: sql<number>`COALESCE(SUM(${intervention.treeCount}), 0)`,
+        totalArea: sql<number>`COALESCE(SUM(ST_Area(${intervention.location}::geography)), 0)`,
+        uniqueSpecies: sql<number>`(
         SELECT COUNT(DISTINCT species_element->>'speciesName')
         FROM (
           SELECT jsonb_array_elements(${intervention.species}) as species_element
@@ -414,68 +414,68 @@ private async getMonthlyStats(projectId: number, startDate: Date, endDate: Date)
         WHERE species_element->>'speciesName' IS NOT NULL
           AND species_element->>'speciesName' != ''
       )`
-    })
-    .from(intervention)
-    .where(
-      and(
-        eq(intervention.projectId, projectId),
-        gte(intervention.interventionStartDate, startDate),
-        lte(intervention.interventionStartDate, endDate),
-        sql`${intervention.deletedAt} IS NULL`
-      )
-    );
+      })
+      .from(intervention)
+      .where(
+        and(
+          eq(intervention.projectId, projectId),
+          gte(intervention.interventionStartDate, startDate),
+          lte(intervention.interventionStartDate, endDate),
+          sql`${intervention.deletedAt} IS NULL`
+        )
+      );
 
-  // Contributors stats - get contributors who joined in this month
-  const contributorStats = await this.drizzleService.db
-    .select({
-      totalContributors: sql<number>`COUNT(DISTINCT ${projectMember.userId})`
-    })
-    .from(projectMember)
-    .where(
-      and(
-        eq(projectMember.projectId, projectId),
-        gte(projectMember.joinedAt, startDate),
-        lte(projectMember.joinedAt, endDate)
-      )
-    );
+    // Contributors stats - get contributors who joined in this month
+    const contributorStats = await this.drizzleService.db
+      .select({
+        totalContributors: sql<number>`COUNT(DISTINCT ${projectMember.userId})`
+      })
+      .from(projectMember)
+      .where(
+        and(
+          eq(projectMember.projectId, projectId),
+          gte(projectMember.joinedAt, startDate),
+          lte(projectMember.joinedAt, endDate)
+        )
+      );
 
-  const interventionResult = interventionStats[0];
-  const contributorResult = contributorStats[0];
+    const interventionResult = interventionStats[0];
+    const contributorResult = contributorStats[0];
 
-  return {
-    totalTrees: interventionResult?.totalTrees || 0,
-    uniqueSpecies: interventionResult?.uniqueSpecies || 0,
-    totalArea: interventionResult?.totalArea || 0,
-    totalContributors: contributorResult?.totalContributors || 0,
-  };
-}
+    return {
+      totalTrees: interventionResult?.totalTrees || 0,
+      uniqueSpecies: interventionResult?.uniqueSpecies || 0,
+      totalArea: interventionResult?.totalArea || 0,
+      totalContributors: contributorResult?.totalContributors || 0,
+    };
+  }
 
-private calculateChange(previousValue: number, currentValue: number): { value: string | number, type: 'increase' | 'decrease' | 'no_change' | 'new' } {
-  // Handle edge cases
-  if (previousValue === 0 && currentValue === 0) {
-    return { value: 0, type: 'no_change' };
+  private calculateChange(previousValue: number, currentValue: number): { value: string | number, type: 'increase' | 'decrease' | 'no_change' | 'new' } {
+    // Handle edge cases
+    if (previousValue === 0 && currentValue === 0) {
+      return { value: 0, type: 'no_change' };
+    }
+
+    if (previousValue === 0 && currentValue > 0) {
+      return { value: "New", type: 'new' };
+    }
+
+    if (previousValue > 0 && currentValue === 0) {
+      return { value: -100, type: 'decrease' };
+    }
+
+    // Calculate percentage change
+    const percentageChange = ((currentValue - previousValue) / previousValue) * 100;
+    const roundedChange = Math.round(percentageChange * 10) / 10; // Round to 1 decimal place
+
+    if (roundedChange > 0) {
+      return { value: roundedChange, type: 'increase' };
+    } else if (roundedChange < 0) {
+      return { value: Math.abs(roundedChange), type: 'decrease' };
+    } else {
+      return { value: 0, type: 'no_change' };
+    }
   }
-  
-  if (previousValue === 0 && currentValue > 0) {
-    return { value: "New", type: 'new' };
-  }
-  
-  if (previousValue > 0 && currentValue === 0) {
-    return { value: -100, type: 'decrease' };
-  }
-  
-  // Calculate percentage change
-  const percentageChange = ((currentValue - previousValue) / previousValue) * 100;
-  const roundedChange = Math.round(percentageChange * 10) / 10; // Round to 1 decimal place
-  
-  if (roundedChange > 0) {
-    return { value: roundedChange, type: 'increase' };
-  } else if (roundedChange < 0) {
-    return { value: Math.abs(roundedChange), type: 'decrease' };
-  } else {
-    return { value: 0, type: 'no_change' };
-  }
-}
 
   async getRecentAdditions(dto: RecentAdditionsDto, projectId): Promise<RecentAdditionsResponse> {
     const { page, limit } = dto;
@@ -800,7 +800,9 @@ LIMIT ${limit} OFFSET ${offset}
     // Transform the data into the export format
     const exportedInterventions: any[] = interventionsData.map(data => {
       const { intervention, project, site, user } = data;
-
+      if (!intervention) {
+        return null
+      }
       return {
         // Basic Information
         interventionId: intervention.uid,
@@ -844,7 +846,7 @@ LIMIT ${limit} OFFSET ${offset}
         // Capture Information
         captureMode: intervention.captureMode,
         captureStatus: intervention.captureStatus,
-        imageUrl: intervention.image,
+        imageUrl: intervention.image || '',
 
         // Project and Site Context
         project: project ? {

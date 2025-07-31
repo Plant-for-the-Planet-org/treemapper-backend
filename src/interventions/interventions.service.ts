@@ -189,7 +189,7 @@ export class InterventionsService {
         if (siteData.length === 0) {
           throw new NotFoundException('Site not found');
         }
-        projectSiteId = site[0].id;
+        projectSiteId = siteData[0].id;
       }
 
       const tranformedData: any = [];
