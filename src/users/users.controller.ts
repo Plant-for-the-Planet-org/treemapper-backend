@@ -42,6 +42,7 @@ export class UsersController {
 
   @Get('me')
   async getProfile(@CurrentUser() users: User) {
+    console.log("IOPSDC", users)
     return {
       uid: users.uid,
       email: users.email,
@@ -61,9 +62,12 @@ export class UsersController {
       existingPlanetUser: users.existingPlanetUser,
       primaryWorkspace: users.primaryWorkspace,
       primaryProject: users.primaryProject,
-      workspace: users.workspace
+      workspace: users.workspace,
+      impersonated: users.impersonate !== null ? true : null
     }
   }
+
+
 
 
   @Post('onboarding')
@@ -75,6 +79,8 @@ export class UsersController {
   async updateUserAvatar(@Body() avatarDto: AvatarDTO, @CurrentUser() user: User,) {
     return await this.usersService.updateUserAvatar(avatarDto.avatarUrl, user);
   }
+
+
 
 
   //   // @ApiExcludeEndpoint()

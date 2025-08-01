@@ -44,7 +44,8 @@ export const auditActionEnum = pgEnum('audit_action', [
   'export',
   'import',
   'archive',
-  'unarchive'
+  'unarchive',
+  'impersonation'
 ]);
 
 export const auditEntityEnum = pgEnum('audit_entity', [
@@ -281,6 +282,7 @@ export const user = pgTable('user', {
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
   existingPlanetUser: boolean('existing_planet_user').default(false),
   workspace: workspaceRoleEnum('role').notNull().default('member'),
+  impersonate: text('impersonate')
 }, (table) => ({
   emailFormat: check('email_format', sql`email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'`),
   slugFormat: check('slug_format', sql`slug ~* '^[a-z0-9-]+$' AND length(slug) >= 3`),
