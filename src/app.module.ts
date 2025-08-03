@@ -27,17 +27,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
     SitesModule,
     InterventionsModule,
     SpeciesModule,
-    AnalyticsModule,
-
+    AnalyticsModule
     // MigrationModule,
-    // SpeciesModule,
-    // EmailModule,
     // NotificationModule,
-    // SitesModule,
-    // SpeciesModule,
-    // InterventionsModule,
     // MobileModule,
-    // OrganizationsModule
   ],
   controllers: [AppController],
   providers: [AppService],

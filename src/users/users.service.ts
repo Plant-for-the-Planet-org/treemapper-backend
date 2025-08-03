@@ -297,7 +297,7 @@ export class UsersService {
             const result = await this.r2Service.generatePresignedUrl({
                 fileName: dto.fileName,
                 fileType: dto.fileType,
-                folder: `${process.env.IS_PRODUCTION ? "production" : "development"}/${dto.folder}`,
+                folder: `${process.env.IS_PRODUCTION==='true'? "production" : "development"}/${dto.folder}`,
             });
             return {
                 success: true,
