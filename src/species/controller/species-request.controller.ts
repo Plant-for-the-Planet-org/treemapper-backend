@@ -20,32 +20,32 @@ import { Membership } from 'src/projects/decorators/membership.decorator';
 export class SpeciesRequestController {
   constructor(private readonly speciesRequestService: SpeciesRequestService) { }
 
-  @Post('/:id')
-  @ProjectRoles('owner', 'admin', 'contributor')
-  @UseGuards(ProjectPermissionsGuard)
-  async createRequest(
-    @Body() createDto: CreateSpeciesRequestDto,
-    @Membership() membership: any,
-  ) {
-    return this.speciesRequestService.createRequest(
-      membership.userId,
-      membership.projectId,
-      createDto,
-    );
-  }
+  // @Post('/:id')
+  // @ProjectRoles('owner', 'admin', 'contributor')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async createRequest(
+  //   @Body() createDto: CreateSpeciesRequestDto,
+  //   @Membership() membership: any,
+  // ) {
+  //   return this.speciesRequestService.createRequest(
+  //     membership.userId,
+  //     membership.projectId,
+  //     createDto,
+  //   );
+  // }
 
-    @Get()
-    @ApiOperation({ summary: 'Get all species requests (Super Admin only)' })
-    @ApiResponse({ status: 200, description: 'Species requests retrieved successfully' })
-    async getRequests(@Query() filterDto: SpeciesRequestFilterDto) {
-      // Note: Add superadmin check in your authentication middleware
-      return this.speciesRequestService.getRequests(filterDto);
-    }
+  //   @Get()
+  //   @ApiOperation({ summary: 'Get all species requests (Super Admin only)' })
+  //   @ApiResponse({ status: 200, description: 'Species requests retrieved successfully' })
+  //   async getRequests(@Query() filterDto: SpeciesRequestFilterDto) {
+  //     // Note: Add superadmin check in your authentication middleware
+  //     return this.speciesRequestService.getRequests(filterDto);
+  //   }
 
-    @Get(':id')
-    @ApiOperation({ summary: 'Get species request by ID' })
-    @ApiResponse({ status: 200, description: 'Species request retrieved successfully' })
-    async getRequestById(@Param('id') id: number) {
-      return this.speciesRequestService.getRequestById(id);
-    }
+  //   @Get(':id')
+  //   @ApiOperation({ summary: 'Get species request by ID' })
+  //   @ApiResponse({ status: 200, description: 'Species request retrieved successfully' })
+  //   async getRequestById(@Param('id') id: number) {
+  //     return this.speciesRequestService.getRequestById(id);
+  //   }
 }

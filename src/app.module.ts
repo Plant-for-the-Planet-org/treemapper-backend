@@ -23,11 +23,11 @@ import { AnalyticsModule } from './analytics/analytics.module';
     UsersModule,
     MemoryCacheMoudle,
     WorkspaceModule,
-    ProjectsModule,
-    SitesModule,
-    InterventionsModule,
-    SpeciesModule,
-    AnalyticsModule
+    // ProjectsModule,
+    // SitesModule,
+    // InterventionsModule,
+    // SpeciesModule,
+    // AnalyticsModule
     // MigrationModule,
     // NotificationModule,
     // MobileModule,

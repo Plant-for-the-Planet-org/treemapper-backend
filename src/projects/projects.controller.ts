@@ -32,212 +32,212 @@ import { Membership } from './decorators/membership.decorator';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) { }
 
-  @Post()
-  create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
-    return this.projectsService.createNewProject(createProjectDto, user);
-  }
+  // @Post()
+  // create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
+  //   return this.projectsService.createNewProject(createProjectDto, user);
+  // }
 
 
-  @Get('')
-  findProjectsAndWorkspace(@CurrentUser() user: User) {
-    return this.projectsService.findProjectsAndWorkspace(user);
-  }
-
-
-
-  @Get(':id/allmembers')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  async getProjectMembersAndInvitations(
-    @Membership() membership: ProjectGuardResponse
-  ): Promise<ProjectMembersAndInvitesResponse> {
-    return this.projectsService.getProjectMembersAndInvitations(membership);
-  }
-
-
-  @Post(':id/invites')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  inviteMember(
-    @Body() inviteDto: InviteProjectMemberDto,
-    @Membership() membership: any,
-    @CurrentUser() currentUser: User,
-  ) {
-    return this.projectsService.inviteMember(
-      inviteDto.email,
-      inviteDto.role,
-      membership,
-      currentUser,
-      inviteDto.message,
-    );
-  }
-
-  @Post(':id/invites/link')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  createInviteLink(
-    @Body() inviteLinkDto: InviteProjectLinkDto,
-    @Membership() membership: ProjectGuardResponse,
-  ) {
-    return this.projectsService.createInviteLink(
-      membership,
-      inviteLinkDto
-    );
-  }
-
-  @Post(':id/invites/expire')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  expireInvite(@Body() declineInviteDto: DeclineInviteDto) {
-    return this.projectsService.expireInvite(declineInviteDto.token);
-  }
-
-  @Get('/:id/links')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  getAllProjectInviteLink(@Membership() membership: ProjectGuardResponse,) {
-    return this.projectsService.getProjectInviteLink(membership);
-  }
-
-
-  @Get('invites/:invite/status')
-  getProjectInviteStatus(@Param('invite') invite: string, @Req() req) {
-    return this.projectsService.getProjectInviteStatus(invite, req.user.email);
-  }
-
-  @Post('invites/decline')
-  declineInvite(@Body() declineInviteDto: DeclineInviteDto, @Req() req) {
-    return this.projectsService.declineInvite(declineInviteDto.token, req.user.email);
-  }
-
-  @Post('invites/accept')
-  acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
-    return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id, req.user.email);
-  }
-
-
-  @Post('invites/accept/link')
-  acceptInviteLink(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
-    return this.projectsService.acceptLinkInvite(acceptInviteDto.token, req.user.id, req.user.email);
-  }
-
-
-  @Get('invites/:invite/status/link')
-  getProjectSingleLinkStatus(@Param('invite') invite: string) {
-    return this.projectsService.getProjectSingleLinkStatus(invite);
-  }
+  // @Get('')
+  // findProjectsAndWorkspace(@CurrentUser() user: User) {
+  //   return this.projectsService.findProjectsAndWorkspace(user);
+  // }
 
 
 
-    @Get(':id')
-    @ProjectRoles('owner', 'admin')
-    @UseGuards(ProjectPermissionsGuard)
-    findOne(@Membership() membership: ProjectGuardResponse) {
-      return this.projectsService.findOne(membership.projectId);
-    }
-
-    @Patch(':id')
-    @ProjectRoles('owner', 'admin')
-    @UseGuards(ProjectPermissionsGuard)
-    update(
-      @Body() updateProjectDto: any,
-      @Membership() membership: any,
-    ): Promise<any> {
-      return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
-    }
+  // @Get(':id/allmembers')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async getProjectMembersAndInvitations(
+  //   @Membership() membership: ProjectGuardResponse
+  // ): Promise<ProjectMembersAndInvitesResponse> {
+  //   return this.projectsService.getProjectMembersAndInvitations(membership);
+  // }
 
 
-  //   @Post('/personal')
-  //   createPersonal(@Req() req): Promise<any> {
-  //     return this.projectsService.createPersonalProject(req.user.displayName, req.user.id, req.user.primaryWorkspace, req.user.auth0Id);
-  //   }
+  // @Post(':id/invites')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // inviteMember(
+  //   @Body() inviteDto: InviteProjectMemberDto,
+  //   @Membership() membership: any,
+  //   @CurrentUser() currentUser: User,
+  // ) {
+  //   return this.projectsService.inviteMember(
+  //     inviteDto.email,
+  //     inviteDto.role,
+  //     membership,
+  //     currentUser,
+  //     inviteDto.message,
+  //   );
+  // }
+
+  // @Post(':id/invites/link')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // createInviteLink(
+  //   @Body() inviteLinkDto: InviteProjectLinkDto,
+  //   @Membership() membership: ProjectGuardResponse,
+  // ) {
+  //   return this.projectsService.createInviteLink(
+  //     membership,
+  //     inviteLinkDto
+  //   );
+  // }
+
+  // @Post(':id/invites/expire')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // expireInvite(@Body() declineInviteDto: DeclineInviteDto) {
+  //   return this.projectsService.expireInvite(declineInviteDto.token);
+  // }
+
+  // @Get('/:id/links')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // getAllProjectInviteLink(@Membership() membership: ProjectGuardResponse,) {
+  //   return this.projectsService.getProjectInviteLink(membership);
+  // }
 
 
-  //   @Get()
-  //   findAll(@Req() req) {
-  //     return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
-  //   }
+  // @Get('invites/:invite/status')
+  // getProjectInviteStatus(@Param('invite') invite: string, @Req() req) {
+  //   return this.projectsService.getProjectInviteStatus(invite, req.user.email);
+  // }
+
+  // @Post('invites/decline')
+  // declineInvite(@Body() declineInviteDto: DeclineInviteDto, @Req() req) {
+  //   return this.projectsService.declineInvite(declineInviteDto.token, req.user.email);
+  // }
+
+  // @Post('invites/accept')
+  // acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
+  //   return this.projectsService.acceptInvite(acceptInviteDto.token, req.user.id, req.user.email);
+  // }
+
+
+  // @Post('invites/accept/link')
+  // acceptInviteLink(@Body() acceptInviteDto: AcceptInviteDto, @Req() req) {
+  //   return this.projectsService.acceptLinkInvite(acceptInviteDto.token, req.user.id, req.user.email);
+  // }
+
+
+  // @Get('invites/:invite/status/link')
+  // getProjectSingleLinkStatus(@Param('invite') invite: string) {
+  //   return this.projectsService.getProjectSingleLinkStatus(invite);
+  // }
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-  //   @Delete(':id/members/:memberId')
+  //   @Get(':id')
   //   @ProjectRoles('owner', 'admin')
   //   @UseGuards(ProjectPermissionsGuard)
-  //   removeMember(
-  //     @Param('id') id: string,
-  //     @Param('memberId') memberId: string,
+  //   findOne(@Membership() membership: ProjectGuardResponse) {
+  //     return this.projectsService.findOne(membership.projectId);
+  //   }
+
+  //   @Patch(':id')
+  //   @ProjectRoles('owner', 'admin')
+  //   @UseGuards(ProjectPermissionsGuard)
+  //   update(
+  //     @Body() updateProjectDto: any,
   //     @Membership() membership: any,
-  //     @Req() req,
-  //   ) {
-  //     return this.projectsService.removeMember(id, memberId, membership, req.user.id);
-  //   }
-
-  //   @Patch(':id/members/:memberId/role')
-  //   @ProjectRoles('owner', 'admin')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   updateMemberRole(
-  //     @Param('id') id: string,
-  //     @Param('memberId') memberId: string,
-  //     @Membership() membership: any,
-  //     @Body() updateRoleDto: UpdateProjectRoleDto,
-  //   ) {
-  //     return this.projectsService.updateMemberRole(memberId, membership, updateRoleDto);
+  //   ): Promise<any> {
+  //     return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
   //   }
 
 
+  // //   @Post('/personal')
+  // //   createPersonal(@Req() req): Promise<any> {
+  // //     return this.projectsService.createPersonalProject(req.user.displayName, req.user.id, req.user.primaryWorkspace, req.user.auth0Id);
+  // //   }
+
+
+  // //   @Get()
+  // //   findAll(@Req() req) {
+  // //     return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
+  // //   }
 
 
 
-  //   @Delete(':id')
-  //   @ProjectRoles('owner')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
-  //     return this.projectsService.remove(id, req.user.id);
-  //   }
-
-  //   @Patch(':id/invites/:invite/link')
-  //   @ProjectRoles('owner')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   removeInviteLink(@Param('invite') invite: string, @Membership() membership: any) {
-  //     return this.projectsService.removeInviteLink(membership, invite);
-  //   }
 
 
-  //   @Get(':id/members')
-  //   @ProjectRoles('owner', 'admin', 'contributor', 'observer')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   getMembers(@Param('id', ParseIntPipe) id: number) {
-  //     return this.projectsService.getMembers(id);
-  //   }
 
-  //   @Post(':id/members')
-  //   @ProjectRoles('owner', 'admin')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   addMember(
-  //     @Param('id', ParseIntPipe) id: number,
-  //     @Body() addMemberDto: AddProjectMemberDto,
-  //     @Req() req,
-  //   ) {
-  //     return this.projectsService.addMember(id, addMemberDto, req.user.id);
-  //   }
 
-  //   @Get(':id/invites')
-  //   @ProjectRoles('owner', 'admin')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   getProjectInvites(@Param('id', ParseIntPipe) id: number, @Req() req) {
-  //     return this.projectsService.getProjectInvites(id, req.user.id);
-  //   }
+
+
+
+
+
+
+
+
+  // //   @Delete(':id/members/:memberId')
+  // //   @ProjectRoles('owner', 'admin')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   removeMember(
+  // //     @Param('id') id: string,
+  // //     @Param('memberId') memberId: string,
+  // //     @Membership() membership: any,
+  // //     @Req() req,
+  // //   ) {
+  // //     return this.projectsService.removeMember(id, memberId, membership, req.user.id);
+  // //   }
+
+  // //   @Patch(':id/members/:memberId/role')
+  // //   @ProjectRoles('owner', 'admin')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   updateMemberRole(
+  // //     @Param('id') id: string,
+  // //     @Param('memberId') memberId: string,
+  // //     @Membership() membership: any,
+  // //     @Body() updateRoleDto: UpdateProjectRoleDto,
+  // //   ) {
+  // //     return this.projectsService.updateMemberRole(memberId, membership, updateRoleDto);
+  // //   }
+
+
+
+
+
+  // //   @Delete(':id')
+  // //   @ProjectRoles('owner')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
+  // //     return this.projectsService.remove(id, req.user.id);
+  // //   }
+
+  // //   @Patch(':id/invites/:invite/link')
+  // //   @ProjectRoles('owner')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   removeInviteLink(@Param('invite') invite: string, @Membership() membership: any) {
+  // //     return this.projectsService.removeInviteLink(membership, invite);
+  // //   }
+
+
+  // //   @Get(':id/members')
+  // //   @ProjectRoles('owner', 'admin', 'contributor', 'observer')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   getMembers(@Param('id', ParseIntPipe) id: number) {
+  // //     return this.projectsService.getMembers(id);
+  // //   }
+
+  // //   @Post(':id/members')
+  // //   @ProjectRoles('owner', 'admin')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   addMember(
+  // //     @Param('id', ParseIntPipe) id: number,
+  // //     @Body() addMemberDto: AddProjectMemberDto,
+  // //     @Req() req,
+  // //   ) {
+  // //     return this.projectsService.addMember(id, addMemberDto, req.user.id);
+  // //   }
+
+  // //   @Get(':id/invites')
+  // //   @ProjectRoles('owner', 'admin')
+  // //   @UseGuards(ProjectPermissionsGuard)
+  // //   getProjectInvites(@Param('id', ParseIntPipe) id: number, @Req() req) {
+  // //     return this.projectsService.getProjectInvites(id, req.user.id);
+  // //   }
 
 }

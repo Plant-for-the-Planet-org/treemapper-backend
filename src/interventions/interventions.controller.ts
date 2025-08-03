@@ -30,47 +30,47 @@ import { ProjectGuardResponse } from 'src/projects/projects.service';
 export class InterventionsController {
   constructor(private readonly interventionsService: InterventionsService) { }
 
-  @Post('/projects/:id/web')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  async createNewInterventionWeb(
-    @Body() createInterventionDto: any,
-    @Membership() membership: any
-  ): Promise<InterventionResponseDto> {
-    return this.interventionsService.createNewInterventionWeb(createInterventionDto, membership);
-  }
+  // @Post('/projects/:id/web')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async createNewInterventionWeb(
+  //   @Body() createInterventionDto: any,
+  //   @Membership() membership: any
+  // ): Promise<InterventionResponseDto> {
+  //   return this.interventionsService.createNewInterventionWeb(createInterventionDto, membership);
+  // }
 
-  @Get('/projects/:id')
-  @ProjectRoles('owner', 'admin', 'contributor')
-  @UseGuards(ProjectPermissionsGuard)
-  async findAllintervention(
-    @Membership() membership: ProjectGuardResponse,
-    @Query() queryDto: GetProjectInterventionsQueryDto,
-  ): Promise<GetProjectInterventionsResponseDto> {
-    return this.interventionsService.getProjectInterventions(membership.projectId, queryDto);
-  }
-
-
-  @Post('/projects/:id/bulk')
-  @ProjectRoles('owner', 'admin')
-  @UseGuards(ProjectPermissionsGuard)
-  async bulkInterventionUpload(
-    @Body() interventionData: CreateInterventionBulkDto[],
-    @Membership() membership: any
-  ): Promise<InterventionResponseDto> {
-    return this.interventionsService.bulkInterventionUpload(interventionData, membership);
-  }
+  // @Get('/projects/:id')
+  // @ProjectRoles('owner', 'admin', 'contributor')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async findAllintervention(
+  //   @Membership() membership: ProjectGuardResponse,
+  //   @Query() queryDto: GetProjectInterventionsQueryDto,
+  // ): Promise<GetProjectInterventionsResponseDto> {
+  //   return this.interventionsService.getProjectInterventions(membership.projectId, queryDto);
+  // }
 
 
-  @Delete(':id/:intervention')
-  @ProjectRoles('owner', 'admin', 'contributor')
-  @UseGuards(ProjectPermissionsGuard)
-  async delete(
-    @Param('intervention') intervention: string,
-    @Membership() membership: ProjectGuardResponse,
-  ) {
-    return this.interventionsService.deleteIntervention(intervention, membership);
-  }
+  // @Post('/projects/:id/bulk')
+  // @ProjectRoles('owner', 'admin')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async bulkInterventionUpload(
+  //   @Body() interventionData: CreateInterventionBulkDto[],
+  //   @Membership() membership: any
+  // ): Promise<InterventionResponseDto> {
+  //   return this.interventionsService.bulkInterventionUpload(interventionData, membership);
+  // }
+
+
+  // @Delete(':id/:intervention')
+  // @ProjectRoles('owner', 'admin', 'contributor')
+  // @UseGuards(ProjectPermissionsGuard)
+  // async delete(
+  //   @Param('intervention') intervention: string,
+  //   @Membership() membership: ProjectGuardResponse,
+  // ) {
+  //   return this.interventionsService.deleteIntervention(intervention, membership);
+  // }
 
 
 

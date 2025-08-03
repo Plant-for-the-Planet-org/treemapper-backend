@@ -375,7 +375,6 @@ export const image = pgTable('image', {
   compressionRatio: decimal('compression_ratio', { precision: 4, scale: 2 }),
   uploadedById: integer('uploaded_by_id').references(() => user.id, { onDelete: 'set null' }),
   altText: text('alt_text'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -395,6 +394,7 @@ export const image = pgTable('image', {
   filenameRequired: check('filename_required',
     sql`filename IS NOT NULL AND length(trim(filename)) > 0`)
 }));
+
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   uid: text('uid').notNull().unique(),
@@ -454,8 +454,6 @@ export const auditLog = pgTable('audit_log', {
   changedFields: text('changed_fields').array(),
   source: text('source').default('web'),
   ipAddress: text('ip_address'),
-
-
   occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   entityAuditIdx: index('audit_log_entity_audit_idx')
@@ -491,26 +489,21 @@ export const project = pgTable('project', {
   classification: text('classification'),
   target: integer('target'),
   originalGeometry: jsonb('original_geometry'),
-
   website: text('website'),
   image: text('image'),
   videoUrl: text('video_url'),
-
   country: char('country', { length: 3 }),
   location: geometryWithGeoJSON(4326)('location'),
-
   isActive: boolean('is_active').notNull().default(true),
   isPublic: boolean('is_public').default(true).notNull(),
   isPrimary: boolean('is_primary').default(false).notNull(),
   isPersonal: boolean('is_personal').default(false).notNull(),
-
   intensity: text('intensity'),
   revisionPeriodicity: text('revision_periodicity'),
   migratedProject: boolean('migrated_project').default(false),
   flag: boolean('flag').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   metadata: jsonb('metadata'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -520,7 +513,6 @@ export const project = pgTable('project', {
   userProjectsIdx: index('project_user_projects_idx')
     .on(table.createdById, table.isActive),
   locationIdx: index('project_location_gist_idx').using('gist', table.location),
-
   targetPositive: check('target_positive', sql`target IS NULL OR target > 0`),
   validIntensity: check('valid_intensity',
     sql`intensity IS NULL OR intensity IN ('low', 'medium', 'high')`),
@@ -536,6 +528,7 @@ export const project = pgTable('project', {
     sql`flag = false OR flag_reason IS NOT NULL`),
 }));
 
+
 export const projectMember = pgTable('project_member', {
   id: serial('id').primaryKey(),
   uid: text('uid').notNull().unique(),
@@ -549,19 +542,15 @@ export const projectMember = pgTable('project_member', {
   status: memberStatusEnum('status').default('active'),
   siteAccess: siteAccessEnum('site_access').default('all_sites').notNull(),
   restrictedSites: text('restricted_sites').array().default([]),
-
   bulkInviteId: integer('bulk_invite_id').references(() => bulkInvite.id, { onDelete: 'set null' }),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }), // 🔧 ADD: Soft delete
 }, (table) => ({
   uniqueMember: unique('unique_project_member').on(table.projectId, table.userId),
-
   projectMembersIdx: index('project_members_active_idx')
     .on(table.projectId, table.status)
     .where(sql`deleted_at IS NULL`),
-
   userProjectsIdx: index('project_members_user_active_idx')
     .on(table.userId, table.status)
     .where(sql`deleted_at IS NULL`),
@@ -594,7 +583,6 @@ export const bulkInvite = pgTable('bulk_invite', {
   currentUses: integer('current_uses').default(0),
   totalInvitesSent: integer('total_invites_sent').default(0),
   totalAccepted: integer('total_accepted').default(0),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -647,7 +635,6 @@ export const site = pgTable('site', {
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   metadata: jsonb('metadata'),
   originalGeometry: jsonb('original_geometry'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -656,9 +643,7 @@ export const site = pgTable('site', {
     .on(table.projectId, table.status)
     .where(sql`deleted_at IS NULL`),
   locationIdx: index('site_location_gist_idx').using('gist', table.location),
-
   createdByIdx: index('site_created_by_idx').on(table.createdById),
-
   areaPositive: check('area_positive', sql`area IS NULL OR area > 0`),
   elevationRange: check('elevation_range',
     sql`elevation IS NULL OR (elevation >= -500 AND elevation <= 9000)`),
@@ -842,7 +827,6 @@ export const projectSpecies = pgTable('project_species', {
   plannedQuantity: integer('planned_quantity'),
   actualQuantity: integer('actual_quantity').default(0),
   priority: text('priority'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -888,12 +872,10 @@ export const speciesRequest = pgTable('species_request', {
   status: speciesRequestStatusEnum('status').notNull().default('pending'),
   reviewedById: integer('reviewed_by_id').references(() => user.id, { onDelete: 'set null' }),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-
   adminNotes: text('admin_notes'),
   rejectionReason: text('rejection_reason'),
   createdSpeciesId: integer('created_species_id').references(() => scientificSpecies.id),
   duplicateOfRequestId: integer('duplicate_of_request_id').references(() => speciesRequest.id),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -924,6 +906,7 @@ export const speciesRequest = pgTable('species_request', {
   scientificNameFormat: check('scientific_name_format',
     sql`scientific_name ~* '^[A-Z][a-z]+ [a-z]+( [a-z]+)*$'`),
 }));
+
 export const intervention = pgTable('intervention', {
   id: serial('id').primaryKey(),
   uid: text('uid').notNull().unique(),
@@ -939,22 +922,19 @@ export const intervention = pgTable('intervention', {
   endDate: timestamp('end_date', { withTimezone: true }).notNull(),
   location: geometryWithGeoJSON(4326)('location'),
   area: doublePrecision('area'),
-
   totalTreeCount: integer('total_tree_count').default(0),
   totalSampleTreeCount: integer('total_sample_tree_count').default(0),
   captureMode: captureModeEnum('capture_mode').notNull().default('on-site'),
   captureStatus: captureStatusEnum('capture_status').notNull().default('complete'),
   deviceLocation: jsonb('device_location'),
   originalGeometry: jsonb('original_geometry'),
-
   description: text('description'),
   image: text('image'),
   isPrivate: boolean('is_private').default(false).notNull(),
-
   flag: boolean('flag').default(false),
+  editedDate: timestamp('created_at', { withTimezone: true }),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   migratedIntervention: boolean('migrated_intervention').default(false),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -962,17 +942,13 @@ export const intervention = pgTable('intervention', {
   projectDateRangeIdx: index('intervention_project_date_range_idx')
     .on(table.projectId, table.startDate, table.status)
     .where(sql`deleted_at IS NULL`),
-
   projectTypeStatusIdx: index('intervention_project_type_status_idx')
     .on(table.projectId, table.type, table.status)
     .where(sql`deleted_at IS NULL`),
-
   locationIdx: index('intervention_location_gist_idx').using('gist', table.location),
-
   userInterventionsIdx: index('intervention_user_idx')
     .on(table.userId, table.startDate)
     .where(sql`deleted_at IS NULL`),
-
   validDateRange: check('valid_date_range', sql`start_date <= end_date`),
   areaPositive: check('area_positive', sql`area IS NULL OR area >= 0`),
   treeCountsNonNegative: check('tree_counts_non_negative',
@@ -989,16 +965,13 @@ export const interventionSpecies = pgTable('intervention_species', {
   interventionId: integer('intervention_id').notNull().references(() => intervention.id, { onDelete: 'cascade' }),
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id, { onDelete: 'set null' }),
   isUnknown: boolean('is_unknown').default(false).notNull(),
-  customSpeciesName: text('custom_species_name'),
-
+  speciesName: text('species_name'),
   plannedCount: integer('planned_count').notNull(),
   actualCount: integer('actual_count').default(0),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   interventionSpeciesIdx: index('intervention_species_intervention_idx').on(table.interventionId),
-
   unknownSpeciesLogic: check('unknown_species_logic',
     sql`(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)`),
   plannedCountPositive: check('planned_count_positive', sql`planned_count > 0`),
@@ -1009,14 +982,12 @@ export const tree = pgTable('tree', {
   id: serial('id').primaryKey(),
   hid: text('hid').notNull().unique(),
   uid: text('uid').notNull().unique(),
-
   interventionId: integer('intervention_id').notNull().references(() => intervention.id, { onDelete: 'cascade' }),
   interventionSpeciesId: integer('intervention_species_id').notNull().references(() => interventionSpecies.id, { onDelete: 'restrict' }),
+  speciesName:text('species_name'),
   createdById: integer('created_by_id').notNull().references(() => user.id, { onDelete: 'set null' }),
-
   tag: text('tag'),
   treeType: treeTypeEnum('tree_type').default('sample'),
-
   location: geometryWithGeoJSON(4326)('location'),
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
@@ -1025,40 +996,33 @@ export const tree = pgTable('tree', {
   currentHeight: doublePrecision('current_height'),
   currentWidth: doublePrecision('current_width'),
   currentHealthScore: integer('current_health_score'),
-
   status: treeStatusEnum('status').default('alive').notNull(),
   statusReason: text('status_reason'),
   statusChangedAt: timestamp('status_changed_at', { withTimezone: true }),
-
   plantingDate: timestamp('planting_date', { withTimezone: true }),
   lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
   nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
-
   image: text('image'),
-
+  remeasured: boolean().default(false),
   flag: boolean('flag').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-
+  remeasuredIdx:index('tree_intervention_remeasured_idx')
+    .on(table.interventionId, table.remeasured),
   interventionTreesIdx: index('tree_intervention_status_idx')
     .on(table.interventionId, table.status)
     .where(sql`deleted_at IS NULL`),
-
   speciesTreesIdx: index('tree_species_idx')
     .on(table.interventionSpeciesId, table.status),
-
   measurementScheduleIdxmeasurementScheduleIdx: index('tree_measurement_schedule_idx')
     .on(table.nextMeasurementDate, table.status)
     .where(sql`next_measurement_date IS NOT NULL AND status = 'alive' AND deleted_at IS NULL`),
-
   healthMonitoringIdx: index('tree_health_monitoring_idx')
     .on(table.currentHealthScore, table.lastMeasurementDate)
     .where(sql`current_health_score IS NOT NULL AND deleted_at IS NULL`),
-
   heightWidthPositive: check('height_width_positive',
     sql`(current_height IS NULL OR current_height >= 0) AND (current_width IS NULL OR current_width >= 0)`),
   altitudeRange: check('altitude_range',
@@ -1073,64 +1037,52 @@ export const tree = pgTable('tree', {
   measurementDateLogic: check('measurement_date_logic',
     sql`last_measurement_date IS NULL OR next_measurement_date IS NULL OR next_measurement_date > last_measurement_date`),
 }));
+
+
 export const treeRecord = pgTable('tree_record', {
   id: serial('id').primaryKey(),
   uid: text('uid').notNull().unique(),
-
   treeId: integer('tree_id').notNull().references(() => tree.id, { onDelete: 'cascade' }),
   recordedById: integer('recorded_by_id').notNull().references(() => user.id, { onDelete: 'set null' }),
-
   recordType: recordTypeEnum('record_type').notNull(),
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
-
   height: doublePrecision('height'),
   width: doublePrecision('width'),
   healthScore: integer('health_score'),
   vitalityScore: integer('vitality_score'),
-
   previousStatus: treeStatusEnum('previous_status'),
   newStatus: treeStatusEnum('new_status'),
   statusReason: text('status_reason'),
-
   findings: text('findings'),
   findingsSeverity: text('findings_severity'),
   notes: text('notes'),
   priorityLevel: text('priority_level'),
-
   weatherConditions: jsonb('weather_conditions'),
   soilConditions: jsonb('soil_conditions'),
   pestsObserved: jsonb('pests_observed'),
   diseasesObserved: jsonb('diseases_observed'),
   damageObserved: jsonb('damage_observed'),
-
   growthRate: decimal('growth_rate', { precision: 6, scale: 3 }),
   leafDensity: text('leaf_density'),
   fruitingStatus: text('fruiting_status'),
   surroundingVegetation: text('surrounding_vegetation'),
-
   recommendedActions: jsonb('recommended_actions'),
-
   image: text('image'),
   deviceLocation: jsonb('device_location'),
   isPublic: boolean('is_public').default(true).notNull(),
-
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-
   treeLatestRecordIdx: index('tree_record_latest_idx')
     .on(table.treeId, table.recordedAt)
     .where(sql`deleted_at IS NULL`),
-
   priorityRecordsIdx: index('tree_record_priority_idx')
     .on(table.priorityLevel, table.recordedAt)
     .where(sql`priority_level IN ('high', 'urgent') AND deleted_at IS NULL`),
-
   healthTrendsIdx: index('tree_record_health_trends_idx')
     .on(table.treeId, table.healthScore, table.recordedAt)
     .where(sql`health_score IS NOT NULL AND deleted_at IS NULL`),
-
   healthVitalityRange: check('health_vitality_range',
     sql`(health_score IS NULL OR (health_score >= 0 AND health_score <= 100)) AND (vitality_score IS NULL OR (vitality_score >= 0 AND vitality_score <= 100))`),
   measurementsPositive: check('measurements_positive',
@@ -1145,7 +1097,7 @@ export const treeRecord = pgTable('tree_record', {
 }));
 
 
-export const userRelations = relations(user, ({ one, many }) => ({
+export const userRelations = relations(user, ({ many }) => ({
   projectMemberships: many(projectMember),
   createdProjects: many(project, { relationName: 'createdBy' }),
   addedProjectSpecies: many(projectSpecies, { relationName: 'addedBy' }),

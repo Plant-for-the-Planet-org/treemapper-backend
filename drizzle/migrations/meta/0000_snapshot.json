@@ -1,5 +1,5 @@
 {
-  "id": "68db4702-dc47-4f68-ba12-1892f6ddd3ce",
+  "id": "a24ce863-cc7c-4f2b-824d-701a4e341346",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -934,6 +934,13 @@
           "notNull": false,
           "default": false
         },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
         "flag_reason": {
           "name": "flag_reason",
           "type": "jsonb",
@@ -946,13 +953,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
@@ -1188,8 +1188,8 @@
           "notNull": true,
           "default": false
         },
-        "custom_species_name": {
-          "name": "custom_species_name",
+        "species_name": {
+          "name": "species_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -4428,6 +4428,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "species_name": {
+          "name": "species_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_by_id": {
           "name": "created_by_id",
           "type": "integer",
@@ -4540,6 +4546,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "remeasured": {
+          "name": "remeasured",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
         "flag": {
           "name": "flag",
           "type": "boolean",
@@ -4575,6 +4588,27 @@
         }
       },
       "indexes": {
+        "tree_intervention_remeasured_idx": {
+          "name": "tree_intervention_remeasured_idx",
+          "columns": [
+            {
+              "expression": "intervention_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "remeasured",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "tree_intervention_status_idx": {
           "name": "tree_intervention_status_idx",
           "columns": [

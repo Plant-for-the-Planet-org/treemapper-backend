@@ -136,9 +136,9 @@ CREATE TABLE "intervention" (
 	"image" text,
 	"is_private" boolean DEFAULT false NOT NULL,
 	"flag" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"flag_reason" jsonb,
 	"migrated_intervention" boolean DEFAULT false,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "intervention_uid_unique" UNIQUE("uid"),
@@ -157,7 +157,7 @@ CREATE TABLE "intervention_species" (
 	"intervention_id" integer NOT NULL,
 	"scientific_species_id" integer,
 	"is_unknown" boolean DEFAULT false NOT NULL,
-	"custom_species_name" text,
+	"species_name" text,
 	"planned_count" integer NOT NULL,
 	"actual_count" integer DEFAULT 0,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -540,6 +540,7 @@ CREATE TABLE "tree" (
 	"uid" text NOT NULL,
 	"intervention_id" integer NOT NULL,
 	"intervention_species_id" integer NOT NULL,
+	"species_name" text,
 	"created_by_id" integer NOT NULL,
 	"tag" text,
 	"tree_type" "tree_enum" DEFAULT 'sample',
@@ -558,6 +559,7 @@ CREATE TABLE "tree" (
 	"last_measurement_date" timestamp with time zone,
 	"next_measurement_date" timestamp with time zone,
 	"image" text,
+	"remeasured" boolean DEFAULT false,
 	"flag" boolean DEFAULT false,
 	"flag_reason" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -784,6 +786,7 @@ CREATE INDEX "species_request_user_idx" ON "species_request" USING btree ("reque
 CREATE INDEX "species_request_project_idx" ON "species_request" USING btree ("project_id","status") WHERE project_id IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "species_request_duplicate_idx" ON "species_request" USING btree ("scientific_name","status") WHERE status IN ('pending', 'approved');--> statement-breakpoint
 CREATE INDEX "survey_user_idx" ON "survey" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "tree_intervention_remeasured_idx" ON "tree" USING btree ("intervention_id","remeasured");--> statement-breakpoint
 CREATE INDEX "tree_intervention_status_idx" ON "tree" USING btree ("intervention_id","status") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "tree_species_idx" ON "tree" USING btree ("intervention_species_id","status");--> statement-breakpoint
 CREATE INDEX "tree_measurement_schedule_idx" ON "tree" USING btree ("next_measurement_date","status") WHERE next_measurement_date IS NOT NULL AND status = 'alive' AND deleted_at IS NULL;--> statement-breakpoint

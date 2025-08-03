@@ -11,7 +11,7 @@ export class ProjectPermissionsGuard implements CanActivate {
     private projectCacheService: ProjectCacheService,
   ) { }
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  async canActivate(context: ExecutionContext): Promise<any> {
     const roles = this.reflector.get<string[]>('projectRoles', context.getHandler());
     if (!roles) {
       return true;
@@ -24,20 +24,20 @@ export class ProjectPermissionsGuard implements CanActivate {
       return false;
     }
 
-    let membership = await this.projectCacheService.getUserProject(projectUid, userId);
-    if (!membership) {
-      membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
-    }
-    if (!membership) {
-      throw new ForbiddenException('You do not have access to this project');
-    }
+    // let membership = await this.projectCacheService.getUserProject(projectUid, userId);
+    // if (!membership) {
+    //   membership = await this.projectsService.getMemberRoleFromUid(projectUid, userId);
+    // }
+    // if (!membership) {
+    //   throw new ForbiddenException('You do not have access to this project');
+    // }
 
-    const hasPermission = roles.includes(membership.role);
+    // const hasPermission = roles.includes(membership.role);
 
-    if (!hasPermission) {
-      throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
-    }
-    request.membership = membership;
-    return true;
+    // if (!hasPermission) {
+    //   throw new ForbiddenException(`You need one of these roles: ${roles.join(', ')} to access this resource`);
+    // }
+    // request.membership = membership;
+    // return true;
   }
 }
