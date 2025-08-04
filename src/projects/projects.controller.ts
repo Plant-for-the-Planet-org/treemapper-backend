@@ -44,10 +44,10 @@ export class ProjectsController {
     return this.projectsService.findProjectsAndWorkspace(user);
   }
 
-  // @Post()
-  // create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
-  //   return this.projectsService.createNewProject(createProjectDto, user);
-  // }
+  @Post()
+  create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
+    return this.projectsService.createNewProject(createProjectDto, user);
+  }
 
 
 

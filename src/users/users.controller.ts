@@ -39,7 +39,6 @@ import { user } from 'src/database/schema';
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
-
   @Get('me')
   async getProfile(@CurrentUser() users: ExtendedUser) {
     return {
@@ -92,6 +91,12 @@ export class UsersController {
   ) {
     return await this.usersService.update(user.id, updateUserDto);
   }
+
+  @Post('invalidate/cache')
+  async invalidateMyCache(@CurrentUser() user: User,) {
+    return await this.usersService.invalidateMyCache(user);
+  }
+
 
 
 

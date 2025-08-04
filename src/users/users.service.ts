@@ -373,6 +373,9 @@ export class UsersService {
         return updateData;
     }
 
+        async invalidateMyCache(user: User,) {
+        return await this.userCacheService.invalidateUser(user);
+    }
 
     //   async findByEmail(email: string): Promise<User | null> {
     //     const cacheKey = CACHE_KEYS.USER.BY_EMAIL(email);

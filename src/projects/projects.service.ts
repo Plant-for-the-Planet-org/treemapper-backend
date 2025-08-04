@@ -93,6 +93,36 @@ export class ProjectsService {
 
   ) { }
 
+
+  private getGeoJSONForPostGIS(locationInput: any): any {
+    if (!locationInput) {
+      return null;
+    }
+
+    // If it's a Feature, extract the geometry
+    if (locationInput.type === 'Feature' && locationInput.geometry) {
+      return locationInput.geometry;
+    }
+
+    // If it's a FeatureCollection, extract the first geometry
+    if (locationInput.type === 'FeatureCollection' &&
+      locationInput.features &&
+      locationInput.features.length > 0 &&
+      locationInput.features[0].geometry) {
+      return locationInput.features[0].geometry;
+    }
+
+
+    // If it's already a geometry object, use it directly
+    if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+      return locationInput;
+    }
+    throw new BadRequestException('Invalid GeoJSON format');
+  }
+
+
+
+
   private generateSlug(projectName: string): string {
     return projectName
       .toLowerCase()
@@ -304,126 +334,64 @@ export class ProjectsService {
     }
   }
 
+  async createNewProject(createProjectDto: CreateProjectDto, userData: User): Promise<any> {
+    try {
+      let locationValue: any = null;
+      if (!userData.primaryWorkspaceUid) {
+        throw new ForbiddenException('User does not have a primary workspace set');
+      }
+      console.log("sd", userData.primaryWorkspaceUid)
+      const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspaceUid);
+      console.log("sd", workspaceId)
+      if (!workspaceId) {
+        throw new NotFoundException('Workspace not found');
+      }
+      if (createProjectDto.location) {
+        try {
+          const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
+          locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+        } catch (error) {
+          return {
+            message: 'Invalid GeoJSON provided',
+            statusCode: 400,
+            error: "invalid_geojson",
+            data: null,
+            code: 'invalid_project_geojson',
+          };
+        }
+      }
+
+      const result = await this.drizzleService.db
+        .update(project)
+        .set({
+          createdById: userData.id,
+          name: createProjectDto.projectName ?? '',
+          type: createProjectDto.projectType ?? 'private',
+          website: createProjectDto.projectWebsite ?? null,
+          description: createProjectDto.description ?? null,
+          location: locationValue,
+          originalGeometry: createProjectDto.location
+        })
 
 
-  // private getGeoJSONForPostGIS(locationInput: any): any {
-  //   if (!locationInput) {
-  //     return null;
-  //   }
-
-  //   // If it's a Feature, extract the geometry
-  //   if (locationInput.type === 'Feature' && locationInput.geometry) {
-  //     return locationInput.geometry;
-  //   }
-
-  //   // If it's a FeatureCollection, extract the first geometry
-  //   if (locationInput.type === 'FeatureCollection' &&
-  //     locationInput.features &&
-  //     locationInput.features.length > 0 &&
-  //     locationInput.features[0].geometry) {
-  //     return locationInput.features[0].geometry;
-  //   }
-
-
-  //   // If it's already a geometry object, use it directly
-  //   if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
-  //     return locationInput;
-  //   }
-  //   throw new BadRequestException('Invalid GeoJSON format');
-  // }
-
-
-
-  // async createNewProject(createProjectDto: CreateProjectDto, userData: User): Promise<any> {
-  //   try {
-  //     let locationValue: any = null;
-  //     if (!userData.primaryWorkspace) {
-  //       throw new ForbiddenException('User does not have a primary workspace set');
-  //     }
-  //     const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspace);
-  //     console.log('Workspace ID:', workspaceId);
-  //     if (!workspaceId) {
-  //       throw new NotFoundException('Workspace not found');
-  //     }
-  //     if (createProjectDto.location) {
-  //       try {
-  //         const geometry = this.getGeoJSONForPostGIS(createProjectDto.location);
-  //         locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
-  //       } catch (error) {
-  //         return {
-  //           message: 'Invalid GeoJSON provided',
-  //           statusCode: 400,
-  //           error: "invalid_geojson",
-  //           data: null,
-  //           code: 'invalid_project_geojson',
-  //         };
-  //       }
-  //     }
-
-
-  //     // Use transaction to ensure data consistency
-  //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  //       // Create project with updated schema fields
-  //       const projectData = await tx
-  //         .insert(project)
-  //         .values({
-  //           uid: createProjectDto.uid ?? generateUid('proj'),
-  //           createdById: userData.id,
-  //           workspaceId: workspaceId,
-  //           slug: this.generateSlug(createProjectDto.projectName) + `-${Date.now()}`,
-  //           projectName: createProjectDto.projectName ?? '',
-  //           projectType: createProjectDto.projectType ?? '',
-  //           projectWebsite: createProjectDto.projectWebsite ?? '',
-  //           description: createProjectDto.description ?? '',
-  //           location: locationValue,
-  //           isPrimary: false,
-  //           isPersonal: false,
-  //           originalGeometry: createProjectDto.location
-  //         })
-  //         .returning();
-  //       if (!projectData || projectData.length === 0) {
-  //         throw new ConflictException('Project creation failed, please try again');
-  //       }
-  //       await tx
-  //         .insert(projectMember)
-  //         .values({
-  //           projectId: projectData[0].id,
-  //           uid: generateUid('projmem'),
-  //           userId: userData.id,
-  //           projectRole: 'owner',
-  //           joinedAt: new Date(),
-  //           siteAccess: 'all_sites',
-  //         });
-  //       await tx.update(user)
-  //         .set({ primaryWorkspace: user.primaryWorkspace, primaryProject: projectData[0].uid })
-  //         .where(eq(user.id, userData.id));
-  //       await this.userCacheService.refreshAuthUser({ ...userData, primaryProject: projectData[0].uid, primaryWorkspace: userData.primaryWorkspace });
-  //       return true;
-  //     });
-  //     // this.notificationService.createNotification({
-  //     //   userId: userId,
-  //     //   type: NotificationType.PROJECT_UPDATE,
-  //     //   title: 'New Project created',
-  //     //   message: `New Project with name ${createProjectDto.projectName} created.`
-  //     // })
-  //     return {
-  //       message: 'Project created successfully',
-  //       statusCode: 201,
-  //       error: null,
-  //       data: result,
-  //       code: 'project_created',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error creating project:', error);
-  //     return {
-  //       message: 'Failed to create project',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'project_creation_failed',
-  //     };
-  //   }
-  // }
+      return {
+        message: 'Project updated successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'project_created',
+      };
+    } catch (error) {
+      console.error('Error updating project:', error);
+      return {
+        message: 'Failed to update project',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'project_creation_failed',
+      };
+    }
+  }
 
 
 

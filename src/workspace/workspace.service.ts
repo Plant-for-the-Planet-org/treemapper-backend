@@ -200,7 +200,6 @@ export class WorkspaceService {
   }
 
   async startImpersonation(person: string, userData: User) {
-    console.log("SDC workspaceId", person)
     try {
       if (!userData.primaryWorkspaceUid) {
         throw new Error('No workspace set');
@@ -214,14 +213,12 @@ export class WorkspaceService {
       if (!workspaceId) {
         throw new Error('No workspace found');
       }
-      console.log("SDC workspaceId", workspaceId)
 
       const personDetails = await this.drizzle.db
         .select({ id: user.id, auth: user.auth0Id })
         .from(user)
         .where(eq(user.uid, person))
         .limit(1)
-      console.log("SDC", personDetails)
       if (personDetails.length === 0) {
         throw 'no person found'
       }
@@ -254,9 +251,7 @@ export class WorkspaceService {
       // } else {
       //   return false
       // }
-    } catch (error) {
-      console.log("SDC",error)
-      return false
+    } catch (error) {      return false
     }
   }
 
