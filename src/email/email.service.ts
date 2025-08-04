@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import axios from 'axios';
+import { EMAIL_TEMPLATES } from './templates';
 
 @Injectable()
 export class EmailService {
@@ -22,7 +23,7 @@ export class EmailService {
   constructor(private configService: ConfigService) {
     // Setup email configuration from environment
     this.frontendUrl = this.configService.get<string>('CLIENT_URL') || '';
-    this.fromEmail = this.configService.get<string>('EMAIL_FROM', 'noreply@yourdomain.com');
+    this.fromEmail = this.configService.get<string>('EMAIL_FROM', 'noreply@treemapper.app');
     this.emailTemplatesDir = path.join(process.cwd(), 'src/notification/templates');
     this.apiUrl = this.configService.get<string>('PLUNK_URL') || '';
     this.apiToken = this.configService.get<string>('PLUNK_API_TOKEN') || '';
@@ -58,7 +59,6 @@ export class EmailService {
   }): Promise<boolean> {
     const inviteUrl = `${this.frontendUrl}?project-invite=${token}`;
     const expiryDate = new Date(expiresAt).toLocaleDateString();
-
     return this.sendTemplateEmail({
       to: email,
       subject: `TreeMapper Invitation to join ${projectName}`,
@@ -177,17 +177,17 @@ export class EmailService {
   }): Promise<boolean> {
     try {
       // Load template
-      const templatePath = path.join(this.emailTemplatesDir, `${templateName}.hbs`);
-      const template = fs.readFileSync(templatePath, 'utf8');
+      // const templatePath = path.join(this.emailTemplatesDir, `${templateName}.hbs`);
+      // const template = fs.readFileSync(templatePath, 'utf8');
 
       // Compile template with Handlebars
-      const compiledTemplate = handlebars.compile(template);
+      const compiledTemplate = handlebars.compile(EMAIL_TEMPLATES.PROJECT_INVITE);
       const html = compiledTemplate(context);
 
       // Send email using SMTP if transporter is configured, otherwise use API
       if (this.transporter) {
         await this.transporter.sendMail({
-          from: this.configService.get<string>('EMAIL_FROM', 'noreply@yourdomain.com'),
+          from: this.configService.get<string>('EMAIL_FROM', 'noreply@treemapper.app'),
           to,
           subject,
           html,
