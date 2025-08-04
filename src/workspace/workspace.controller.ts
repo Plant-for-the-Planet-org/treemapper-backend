@@ -51,10 +51,6 @@ export class WorkspaceController {
         return this.workspaceService.createNewWorkspace(createOrganizationDto, req.user.id);
     }
 
-    @Post('cache')
-    cacheWorkspace(@CurrentUser() user: User) {
-        return this.workspaceService.cacheWorkspace(user);
-    }
 
 
     // @Post('/primary')

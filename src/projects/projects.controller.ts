@@ -32,16 +32,24 @@ import { Membership } from './decorators/membership.decorator';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) { }
 
+  @Post('/personal')
+  createPersonal(@CurrentUser() userData): Promise<any> {
+    return this.projectsService.createPersonalProject(userData);
+  }
+
+
+  @Get('')
+  findProjectsAndWorkspace(@CurrentUser() user: User) {
+    // return false
+    return this.projectsService.findProjectsAndWorkspace(user);
+  }
+
   // @Post()
   // create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: User): Promise<any> {
   //   return this.projectsService.createNewProject(createProjectDto, user);
   // }
 
 
-  // @Get('')
-  // findProjectsAndWorkspace(@CurrentUser() user: User) {
-  //   return this.projectsService.findProjectsAndWorkspace(user);
-  // }
 
 
 
@@ -147,10 +155,7 @@ export class ProjectsController {
   //   }
 
 
-  // //   @Post('/personal')
-  // //   createPersonal(@Req() req): Promise<any> {
-  // //     return this.projectsService.createPersonalProject(req.user.displayName, req.user.id, req.user.primaryWorkspace, req.user.auth0Id);
-  // //   }
+
 
 
   // //   @Get()

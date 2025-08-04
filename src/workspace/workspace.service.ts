@@ -107,7 +107,7 @@ export class WorkspaceService {
   }
 
 
-  async cacheWorkspace(userData: User) {
+  async cacheWorkspace() {
     try {
       const workspacesResult = await this.drizzle.db
         .select({
@@ -115,7 +115,6 @@ export class WorkspaceService {
           id: workspace.id,
         })
         .from(workspace)
-        .where(eq(workspace.createdById, userData.id));
 
       if (workspacesResult.length === 0) {
         return "no workspaces found";
@@ -137,7 +136,7 @@ export class WorkspaceService {
     }
   }
 
-  
+
   async clearServerCache(userData: User) {
     try {
       await this.projectCacheService.clearServerCache();

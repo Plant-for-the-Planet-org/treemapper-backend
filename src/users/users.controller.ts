@@ -59,10 +59,10 @@ export class UsersController {
       isActive: users.isActive,
       migratedAt: users.migratedAt,
       existingPlanetUser: users.existingPlanetUser,
-      primaryWorkspace: users.primaryWorkspaceUid,
-      primaryProject: users.primaryProjectUid,
+      primaryWorkspaceUid: users.primaryWorkspaceUid,
+      primaryProjectUid: users.primaryProjectUid,
       workspace: users.workspaceRole,
-      impersonated: users.impersonated !== null ? true : null
+      impersonated: false
     }
   }
 

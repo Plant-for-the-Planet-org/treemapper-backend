@@ -93,6 +93,219 @@ export class ProjectsService {
 
   ) { }
 
+  private generateSlug(projectName: string): string {
+    return projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+      .replace(/\s+/g, '-')         // Replace spaces with hyphens
+      .replace(/-+/g, '-')          // Replace multiple hyphens with single
+      .trim()
+      .substring(0, 255); // Ensure it fits in varchar(255)
+  }
+
+
+  async createPersonalProject(userData: User): Promise<any> {
+    if (!userData.primaryWorkspaceUid) {
+      throw 'No workspace set'
+    }
+    const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspaceUid)
+    if (!workspaceId) {
+      throw 'No workspace found'
+    }
+    try {
+      const existingProject = await this.drizzleService.db
+        .select({ id: project.id })
+        .from(project)
+        .where(
+          and(
+            eq(project.isPersonal, true),
+            eq(project.createdById, userData.id),
+            eq(project.workspaceId, workspaceId)
+          )
+        )
+        .limit(1);
+
+      if (existingProject.length > 0) {
+        await this.userCacheService.invalidateUser(userData)
+        return {
+          message: 'Personal project already exists in this workspace',
+          statusCode: 201,
+          error: 'personal_project_exists',
+          data: null,
+          code: 'personal_project_exists',
+        };
+      }
+
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        const [projectData] = await tx
+          .insert(project)
+          .values({
+            uid: generateUid('proj'),
+            createdById: userData.id,
+            workspaceId: workspaceId,
+            slug: `${this.generateSlug(userData.displayName)}-${Date.now()}`,
+            name: `${userData.displayName}'s personal project`,
+            isPersonal: true,
+          })
+          .returning();
+
+        await tx
+          .insert(projectMember)
+          .values({
+            uid: generateUid('projmem'),
+            projectId: projectData.id,
+            userId: userData.id,
+            projectRole: 'owner',
+            joinedAt: new Date(),
+          });
+        await tx.update(user)
+          .set({ primaryWorkspaceUid: userData.primaryWorkspaceUid, primaryProjectUid: projectData.uid })
+          .where(eq(user.id, userData.id)),
+          await this.userCacheService.refreshAuthUser({ ...userData, primaryWorkspaceUid: userData.primaryWorkspaceUid, primaryProjectUid: projectData.uid })
+        this.notificationService.createNotification({
+          userId: userData.id,
+          type: NotificationType.PROJECT_UPDATE,
+          title: 'Personal Project Created',
+          message: `Your personal project ${name} has been created successfully.`
+        }).catch(err => console.error('Notification failed:', err));
+        return project;
+      });
+      return {
+        message: 'Personal project created successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'personal_project_created',
+      };
+
+    } catch (error) {
+      console.error('Error creating personal project:', error);
+      return {
+        message: 'Failed to create personal project',
+        statusCode: 500,
+        error: error.message || 'internal_server_error',
+        data: null,
+        code: 'personal_project_creation_failed',
+      };
+    }
+  }
+
+
+
+  async findProjectsAndWorkspace(userData: User) {
+    try {
+      const projectsResult = await this.drizzleService.db
+        .select({
+          project: {
+            uid: project.uid,
+            slug: project.slug,
+            name: project.name,
+            type: project.type,
+            target: project.target,
+            description: project.description,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+            location: project.originalGeometry
+          },
+          projectRole: projectMember.projectRole,
+          workspace: {
+            uid: workspace.uid,
+            name: workspace.name,
+            slug: workspace.slug,
+            type: workspace.type
+          }
+        })
+        .from(projectMember)
+        .innerJoin(project, eq(projectMember.projectId, project.id))
+        .innerJoin(workspace, eq(project.workspaceId, workspace.id))
+        .where(eq(projectMember.userId, userData.id));
+
+      const workspacesResult = await this.drizzleService.db
+        .select({
+          workspace: {
+            uid: workspace.uid,
+            name: workspace.name,
+            slug: workspace.slug,
+            type: workspace.type,
+            description: workspace.description,
+            isActive: workspace.isActive,
+            createdAt: workspace.createdAt
+          },
+          workspaceRole: workspaceMember.role,
+          memberStatus: workspaceMember.status
+        })
+        .from(workspaceMember)
+        .innerJoin(workspace, eq(workspaceMember.workspaceId, workspace.id))
+        .where(eq(workspaceMember.userId, userData.id));
+
+      return {
+        message: 'User projects and workspaces fetched successfully',
+        statusCode: 200,
+        error: null,
+        data: {
+          projects: projectsResult.map(({ project, projectRole, workspace }) => ({
+            ...project,
+            userRole: projectRole,
+            workspace: workspace
+          })),
+          workspaces: workspacesResult.map(({ workspace, workspaceRole, memberStatus }) => ({
+            ...workspace,
+            userRole: workspaceRole,
+            memberStatus: memberStatus
+          }))
+        },
+        code: 'user_projects_workspaces_fetched',
+      };
+    } catch (error) {
+      console.error('Error fetching user projects and workspaces:', error);
+      return {
+        message: 'Failed to fetch user projects and workspaces',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'user_projects_workspaces_fetch_failed',
+      };
+    }
+  }
+
+  async getMemberRoleFromUid(projectUid: string, userId: number): Promise<ProjectGuardResponse | null> {
+    try {
+      const projectData = await this.drizzleService.db
+        .select()
+        .from(project)
+        .where(eq(project.uid, projectUid))
+        .then(results => {
+          if (results.length === 0) throw new NotFoundException('Project not found');
+          return results[0];
+        });
+
+      if (!projectData) {
+        throw new NotFoundException('Project not found');
+      }
+
+      const membershipQuery = await this.drizzleService.db
+        .select({ role: projectMember.projectRole, userId: projectMember.userId, siteAccess: projectMember.siteAccess, restrictedSites: projectMember.restrictedSites })
+        .from(projectMember)
+        .where(
+          and(
+            eq(projectMember.projectId, projectData.id),
+            eq(projectMember.userId, userId)
+          )
+        )
+        .limit(1);
+      const payload = membershipQuery.length > 0 ? { projectName: projectData.name, projectId: projectData.id, role: membershipQuery[0].role, userId: membershipQuery[0].userId, siteAccess: membershipQuery[0].siteAccess, restrictedSites: membershipQuery[0].restrictedSites } : null
+      if (payload) {
+        await this.projectCacheService.setUserProject(projectData.uid, userId, payload)
+      }
+      return payload
+    } catch (error) {
+      console.error('Error fetching member role:', error);
+      return null;
+    }
+  }
+
+
+
   // private getGeoJSONForPostGIS(locationInput: any): any {
   //   if (!locationInput) {
   //     return null;
@@ -119,15 +332,7 @@ export class ProjectsService {
   //   throw new BadRequestException('Invalid GeoJSON format');
   // }
 
-  // private generateSlug(projectName: string): string {
-  //   return projectName
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-  //     .replace(/\s+/g, '-')         // Replace spaces with hyphens
-  //     .replace(/-+/g, '-')          // Replace multiple hyphens with single
-  //     .trim()
-  //     .substring(0, 255); // Ensure it fits in varchar(255)
-  // }
+
 
   // async createNewProject(createProjectDto: CreateProjectDto, userData: User): Promise<any> {
   //   try {
@@ -220,86 +425,7 @@ export class ProjectsService {
   //   }
   // }
 
-  // // async createPersonalProject(name: string, userId: number, primaryWorkspaceId: number, auth0Id: string): Promise<any> {
-  // //   try {
-  // //     const existingProject = await this.drizzleService.db
-  // //       .select({ id: projects.id })
-  // //       .from(projects)
-  // //       .where(
-  // //         and(
-  // //           eq(projects.isPersonal, true),
-  // //           eq(projects.createdById, userId),
-  // //           eq(projects.workspaceId, primaryWorkspaceId)
-  // //         )
-  // //       )
-  // //       .limit(1);
 
-  // //     if (existingProject.length > 0) {
-  // //       return {
-  // //         message: 'Personal project already exists in this workspace',
-  // //         statusCode: 409,
-  // //         error: 'personal_project_exists',
-  // //         data: null,
-  // //         code: 'personal_project_exists',
-  // //       };
-  // //     }
-
-  // //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  // //       const [project] = await tx
-  // //         .insert(projects)
-  // //         .values({
-  // //           uid: generateUid('proj'),
-  // //           createdById: userId,
-  // //           workspaceId: primaryWorkspaceId,
-  // //           slug: `${this.generateSlug(name)}-${Date.now()}`,
-  // //           projectName: `${name}'s personal project`,
-  // //           isPersonal: true,
-  // //         })
-  // //         .returning();
-
-  // //       await tx
-  // //         .insert(projectMembers)
-  // //         .values({
-  // //           uid: generateUid('mem'),
-  // //           projectId: project.id,
-  // //           userId: userId,
-  // //           workspaceId: primaryWorkspaceId,
-  // //           projectRole: 'owner',
-  // //           joinedAt: new Date(),
-  // //         });
-  // //       await tx.update(users)
-  // //         .set({ primaryWorkspace: primaryWorkspaceId, primaryProject: project.id })
-  // //         .where(eq(users.id, userId)),
-  // //         await this.cacheService.delete(CACHE_KEYS.USER.BY_AUTH0_ID(auth0Id));
-  // //       this.notificationService.createNotification({
-  // //         userId: userId,
-  // //         type: NotificationType.PROJECT_UPDATE,
-  // //         title: 'Personal Project Created',
-  // //         message: `Your personal project ${name} has been created successfully.`
-  // //       }).catch(err => console.error('Notification failed:', err));
-
-  // //       return project;
-  // //     });
-
-  // //     return {
-  // //       message: 'Personal project created successfully',
-  // //       statusCode: 201,
-  // //       error: null,
-  // //       data: result,
-  // //       code: 'personal_project_created',
-  // //     };
-
-  // //   } catch (error) {
-  // //     console.error('Error creating personal project:', error);
-  // //     return {
-  // //       message: 'Failed to create personal project',
-  // //       statusCode: 500,
-  // //       error: error.message || 'internal_server_error',
-  // //       data: null,
-  // //       code: 'personal_project_creation_failed',
-  // //     };
-  // //   }
-  // // }
 
   // // async findAll(userId: number, primaryOrg: number) {
   // //   try {
@@ -344,119 +470,6 @@ export class ProjectsService {
   // //   }
   // // }
 
-
-
-  // async findProjectsAndWorkspace(userData: User) {
-  //   try {
-  //     const projectsResult = await this.drizzleService.db
-  //       .select({
-  //         project: {
-  //           uid: project.uid,
-  //           slug: project.slug,
-  //           projectName: project.projectName,
-  //           projectType: project.projectType,
-  //           target: project.target,
-  //           description: project.description,
-  //           createdAt: project.createdAt,
-  //           updatedAt: project.updatedAt,
-  //           location: project.originalGeometry
-  //         },
-  //         projectRole: projectMember.projectRole,
-  //         workspace: {
-  //           uid: workspace.uid,
-  //           name: workspace.name,
-  //           slug: workspace.slug,
-  //           type: workspace.type
-  //         }
-  //       })
-  //       .from(projectMember)
-  //       .innerJoin(project, eq(projectMember.projectId, project.id))
-  //       .innerJoin(workspace, eq(project.workspaceId, workspace.id))
-  //       .where(eq(projectMember.userId, userData.id));
-
-  //     const workspacesResult = await this.drizzleService.db
-  //       .select({
-  //         workspace: {
-  //           uid: workspace.uid,
-  //           name: workspace.name,
-  //           slug: workspace.slug,
-  //           type: workspace.type,
-  //           description: workspace.description,
-  //           isActive: workspace.isActive,
-  //           createdAt: workspace.createdAt
-  //         },
-  //         workspaceRole: workspaceMember.role,
-  //         memberStatus: workspaceMember.status
-  //       })
-  //       .from(workspaceMember)
-  //       .innerJoin(workspace, eq(workspaceMember.workspaceId, workspace.id))
-  //       .where(eq(workspaceMember.userId, userData.id));
-
-  //     return {
-  //       message: 'User projects and workspaces fetched successfully',
-  //       statusCode: 200,
-  //       error: null,
-  //       data: {
-  //         projects: projectsResult.map(({ project, projectRole, workspace }) => ({
-  //           ...project,
-  //           userRole: projectRole,
-  //           workspace: workspace
-  //         })),
-  //         workspaces: workspacesResult.map(({ workspace, workspaceRole, memberStatus }) => ({
-  //           ...workspace,
-  //           userRole: workspaceRole,
-  //           memberStatus: memberStatus
-  //         }))
-  //       },
-  //       code: 'user_projects_workspaces_fetched',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error fetching user projects and workspaces:', error);
-  //     return {
-  //       message: 'Failed to fetch user projects and workspaces',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'user_projects_workspaces_fetch_failed',
-  //     };
-  //   }
-  // }
-
-  // async getMemberRoleFromUid(projectUid: string, userId: number): Promise<ProjectGuardResponse | null> {
-  //   try {
-  //     const projectData = await this.drizzleService.db
-  //       .select()
-  //       .from(project)
-  //       .where(eq(project.uid, projectUid))
-  //       .then(results => {
-  //         if (results.length === 0) throw new NotFoundException('Project not found');
-  //         return results[0];
-  //       });
-
-  //     if (!projectData) {
-  //       throw new NotFoundException('Project not found');
-  //     }
-
-  //     const membershipQuery = await this.drizzleService.db
-  //       .select({ role: projectMember.projectRole, userId: projectMember.userId, siteAccess: projectMember.siteAccess, restrictedSites: projectMember.restrictedSites })
-  //       .from(projectMember)
-  //       .where(
-  //         and(
-  //           eq(projectMember.projectId, projectData.id),
-  //           eq(projectMember.userId, userId)
-  //         )
-  //       )
-  //       .limit(1);
-  //     const payload = membershipQuery.length > 0 ? { projectName: projectData.projectName, projectId: projectData.id, role: membershipQuery[0].role, userId: membershipQuery[0].userId, siteAccess: membershipQuery[0].siteAccess, restrictedSites: membershipQuery[0].restrictedSites } : null
-  //     if (payload) {
-  //       await this.projectCacheService.setUserProject(projectData.uid, userId, payload)
-  //     }
-  //     return payload
-  //   } catch (error) {
-  //     console.error('Error fetching member role:', error);
-  //     return null;
-  //   }
-  // }
 
 
   // async getProjectMembersAndInvitations(membership: ProjectGuardResponse): Promise<ProjectMembersAndInvitesResponse> {

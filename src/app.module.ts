@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MemoryCacheMoudle } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { StartupModule } from './startup/startup.module';
 import { ProjectsModule } from './projects/projects.module';
 import { SitesModule } from './sites/sites.module';
 import { InterventionsModule } from './interventions/interventions.module';
@@ -23,7 +24,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     UsersModule,
     MemoryCacheMoudle,
     WorkspaceModule,
-    // ProjectsModule,
+    StartupModule,
+    ProjectsModule,
     // SitesModule,
     // InterventionsModule,
     // SpeciesModule,
