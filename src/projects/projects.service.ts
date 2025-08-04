@@ -323,13 +323,15 @@ export class ProjectsService {
           )
         )
         .limit(1);
+      if (!membershipQuery) {
+        throw new NotFoundException('Role not found');
+      }
       const payload = membershipQuery.length > 0 ? { projectName: projectData.name, projectId: projectData.id, role: membershipQuery[0].role, userId: membershipQuery[0].userId, siteAccess: membershipQuery[0].siteAccess, restrictedSites: membershipQuery[0].restrictedSites } : null
       if (payload) {
         await this.projectCacheService.setUserProject(projectData.uid, userId, payload)
       }
       return payload
     } catch (error) {
-      console.error('Error fetching member role:', error);
       return null;
     }
   }
@@ -393,6 +395,1079 @@ export class ProjectsService {
     }
   }
 
+  async inviteMember(email: string, role: string, membership: ProjectGuardResponse, currentUser: User, message?: string): Promise<any> {
+    try {
+      const existingUser = await this.drizzleService.db
+        .select()
+        .from(user)
+        .where(eq(user.email, email))
+        .then(results => results[0] || null);
+
+      if (existingUser) {
+        const existingMembership = await this.drizzleService.db
+          .select()
+          .from(projectMember)
+          .where(
+            and(
+              eq(projectMember.projectId, membership.projectId),
+              eq(projectMember.userId, existingUser.id)
+            )
+          )
+          .then(results => results[0] || null);
+
+        if (existingMembership) {
+          return {
+            message: 'User is already a member of this project',
+            statusCode: 409,
+            error: "conflict",
+            data: null,
+            code: 'user_already_member',
+          };
+        }
+      }
+
+      const existingInvite = await this.drizzleService.db
+        .select()
+        .from(projectInvites)
+        .where(
+          and(
+            eq(projectInvites.projectId, membership.projectId),
+            eq(projectInvites.email, email),
+            eq(projectInvites.status, 'pending')
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (existingInvite) {
+        return {
+          message: 'An invite has already been sent to this email',
+          statusCode: 409,
+          error: "conflict",
+          data: null,
+          code: 'invite_already_sent',
+        };
+      }
+
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 7);
+
+      const [invitation] = await this.drizzleService.db
+        .insert(projectInvites)
+        .values({
+          projectId: membership.projectId,
+          uid: generateUid('invi'),
+          email,
+          projectRole: role as 'owner' | 'admin' | 'contributor' | 'observer',
+          invitedById: membership.userId,
+          expiresAt: expiryDate,
+          message: message || '',
+          token: uuidv4(),
+        })
+        .returning();
+
+      await this.emailService.sendProjectInviteEmail({
+        email,
+        projectName: membership.projectName,
+        role,
+        inviterName: currentUser.displayName || '',
+        token: invitation.token,
+        expiresAt: expiryDate,
+      });
+
+      return {
+        message: 'Invitation sent successfully',
+        statusCode: 201,
+        error: null,
+        data: invitation,
+        code: 'invitation_sent',
+      };
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+      return {
+        message: 'Failed to send invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'invitation_send_failed',
+      };
+    }
+  }
+
+  async getProjectMembersAndInvitations(membership: ProjectGuardResponse): Promise<ProjectMembersAndInvitesResponse> {
+    const members = await this.drizzleService.db
+      .select({
+        role: projectMember.projectRole,
+        joinedAt: projectMember.joinedAt,
+        invitedAt: projectMember.invitedAt,
+        user: {
+          name: user.displayName,
+          email: user.email,
+          image: user.image,
+          isActive: user.isActive,
+          uid: user.uid,
+        }
+      })
+      .from(projectMember)
+      .innerJoin(user, eq(user.id, projectMember.userId))
+      .where(eq(projectMember.projectId, membership.projectId))
+      .orderBy(desc(projectMember.joinedAt));
+
+    const invitations = await this.drizzleService.db
+      .select({
+        uid: projectInvites.uid,
+        email: projectInvites.email,
+        role: projectInvites.projectRole,
+        status: projectInvites.status,
+        message: projectInvites.message,
+        expiresAt: projectInvites.expiresAt,
+        acceptedAt: projectInvites.acceptedAt,
+        createdAt: projectInvites.createdAt,
+        token: projectInvites.token,
+        invitedBy: {
+          uid: user.uid,
+          email: user.email,
+          name: user.displayName,
+        }
+      })
+      .from(projectInvites)
+      .innerJoin(user, eq(projectInvites.invitedById, user.id))
+      .where(
+        and(
+          eq(projectInvites.projectId, membership.projectId),
+          eq(projectInvites.status, 'pending')
+        )
+      )
+      .orderBy(desc(projectInvites.createdAt));
+
+    return {
+      members,
+      invitations
+    };
+  }
+
+  async expireInvite(token: string, userData: User) {
+    try {
+      const invite = await this.drizzleService.db
+        .select({
+          invite: projectInvites,
+        })
+        .from(projectInvites)
+        .where(
+          and(
+            eq(projectInvites.token, token),
+            eq(projectInvites.status, 'pending'),
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (!invite) {
+        return {
+          message: 'Invitation not found or already processed',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'invitation_not_found',
+        };
+      }
+
+      await this.drizzleService.db
+        .update(projectInvites)
+        .set({
+          status: 'discarded',
+          discardedAt: new Date(),
+          discardedById: userData.id,
+          updatedAt: new Date()
+        })
+        .where(eq(projectInvites.id, invite.invite.id));
+
+      return {
+        message: `Invitation discarded`,
+        statusCode: 200,
+        error: null,
+        data: null,
+        code: 'invite_declined',
+      };
+    } catch (error) {
+      console.error('Error declining invite:', error);
+      return {
+        message: 'Failed to decline invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'decline_invite_failed',
+      };
+    }
+  }
+
+  async getProjectInviteLink(memerShip: ProjectGuardResponse): Promise<any> {
+    try {
+      const inviteResult = await this.drizzleService.db
+        .select({
+          id: bulkInvite.uid,
+          invitationlink: bulkInvite.token,
+          domain_restriction: bulkInvite.emailDomainRestrictions,
+          created_at: bulkInvite.createdAt,
+          created_by: user.displayName,
+        })
+        .from(bulkInvite)
+        .innerJoin(user, eq(bulkInvite.invitedById, user.id))
+        .where(
+          and(
+            eq(bulkInvite.projectId, memerShip.projectId),
+            isNull(bulkInvite.deletedAt)
+          )
+        )
+
+      if (!inviteResult) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+
+      return inviteResult ? inviteResult : [];
+
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error fetching project invite status:', error);
+      throw new Error('Failed to fetch invitation details');
+    }
+  }
+
+  async createInviteLink(membership: ProjectGuardResponse, data: any): Promise<any> {
+    try {
+
+      data.restriction.forEach((el: string, index: number) => {
+        if (!isValidEmailDomain(el)) {
+          throw new BadRequestException(`Invalid email domain: ${el}`);
+        }
+        if (!el.startsWith('@')) {
+          data.restriction[index] = '@' + el;
+        }
+      })
+
+      // Create invitation
+      const expiryDate = new Date(data.expiry);
+
+
+      const result = await this.drizzleService.db
+        .insert(bulkInvite)
+        .values({
+          projectId: membership.projectId,
+          invitedById: membership.userId,
+          token: uuidv4(),
+          uid: generateUid('invi'),
+          projectRole: 'contributor',
+          expiresAt: expiryDate,
+          message: '',
+          emailDomainRestrictions: data.restriction
+        })
+        .returning();
+
+      if (!result) {
+        throw ''
+      }
+
+      return {
+        message: 'Invitation Link Created',
+        statusCode: 201,
+        error: null,
+        data: {
+          link: result[0].token
+        },
+        code: 'invitation_link_created',
+      };
+    } catch (error) {
+      return {
+        message: 'Failed to created invitation link',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'invitation_send_failed',
+      };
+    }
+  }
+
+  async removeInviteLink(myMembership: ProjectGuardResponse, uid: string) {
+    try {
+      if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
+        return {
+          message: 'You do not have permission to remove members',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'remove_member_permission_denied',
+        };
+      }
+
+      await this.drizzleService.db
+        .update(bulkInvite)
+        .set({ deletedAt: new Date(), expiresAt: new Date(), discardedAt: new Date(), discardedById: myMembership.userId })
+        .where(
+          and(
+            eq(bulkInvite.uid, uid)
+          )
+        );
+
+      return {
+        message: 'Link removed successfully',
+        statusCode: 200,
+        error: null,
+        data: { success: true },
+        code: 'member_removed',
+      };
+    } catch (error) {
+      return {
+        message: 'Failed to remove link',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'remove_member_failed',
+      };
+    }
+  }
+
+  async getProjectInviteStatus(token: string, email: string): Promise<ProjectInviteStatusResponse> {
+    try {
+      const inviteResult = await this.drizzleService.db
+        .select({
+          invite: {
+            uid: projectInvites.uid,
+            email: projectInvites.email,
+            role: projectInvites.projectRole,
+            message: projectInvites.message,
+            status: projectInvites.status,
+            expiresAt: projectInvites.expiresAt,
+            createdAt: projectInvites.createdAt,
+            projectId: projectInvites.projectId,
+          },
+          project: {
+            uid: project.uid,
+            name: project.name,
+            description: project.description,
+            slug: project.slug,
+            country: project.country,
+            image: project.image,
+          },
+          invitedBy: {
+            uid: user.uid,
+            name: user.displayName,
+            email: user.email,
+            displayName: user.displayName,
+            image: user.image,
+          }
+        })
+        .from(projectInvites)
+        .innerJoin(project, eq(projectInvites.projectId, project.id))
+        .innerJoin(user, eq(projectInvites.invitedById, user.id))
+        .where(eq(projectInvites.token, token))
+        .orderBy(desc(projectInvites.createdAt))
+        .limit(1);
+      if (!inviteResult.length) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+      const result = inviteResult[0];
+
+      // Verify email matches
+      if (result.invite.email.toLowerCase() !== email.toLowerCase()) {
+        throw new UnauthorizedException('Email does not match invitation');
+      }
+
+      // Check if invite is expired
+      const now = new Date();
+      const isExpired = result.invite.expiresAt < now;
+
+      // Prepare and return response data
+      return {
+        uid: result.invite.uid,
+        email: result.invite.email,
+        role: result.invite.role,
+        message: result.invite.message,
+        status: result.invite.status,
+        expiresAt: result.invite.expiresAt,
+        createdAt: result.invite.createdAt,
+        isExpired,
+        project: {
+          uid: result.project.uid,
+          name: result.project.name,
+          description: result.project.description,
+          slug: result.project.slug,
+          country: result.project.country,
+          image: result.project.image,
+        },
+        invitedBy: {
+          uid: result.invitedBy.uid,
+          name: result.invitedBy.name,
+          email: result.invitedBy.email,
+          displayName: result.invitedBy.displayName,
+          image: result.invitedBy.image,
+        }
+      };
+
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      console.error('Error fetching project invite status:', error);
+      throw new Error('Failed to fetch invitation details');
+    }
+  }
+
+
+
+
+  async acceptInvite(token: string, userId: number, email: string) {
+    try {
+      const invite = await this.drizzleService.db
+        .select({
+          invite: projectInvites,
+          project: project,
+          inviter: user,
+          workspace: workspace,
+        })
+        .from(projectInvites)
+        .innerJoin(project, eq(projectInvites.projectId, project.id))
+        .innerJoin(workspace, eq(project.workspaceId, workspace.id))
+        .innerJoin(user, eq(projectInvites.invitedById, user.id))
+        .where(
+          and(
+            eq(projectInvites.token, token),
+            eq(projectInvites.email, email),
+            eq(projectInvites.status, 'pending'),
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (!invite) {
+        return {
+          message: 'Invitation not found or already processed',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'invitation_not_found',
+        };
+      }
+
+      if (new Date(invite.invite.expiresAt) < new Date()) {
+        // await this.drizzleService.db TODO: Expire invite here
+        //   .update(projectInvites)
+        //   .set({status:new Date(),})
+        //   .innerJoin(project, eq(projectInvites.projectId, project.id))
+        //   .innerJoin(workspace, eq(project.workspaceId, workspace.id))
+        //   .innerJoin(user, eq(projectInvites.invitedById, user.id))
+        //   .where(
+        //     and(
+        //       eq(projectInvites.token, token),
+        //       eq(projectInvites.email, email),
+        //       eq(projectInvites.status, 'pending'),
+        //     )
+        //   )
+        return {
+          message: 'Invitation has expired',
+          statusCode: 400,
+          error: "expired",
+          data: null,
+          code: 'invitation_expired',
+        };
+      }
+
+      // Check existing memberships in parallel
+      const [existingProjectMember, existingWorkspaceMember] = await Promise.all([
+        this.drizzleService.db
+          .select()
+          .from(projectMember)
+          .where(
+            and(
+              eq(projectMember.projectId, invite.invite.projectId),
+              eq(projectMember.userId, userId),
+            )
+          )
+          .then(results => results[0] || null),
+
+        this.drizzleService.db
+          .select()
+          .from(workspaceMember)
+          .where(
+            and(
+              eq(workspaceMember.workspaceId, invite.workspace.id),
+              eq(workspaceMember.userId, userId),
+            )
+          )
+          .then(results => results[0] || null)
+      ]);
+
+      if (existingProjectMember) {
+        return {
+          message: 'You are already a member of this project',
+          statusCode: 409,
+          error: "conflict",
+          data: null,
+          code: 'already_member',
+        };
+      }
+
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        if (!existingWorkspaceMember) {
+          await tx
+            .insert(workspaceMember)
+            .values({
+              uid: generateUid('workmem'),
+              workspaceId: invite.workspace.id,
+              userId: userId,
+              role: 'member',
+              status: 'active',
+              joinedAt: new Date(),
+            });
+        }
+
+        const [membership] = await tx
+          .insert(projectMember)
+          .values({
+            projectId: invite.invite.projectId,
+            userId: userId,
+            uid: generateUid('projmem'),
+            projectRole: invite.invite.projectRole,
+            joinedAt: new Date(),
+          })
+          .returning();
+
+        await tx
+          .update(projectInvites)
+          .set({
+            status: 'accepted',
+            acceptedAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(projectInvites.id, invite.invite.id));
+
+        return membership;
+      });
+
+      return {
+        message: `You have successfully joined ${invite.project.name}`,
+        statusCode: 200,
+        error: null,
+        data: {
+          projectId: invite.project.id,
+          workspaceId: invite.workspace.id,
+          projectRole: result.projectRole,
+          addedToWorkspace: !existingWorkspaceMember,
+        },
+        code: 'invite_accepted',
+      };
+    } catch (error) {
+      console.error('Error accepting invite:', error);
+      return {
+        message: 'Failed to accept invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'accept_invite_failed',
+      };
+    }
+  }
+
+  async declineInvite(token: string, email: string) {
+    try {
+      const invite = await this.drizzleService.db
+        .select({
+          invite: projectInvites,
+          project: project,
+          inviter: user,
+        })
+        .from(projectInvites)
+        .innerJoin(project, eq(projectInvites.projectId, project.id))
+        .innerJoin(user, eq(projectInvites.invitedById, user.id))
+        .where(
+          and(
+            eq(projectInvites.token, token),
+            eq(projectInvites.email, email),
+            eq(projectInvites.status, 'pending'),
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (!invite) {
+        return {
+          message: 'Invitation not found or already processed',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'invitation_not_found',
+        };
+      }
+
+      await this.drizzleService.db
+        .update(projectInvites)
+        .set({
+          status: 'declined',
+          updatedAt: new Date()
+        })
+        .where(eq(projectInvites.id, invite.invite.id));
+
+      return {
+        message: `You have declined the invitation to join ${invite.project.name}`,
+        statusCode: 200,
+        error: null,
+        data: null,
+        code: 'invite_declined',
+      };
+    } catch (error) {
+      console.error('Error declining invite:', error);
+      return {
+        message: 'Failed to decline invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'decline_invite_failed',
+      };
+    }
+  }
+
+  async updateMemberRole(
+    memberId: string,
+    myMembership: ProjectGuardResponse,
+    updateRoleDto: UpdateProjectRoleDto,
+  ) {
+    try {
+      if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
+        return {
+          message: 'You do not have permission to update member roles',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'update_role_permission_denied',
+        };
+      }
+
+      // Find the member to update
+      const memberQuery = await this.drizzleService.db
+        .select({
+          member: projectMember,
+          user: user,
+        })
+        .from(projectMember)
+        .innerJoin(user, eq(user.uid, memberId))
+        .where(
+          and(
+            eq(projectMember.projectId, myMembership.projectId),
+            eq(projectMember.userId, user.id)
+          )
+        );
+
+      if (memberQuery.length === 0) {
+        return {
+          message: 'Member not found in this project',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'member_not_found',
+        };
+      }
+
+      const memberToUpdate = memberQuery[0];
+
+      // Cannot change owner's role
+      if (memberToUpdate.member.projectRole === 'owner') {
+        return {
+          message: 'Cannot change the role of the project owner',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'cannot_change_owner_role',
+        };
+      }
+
+      // Admin cannot change another admin's role (only owner can)
+      if (myMembership.role === 'admin' && memberToUpdate.member.projectRole === 'admin') {
+        return {
+          message: 'Admin cannot change another admin\'s role',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'admin_cannot_change_admin_role',
+        };
+      }
+
+      // Update role
+      const [result] = await this.drizzleService.db
+        .update(projectMember)
+        .set({
+          projectRole: updateRoleDto.role,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(projectMember.projectId, myMembership.projectId),
+            eq(projectMember.userId, memberToUpdate.user.id)
+          )
+        )
+        .returning();
+
+      return {
+        message: 'Member role updated successfully',
+        statusCode: 200,
+        error: null,
+        data: {
+          userId: memberId,
+          name: memberToUpdate.user.displayName,
+          email: memberToUpdate.user.email,
+          role: result.projectRole,
+        },
+        code: 'member_role_updated',
+      };
+    } catch (error) {
+      console.error('Error updating member role:', error);
+      return {
+        message: 'Failed to update member role',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'update_member_role_failed',
+      };
+    }
+  }
+
+  async removeMember(projectId: string, memberId: string, myMembership: ProjectGuardResponse, currentUserId: number) {
+    try {
+
+
+      if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
+        return {
+          message: 'You do not have permission to remove members',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'remove_member_permission_denied',
+        };
+      }
+
+
+      // Find the member to remove
+      const memberQuery = await this.drizzleService.db
+        .select()
+        .from(projectMember)
+        .innerJoin(user, eq(user.uid, memberId))
+        .where(
+          and(
+            eq(projectMember.projectId, myMembership.projectId),
+            eq(projectMember.userId, user.id),
+          )
+        );
+
+      if (memberQuery.length === 0) {
+        return {
+          message: 'Member not found in this project',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'member_not_found',
+        };
+      }
+
+      const memberToRemove = memberQuery[0];
+
+      // Cannot remove the owner
+      if (memberToRemove.project_member.projectRole === 'owner') {
+        return {
+          message: 'Cannot remove the project owner',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'cannot_remove_owner',
+        };
+      }
+
+      // Admin cannot remove another admin (only owner can)
+      if (memberToRemove.project_member.projectRole === 'admin' && myMembership.role === 'admin') {
+        return {
+          message: 'Admin cannot remove another admin',
+          statusCode: 403,
+          error: "forbidden",
+          data: null,
+          code: 'admin_cannot_remove_admin',
+        };
+      }
+
+      // Remove member
+      await this.drizzleService.db
+        .delete(projectMember)
+        .where(
+          and(
+            eq(projectMember.projectId, myMembership.projectId),
+            eq(projectMember.userId, memberToRemove.user.id)
+          )
+        );
+
+      return {
+        message: 'Member removed successfully',
+        statusCode: 200,
+        error: null,
+        data: { success: true },
+        code: 'member_removed',
+      };
+    } catch (error) {
+      console.error('Error removing member:', error);
+      return {
+        message: 'Failed to remove member',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'remove_member_failed',
+      };
+    }
+  }
+
+   async getProjectSingleLinkStatus(token: string): Promise<ProjectInviteStatusResponse> {
+    try {
+      const inviteResult = await this.drizzleService.db
+        .select({
+          invite: {
+            uid: bulkInvite.uid,
+            email: bulkInvite.emailDomainRestrictions,
+            role: bulkInvite.projectRole,
+            message: bulkInvite.message,
+            status: bulkInvite.status,
+            expiresAt: bulkInvite.expiresAt,
+            createdAt: bulkInvite.createdAt,
+            projectId: bulkInvite.projectId,
+          },
+          project: {
+            uid: project.uid,
+            name: project.name,
+            description: project.description,
+            slug: project.slug,
+            country: project.country,
+            image: project.image,
+          },
+          invitedBy: {
+            uid: user.uid,
+            name: user.displayName,
+            email: user.email,
+            displayName: user.displayName,
+            image: user.image,
+          }
+        })
+        .from(bulkInvite)
+        .innerJoin(project, eq(bulkInvite.projectId, project.id))
+        .innerJoin(user, eq(bulkInvite.invitedById, user.id))
+        .where(eq(bulkInvite.token, token))
+
+      if (!inviteResult.length) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+      const result = inviteResult[0];
+
+
+      // Check if invite is expired
+      const now = new Date();
+      const isExpired = result.invite.expiresAt < now;
+
+      // Prepare and return response data
+      return {
+        uid: result.invite.uid,
+        email: '',
+        role: result.invite.role,
+        message: result.invite.message,
+        status: result.invite.status || '',
+        expiresAt: result.invite.expiresAt,
+        createdAt: result.invite.createdAt || new Date(),
+        isExpired,
+        project: {
+          uid: result.project.uid,
+          name: result.project.name,
+          description: result.project.description,
+          slug: result.project.slug,
+          country: result.project.country,
+          image: result.project.image,
+        },
+        invitedBy: {
+          uid: result.invitedBy.uid,
+          name: result.invitedBy.name,
+          email: result.invitedBy.email,
+          displayName: result.invitedBy.displayName,
+          image: result.invitedBy.image,
+        }
+      };
+
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      console.error('Error fetching project invite status:', error);
+      throw new Error('Failed to fetch invitation details');
+    }
+  }
+
+  async acceptLinkInvite(token: string, userId: number, email: string) {
+    try {
+      // Get bulk invite with project and workspace details in single query
+      const invite = await this.drizzleService.db
+        .select({
+          invite: bulkInvite,
+          project: project,
+          inviter: user,
+          workspace: workspace,
+        })
+        .from(bulkInvite)
+        .innerJoin(project, eq(bulkInvite.projectId, project.id))
+        .innerJoin(workspace, eq(project.workspaceId, workspace.id))
+        .innerJoin(user, eq(bulkInvite.invitedById, user.id))
+        .where(
+          and(
+            eq(bulkInvite.token, token),
+            eq(bulkInvite.status, 'pending') // Add status check
+          )
+        )
+        .then(results => results[0] || null);
+
+      if (!invite) {
+        return {
+          message: 'Invitation link is invalid or has been processed',
+          statusCode: 404,
+          error: "not_found",
+          data: null,
+          code: 'invitation_not_found',
+        };
+      }
+
+      if (new Date(invite.invite.expiresAt) < new Date()) {
+        return {
+          message: 'Invitation has expired',
+          statusCode: 400,
+          error: "expired",
+          data: null,
+          code: 'invitation_expired',
+        };
+      }
+
+      // Check domain restriction if exists
+      if (invite.invite.emailDomainRestrictions && invite.invite.emailDomainRestrictions.length > 0) {
+        try {
+          const emailDomain = email.substring(email.indexOf('@'));
+          if (!invite.invite.emailDomainRestrictions.includes(emailDomain)) {
+            return {
+              message: 'Your email domain is not authorized for this invitation',
+              statusCode: 403,
+              error: "forbidden",
+              data: null,
+              code: 'domain_not_authorized',
+            };
+          }
+        } catch (error) {
+          return {
+            message: 'Invalid email format',
+            statusCode: 400,
+            error: "bad_request",
+            data: null,
+            code: 'invalid_email',
+          };
+        }
+      }
+
+      // Check existing memberships in parallel
+      const [existingProjectMember, existingWorkspaceMember] = await Promise.all([
+        this.drizzleService.db
+          .select()
+          .from(projectMember)
+          .where(
+            and(
+              eq(projectMember.projectId, invite.invite.projectId),
+              eq(projectMember.userId, userId),
+            )
+          )
+          .then(results => results[0] || null),
+        this.drizzleService.db
+          .select()
+          .from(workspaceMember)
+          .where(
+            and(
+              eq(workspaceMember.workspaceId, invite.workspace.id),
+              eq(workspaceMember.userId, userId),
+            )
+          )
+          .then(results => results[0] || null)
+      ]);
+
+      if (existingProjectMember) {
+        return {
+          message: 'You are already a member of this project',
+          statusCode: 409,
+          error: "conflict",
+          data: null,
+          code: 'already_member',
+        };
+      }
+
+
+      // Use transaction to ensure data consistency
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        // Add to workspace if not already a member
+        if (!existingWorkspaceMember) {
+          await tx
+            .insert(workspaceMember)
+            .values({
+              uid: generateUid('workmem'),
+              workspaceId: invite.workspace.id,
+              userId: userId,
+              role: 'member', // default workspace role
+              status: 'active',
+              joinedAt: new Date(),
+            });
+        }
+
+        // Add user as project member
+        const [membership] = await tx
+          .insert(projectMember)
+          .values({
+            projectId: invite.invite.projectId,
+            userId: userId,
+            uid: generateUid('projmem'),
+            projectRole: invite.invite.projectRole,
+            joinedAt: new Date(),
+            bulkInviteId: invite.invite.id,
+            siteAccess: 'limited_access',
+            restrictedSites: []
+          })
+          .returning();
+
+        return membership;
+      });
+
+      return {
+        message: `You have successfully joined ${invite.project.name}`,
+        statusCode: 200,
+        error: null,
+        data: {
+          projectId: invite.project.id,
+          workspaceId: invite.workspace.id,
+          projectRole: result.projectRole,
+          addedToWorkspace: !existingWorkspaceMember,
+          inviteType: 'bulk_link',
+        },
+        code: 'invite_accepted',
+      };
+    } catch (error) {
+      console.error('Error accepting link invite:', error);
+      return {
+        message: 'Failed to accept invitation',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'accept_invite_failed',
+      };
+    }
+  }
+
+ 
+
+
+
+  
 
 
   // // async findAll(userId: number, primaryOrg: number) {
@@ -440,843 +1515,20 @@ export class ProjectsService {
 
 
 
-  // async getProjectMembersAndInvitations(membership: ProjectGuardResponse): Promise<ProjectMembersAndInvitesResponse> {
-  //   const members = await this.drizzleService.db
-  //     .select({
-  //       role: projectMember.projectRole,
-  //       joinedAt: projectMember.joinedAt,
-  //       invitedAt: projectMember.invitedAt,
-  //       user: {
-  //         name: user.displayName,
-  //         email: user.email,
-  //         image: user.image,
-  //         isActive: user.isActive,
-  //         uid: user.uid,
-  //       }
-  //     })
-  //     .from(projectMember)
-  //     .innerJoin(user, eq(user.id, projectMember.userId))
-  //     .where(eq(projectMember.projectId, membership.projectId))
-  //     .orderBy(desc(projectMember.joinedAt));
 
-  //   const invitations = await this.drizzleService.db
-  //     .select({
-  //       uid: projectInvites.uid,
-  //       email: projectInvites.email,
-  //       role: projectInvites.projectRole,
-  //       status: projectInvites.status,
-  //       message: projectInvites.message,
-  //       expiresAt: projectInvites.expiresAt,
-  //       acceptedAt: projectInvites.acceptedAt,
-  //       createdAt: projectInvites.createdAt,
-  //       token: projectInvites.token,
-  //       invitedBy: {
-  //         uid: user.uid,
-  //         email: user.email,
-  //         name: user.displayName,
-  //       }
-  //     })
-  //     .from(projectInvites)
-  //     .innerJoin(user, eq(projectInvites.invitedById, user.id))
-  //     .where(
-  //       and(
-  //         eq(projectInvites.projectId, membership.projectId),
-  //         eq(projectInvites.status, 'pending')
-  //       )
-  //     )
-  //     .orderBy(desc(projectInvites.createdAt));
 
-  //   return {
-  //     members,
-  //     invitations
-  //   };
-  // }
 
 
 
-  // async inviteMember(email: string, role: string, membership: ProjectGuardResponse, currentUser: User, message?: string): Promise<any> {
-  //   try {
-  //     const existingUser = await this.drizzleService.db
-  //       .select()
-  //       .from(user)
-  //       .where(eq(user.email, email))
-  //       .then(results => results[0] || null);
 
-  //     if (existingUser) {
-  //       const existingMembership = await this.drizzleService.db
-  //         .select()
-  //         .from(projectMember)
-  //         .where(
-  //           and(
-  //             eq(projectMember.projectId, membership.projectId),
-  //             eq(projectMember.userId, existingUser.id)
-  //           )
-  //         )
-  //         .then(results => results[0] || null);
 
-  //       if (existingMembership) {
-  //         return {
-  //           message: 'User is already a member of this project',
-  //           statusCode: 409,
-  //           error: "conflict",
-  //           data: null,
-  //           code: 'user_already_member',
-  //         };
-  //       }
-  //     }
 
-  //     const existingInvite = await this.drizzleService.db
-  //       .select()
-  //       .from(projectInvites)
-  //       .where(
-  //         and(
-  //           eq(projectInvites.projectId, membership.projectId),
-  //           eq(projectInvites.email, email),
-  //           eq(projectInvites.status, 'pending')
-  //         )
-  //       )
-  //       .then(results => results[0] || null);
 
-  //     if (existingInvite) {
-  //       return {
-  //         message: 'An invite has already been sent to this email',
-  //         statusCode: 409,
-  //         error: "conflict",
-  //         data: null,
-  //         code: 'invite_already_sent',
-  //       };
-  //     }
 
-  //     // Create invitation
-  //     const expiryDate = new Date();
-  //     expiryDate.setDate(expiryDate.getDate() + 7); // 7 days expiry
+  
 
-  //     const [invitation] = await this.drizzleService.db
-  //       .insert(projectInvites)
-  //       .values({
-  //         projectId: membership.projectId,
-  //         uid: generateUid('invi'),
-  //         email,
-  //         projectRole: role as 'owner' | 'admin' | 'contributor' | 'observer',
-  //         invitedById: membership.userId,
-  //         expiresAt: expiryDate,
-  //         message: message || '',
-  //         token: uuidv4(),
-  //       })
-  //       .returning();
 
-  //     await this.emailService.sendProjectInviteEmail({
-  //       email,
-  //       projectName: membership.projectName,
-  //       role,
-  //       inviterName: currentUser.displayName || '',
-  //       token: invitation.token,
-  //       expiresAt: expiryDate,
-  //     });
-
-  //     return {
-  //       message: 'Invitation sent successfully',
-  //       statusCode: 201,
-  //       error: null,
-  //       data: invitation,
-  //       code: 'invitation_sent',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error sending invitation:', error);
-  //     return {
-  //       message: 'Failed to send invitation',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'invitation_send_failed',
-  //     };
-  //   }
-  // }
-
-  // async getProjectInviteLink(memerShip: ProjectGuardResponse): Promise<any> {
-  //   try {
-  //     const inviteResult = await this.drizzleService.db
-  //       .select({
-  //         id: bulkInvite.uid,
-  //         invitationlink: bulkInvite.token,
-  //         domain_restriction: bulkInvite.restriction,
-  //         created_at: bulkInvite.createdAt,
-  //         created_by: user.displayName,
-  //       })
-  //       .from(bulkInvite)
-  //       .innerJoin(user, eq(bulkInvite.invitedById, user.id))
-  //       .where(
-  //         and(
-  //           eq(bulkInvite.projectId, memerShip.projectId),
-  //           isNull(bulkInvite.deletedAt)
-  //         )
-  //       )
-
-  //     if (!inviteResult) {
-  //       throw new NotFoundException('Invitation not found');
-  //     }
-
-
-  //     return inviteResult ? inviteResult : [];
-
-  //   } catch (error) {
-  //     if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
-  //       throw error;
-  //     }
-  //     console.error('Error fetching project invite status:', error);
-  //     throw new Error('Failed to fetch invitation details');
-  //   }
-  // }
-
-  // async createInviteLink(membership: ProjectGuardResponse, data: any): Promise<any> {
-  //   try {
-
-  //     data.restriction.forEach((el: string, index: number) => {
-  //       if (!isValidEmailDomain(el)) {
-  //         throw new BadRequestException(`Invalid email domain: ${el}`);
-  //       }
-  //       if (!el.startsWith('@')) {
-  //         data.restriction[index] = '@' + el;
-  //       }
-  //     })
-
-  //     // Create invitation
-  //     const expiryDate = new Date(data.expiry);
-
-
-  //     const result = await this.drizzleService.db
-  //       .insert(bulkInvite)
-  //       .values({
-  //         projectId: membership.projectId,
-  //         invitedById: membership.userId,
-  //         token: uuidv4(),
-  //         uid: generateUid('invi'),
-  //         projectRole: 'contributor',
-  //         expiresAt: expiryDate,
-  //         message: '',
-  //         restriction: data.restriction
-  //       })
-  //       .returning();
-
-  //     if (!result) {
-  //       throw ''
-  //     }
-
-  //     return {
-  //       message: 'Invitation Link Created',
-  //       statusCode: 201,
-  //       error: null,
-  //       data: {
-  //         link: result[0].token
-  //       },
-  //       code: 'invitation_link_created',
-  //     };
-  //   } catch (error) {
-  //     return {
-  //       message: 'Failed to created invitation link',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'invitation_send_failed',
-  //     };
-  //   }
-  // }
-
-  // async expireInvite(token: string) {
-  //   try {
-  //     const invite = await this.drizzleService.db
-  //       .select({
-  //         invite: projectInvites,
-  //       })
-  //       .from(projectInvites)
-  //       .where(
-  //         and(
-  //           eq(projectInvites.token, token),
-  //           eq(projectInvites.status, 'pending'),
-  //         )
-  //       )
-  //       .then(results => results[0] || null);
-
-  //     if (!invite) {
-  //       return {
-  //         message: 'Invitation not found or already processed',
-  //         statusCode: 404,
-  //         error: "not_found",
-  //         data: null,
-  //         code: 'invitation_not_found',
-  //       };
-  //     }
-
-  //     await this.drizzleService.db
-  //       .update(projectInvites)
-  //       .set({
-  //         status: 'expired',
-  //         updatedAt: new Date()
-  //       })
-  //       .where(eq(projectInvites.id, invite.invite.id));
-
-  //     return {
-  //       message: `Invitation discarded`,
-  //       statusCode: 200,
-  //       error: null,
-  //       data: null,
-  //       code: 'invite_declined',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error declining invite:', error);
-  //     return {
-  //       message: 'Failed to decline invitation',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'decline_invite_failed',
-  //     };
-  //   }
-  // }
-
-
-
-  // async getProjectInviteStatus(token: string, email: string): Promise<ProjectInviteStatusResponse> {
-  //   try {
-  //     const inviteResult = await this.drizzleService.db
-  //       .select({
-  //         invite: {
-  //           uid: projectInvites.uid,
-  //           email: projectInvites.email,
-  //           role: projectInvites.projectRole,
-  //           message: projectInvites.message,
-  //           status: projectInvites.status,
-  //           expiresAt: projectInvites.expiresAt,
-  //           createdAt: projectInvites.createdAt,
-  //           projectId: projectInvites.projectId,
-  //         },
-  //         project: {
-  //           uid: project.uid,
-  //           name: project.projectName,
-  //           description: project.description,
-  //           slug: project.slug,
-  //           country: project.country,
-  //           image: project.image,
-  //         },
-  //         invitedBy: {
-  //           uid: user.uid,
-  //           name: user.displayName,
-  //           email: user.email,
-  //           displayName: user.displayName,
-  //           image: user.image,
-  //         }
-  //       })
-  //       .from(projectInvites)
-  //       .innerJoin(project, eq(projectInvites.projectId, project.id))
-  //       .innerJoin(user, eq(projectInvites.invitedById, user.id))
-  //       .where(eq(projectInvites.token, token))
-  //       .orderBy(desc(projectInvites.createdAt))
-  //       .limit(1);
-  //     if (!inviteResult.length) {
-  //       throw new NotFoundException('Invitation not found');
-  //     }
-
-  //     const result = inviteResult[0];
-
-  //     // Verify email matches
-  //     if (result.invite.email.toLowerCase() !== email.toLowerCase()) {
-  //       throw new UnauthorizedException('Email does not match invitation');
-  //     }
-
-  //     // Check if invite is expired
-  //     const now = new Date();
-  //     const isExpired = result.invite.expiresAt < now;
-
-  //     // Prepare and return response data
-  //     return {
-  //       uid: result.invite.uid,
-  //       email: result.invite.email,
-  //       role: result.invite.role,
-  //       message: result.invite.message,
-  //       status: result.invite.status,
-  //       expiresAt: result.invite.expiresAt,
-  //       createdAt: result.invite.createdAt,
-  //       isExpired,
-  //       project: {
-  //         uid: result.project.uid,
-  //         name: result.project.name,
-  //         description: result.project.description,
-  //         slug: result.project.slug,
-  //         country: result.project.country,
-  //         image: result.project.image,
-  //       },
-  //       invitedBy: {
-  //         uid: result.invitedBy.uid,
-  //         name: result.invitedBy.name,
-  //         email: result.invitedBy.email,
-  //         displayName: result.invitedBy.displayName,
-  //         image: result.invitedBy.image,
-  //       }
-  //     };
-
-  //   } catch (error) {
-  //     if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
-  //       throw error;
-  //     }
-
-  //     console.error('Error fetching project invite status:', error);
-  //     throw new Error('Failed to fetch invitation details');
-  //   }
-  // }
-
-  // async declineInvite(token: string, email: string) {
-  //   try {
-  //     const invite = await this.drizzleService.db
-  //       .select({
-  //         invite: projectInvites,
-  //         project: project,
-  //         inviter: user,
-  //       })
-  //       .from(projectInvites)
-  //       .innerJoin(project, eq(projectInvites.projectId, project.id))
-  //       .innerJoin(user, eq(projectInvites.invitedById, user.id))
-  //       .where(
-  //         and(
-  //           eq(projectInvites.token, token),
-  //           eq(projectInvites.email, email),
-  //           eq(projectInvites.status, 'pending'),
-  //         )
-  //       )
-  //       .then(results => results[0] || null);
-
-  //     if (!invite) {
-  //       return {
-  //         message: 'Invitation not found or already processed',
-  //         statusCode: 404,
-  //         error: "not_found",
-  //         data: null,
-  //         code: 'invitation_not_found',
-  //       };
-  //     }
-
-  //     await this.drizzleService.db
-  //       .update(projectInvites)
-  //       .set({
-  //         status: 'declined',
-  //         updatedAt: new Date()
-  //       })
-  //       .where(eq(projectInvites.id, invite.invite.id));
-
-  //     return {
-  //       message: `You have declined the invitation to join ${invite.project.projectName}`,
-  //       statusCode: 200,
-  //       error: null,
-  //       data: null,
-  //       code: 'invite_declined',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error declining invite:', error);
-  //     return {
-  //       message: 'Failed to decline invitation',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'decline_invite_failed',
-  //     };
-  //   }
-  // }
-
-  // async acceptInvite(token: string, userId: number, email: string) {
-  //   try {
-  //     // Get invite with project and workspace details in single query
-  //     const invite = await this.drizzleService.db
-  //       .select({
-  //         invite: projectInvites,
-  //         project: project,
-  //         inviter: user,
-  //         workspace: workspace,
-  //       })
-  //       .from(projectInvites)
-  //       .innerJoin(project, eq(projectInvites.projectId, project.id))
-  //       .innerJoin(workspace, eq(project.workspaceId, workspace.id))
-  //       .innerJoin(user, eq(projectInvites.invitedById, user.id))
-  //       .where(
-  //         and(
-  //           eq(projectInvites.token, token),
-  //           eq(projectInvites.email, email),
-  //           eq(projectInvites.status, 'pending'),
-  //         )
-  //       )
-  //       .then(results => results[0] || null);
-
-  //     if (!invite) {
-  //       return {
-  //         message: 'Invitation not found or already processed',
-  //         statusCode: 404,
-  //         error: "not_found",
-  //         data: null,
-  //         code: 'invitation_not_found',
-  //       };
-  //     }
-
-  //     if (new Date(invite.invite.expiresAt) < new Date()) {
-  //       return {
-  //         message: 'Invitation has expired',
-  //         statusCode: 400,
-  //         error: "expired",
-  //         data: null,
-  //         code: 'invitation_expired',
-  //       };
-  //     }
-
-  //     // Check existing memberships in parallel
-  //     const [existingProjectMember, existingWorkspaceMember] = await Promise.all([
-  //       this.drizzleService.db
-  //         .select()
-  //         .from(projectMember)
-  //         .where(
-  //           and(
-  //             eq(projectMember.projectId, invite.invite.projectId),
-  //             eq(projectMember.userId, userId),
-  //           )
-  //         )
-  //         .then(results => results[0] || null),
-
-  //       this.drizzleService.db
-  //         .select()
-  //         .from(workspaceMember)
-  //         .where(
-  //           and(
-  //             eq(workspaceMember.workspaceId, invite.workspace.id),
-  //             eq(workspaceMember.userId, userId),
-  //           )
-  //         )
-  //         .then(results => results[0] || null)
-  //     ]);
-
-  //     if (existingProjectMember) {
-  //       return {
-  //         message: 'You are already a member of this project',
-  //         statusCode: 409,
-  //         error: "conflict",
-  //         data: null,
-  //         code: 'already_member',
-  //       };
-  //     }
-
-  //     // Use transaction to ensure data consistency
-  //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  //       // Add to workspace if not already a member
-  //       if (!existingWorkspaceMember) {
-  //         await tx
-  //           .insert(workspaceMember)
-  //           .values({
-  //             uid: generateUid('workmem'),
-  //             workspaceId: invite.workspace.id,
-  //             userId: userId,
-  //             role: 'member', // default workspace role
-  //             status: 'active',
-  //             joinedAt: new Date(),
-  //           });
-  //       }
-
-  //       // Add user as project member
-  //       const [membership] = await tx
-  //         .insert(projectMember)
-  //         .values({
-  //           projectId: invite.invite.projectId,
-  //           userId: userId,
-  //           uid: generateUid('projmem'),
-  //           projectRole: invite.invite.projectRole,
-  //           joinedAt: new Date(),
-  //         })
-  //         .returning();
-
-  //       // Update invite status
-  //       await tx
-  //         .update(projectInvites)
-  //         .set({
-  //           status: 'accepted',
-  //           acceptedAt: new Date(),
-  //           updatedAt: new Date()
-  //         })
-  //         .where(eq(projectInvites.id, invite.invite.id));
-
-  //       return membership;
-  //     });
-
-  //     return {
-  //       message: `You have successfully joined ${invite.project.projectName}`,
-  //       statusCode: 200,
-  //       error: null,
-  //       data: {
-  //         projectId: invite.project.id,
-  //         workspaceId: invite.workspace.id,
-  //         projectRole: result.projectRole,
-  //         addedToWorkspace: !existingWorkspaceMember,
-  //       },
-  //       code: 'invite_accepted',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error accepting invite:', error);
-  //     return {
-  //       message: 'Failed to accept invitation',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'accept_invite_failed',
-  //     };
-  //   }
-  // }
-
-  // async acceptLinkInvite(token: string, userId: number, email: string) {
-  //   try {
-  //     // Get bulk invite with project and workspace details in single query
-  //     const invite = await this.drizzleService.db
-  //       .select({
-  //         invite: bulkInvite,
-  //         project: project,
-  //         inviter: user,
-  //         workspace: workspace,
-  //       })
-  //       .from(bulkInvite)
-  //       .innerJoin(project, eq(bulkInvite.projectId, project.id))
-  //       .innerJoin(workspace, eq(project.workspaceId, workspace.id))
-  //       .innerJoin(user, eq(bulkInvite.invitedById, user.id))
-  //       .where(
-  //         and(
-  //           eq(bulkInvite.token, token),
-  //           eq(bulkInvite.status, 'pending') // Add status check
-  //         )
-  //       )
-  //       .then(results => results[0] || null);
-
-  //     if (!invite) {
-  //       return {
-  //         message: 'Invitation link is invalid or has been processed',
-  //         statusCode: 404,
-  //         error: "not_found",
-  //         data: null,
-  //         code: 'invitation_not_found',
-  //       };
-  //     }
-
-  //     if (new Date(invite.invite.expiresAt) < new Date()) {
-  //       return {
-  //         message: 'Invitation has expired',
-  //         statusCode: 400,
-  //         error: "expired",
-  //         data: null,
-  //         code: 'invitation_expired',
-  //       };
-  //     }
-
-  //     // Check domain restriction if exists
-  //     if (invite.invite.restriction && invite.invite.restriction.length > 0) {
-  //       try {
-  //         const emailDomain = email.substring(email.indexOf('@'));
-  //         if (!invite.invite.restriction.includes(emailDomain)) {
-  //           return {
-  //             message: 'Your email domain is not authorized for this invitation',
-  //             statusCode: 403,
-  //             error: "forbidden",
-  //             data: null,
-  //             code: 'domain_not_authorized',
-  //           };
-  //         }
-  //       } catch (error) {
-  //         return {
-  //           message: 'Invalid email format',
-  //           statusCode: 400,
-  //           error: "bad_request",
-  //           data: null,
-  //           code: 'invalid_email',
-  //         };
-  //       }
-  //     }
-
-  //     // Check existing memberships in parallel
-  //     const [existingProjectMember, existingWorkspaceMember] = await Promise.all([
-  //       this.drizzleService.db
-  //         .select()
-  //         .from(projectMember)
-  //         .where(
-  //           and(
-  //             eq(projectMember.projectId, invite.invite.projectId),
-  //             eq(projectMember.userId, userId),
-  //           )
-  //         )
-  //         .then(results => results[0] || null),
-  //       this.drizzleService.db
-  //         .select()
-  //         .from(workspaceMember)
-  //         .where(
-  //           and(
-  //             eq(workspaceMember.workspaceId, invite.workspace.id),
-  //             eq(workspaceMember.userId, userId),
-  //           )
-  //         )
-  //         .then(results => results[0] || null)
-  //     ]);
-
-  //     if (existingProjectMember) {
-  //       return {
-  //         message: 'You are already a member of this project',
-  //         statusCode: 409,
-  //         error: "conflict",
-  //         data: null,
-  //         code: 'already_member',
-  //       };
-  //     }
-
-  //     await this.drizzleService.db
-  //       .update(projectInvites)
-  //       .set({ status: 'discarded' })
-  //       .where(
-  //         and(
-  //           eq(projectInvites.projectId, invite.invite.projectId),
-  //           eq(projectInvites.email, email),
-  //         )
-  //       )
-  //       .then(results => results[0] || null)
-
-  //     // Use transaction to ensure data consistency
-  //     const result = await this.drizzleService.db.transaction(async (tx) => {
-  //       // Add to workspace if not already a member
-  //       if (!existingWorkspaceMember) {
-  //         await tx
-  //           .insert(workspaceMember)
-  //           .values({
-  //             uid: generateUid('workmem'),
-  //             workspaceId: invite.workspace.id,
-  //             userId: userId,
-  //             role: 'member', // default workspace role
-  //             status: 'active',
-  //             joinedAt: new Date(),
-  //           });
-  //       }
-
-  //       // Add user as project member
-  //       const [membership] = await tx
-  //         .insert(projectMember)
-  //         .values({
-  //           projectId: invite.invite.projectId,
-  //           userId: userId,
-  //           uid: generateUid('projmem'),
-  //           projectRole: invite.invite.projectRole,
-  //           joinedAt: new Date(),
-  //           bulkInviteId: invite.invite.id,
-  //           siteAccess: 'limited_access',
-  //           restrictedSites: []
-  //         })
-  //         .returning();
-
-  //       return membership;
-  //     });
-
-  //     return {
-  //       message: `You have successfully joined ${invite.project.projectName}`,
-  //       statusCode: 200,
-  //       error: null,
-  //       data: {
-  //         projectId: invite.project.id,
-  //         workspaceId: invite.workspace.id,
-  //         projectRole: result.projectRole,
-  //         addedToWorkspace: !existingWorkspaceMember,
-  //         inviteType: 'bulk_link',
-  //       },
-  //       code: 'invite_accepted',
-  //     };
-  //   } catch (error) {
-  //     console.error('Error accepting link invite:', error);
-  //     return {
-  //       message: 'Failed to accept invitation',
-  //       statusCode: 500,
-  //       error: error.message || "internal_server_error",
-  //       data: null,
-  //       code: 'accept_invite_failed',
-  //     };
-  //   }
-  // }
-
-  // async getProjectSingleLinkStatus(token: string): Promise<ProjectInviteStatusResponse> {
-  //   try {
-  //     const inviteResult = await this.drizzleService.db
-  //       .select({
-  //         invite: {
-  //           uid: bulkInvite.uid,
-  //           email: bulkInvite.restriction,
-  //           role: bulkInvite.projectRole,
-  //           message: bulkInvite.message,
-  //           status: bulkInvite.status,
-  //           expiresAt: bulkInvite.expiresAt,
-  //           createdAt: bulkInvite.createdAt,
-  //           projectId: bulkInvite.projectId,
-  //         },
-  //         project: {
-  //           uid: project.uid,
-  //           name: project.projectName,
-  //           description: project.description,
-  //           slug: project.slug,
-  //           country: project.country,
-  //           image: project.image,
-  //         },
-  //         invitedBy: {
-  //           uid: user.uid,
-  //           name: user.displayName,
-  //           email: user.email,
-  //           displayName: user.displayName,
-  //           image: user.image,
-  //         }
-  //       })
-  //       .from(bulkInvite)
-  //       .innerJoin(project, eq(bulkInvite.projectId, project.id))
-  //       .innerJoin(user, eq(bulkInvite.invitedById, user.id))
-  //       .where(eq(bulkInvite.token, token))
-
-  //     if (!inviteResult.length) {
-  //       throw new NotFoundException('Invitation not found');
-  //     }
-
-  //     const result = inviteResult[0];
-
-
-  //     // Check if invite is expired
-  //     const now = new Date();
-  //     const isExpired = result.invite.expiresAt < now;
-
-  //     // Prepare and return response data
-  //     return {
-  //       uid: result.invite.uid,
-  //       email: '',
-  //       role: result.invite.role,
-  //       message: result.invite.message,
-  //       status: result.invite.status || '',
-  //       expiresAt: result.invite.expiresAt,
-  //       createdAt: result.invite.createdAt || new Date(),
-  //       isExpired,
-  //       project: {
-  //         uid: result.project.uid,
-  //         name: result.project.name,
-  //         description: result.project.description,
-  //         slug: result.project.slug,
-  //         country: result.project.country,
-  //         image: result.project.image,
-  //       },
-  //       invitedBy: {
-  //         uid: result.invitedBy.uid,
-  //         name: result.invitedBy.name,
-  //         email: result.invitedBy.email,
-  //         displayName: result.invitedBy.displayName,
-  //         image: result.invitedBy.image,
-  //       }
-  //     };
-
-  //   } catch (error) {
-  //     if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
-  //       throw error;
-  //     }
-
-  //     console.error('Error fetching project invite status:', error);
-  //     throw new Error('Failed to fetch invitation details');
-  //   }
-  // }
-
+  
 
   // async findOne(projectId: number) {
   //   try {
@@ -1492,242 +1744,7 @@ export class ProjectsService {
 
 
 
-  // // async removeMember(projectId: string, memberId: string, myMembership: ProjectGuardResponse, currentUserId: number) {
-  // //   try {
-
-
-  // //     if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
-  // //       return {
-  // //         message: 'You do not have permission to remove members',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'remove_member_permission_denied',
-  // //       };
-  // //     }
-
-
-  // //     // Find the member to remove
-  // //     const memberQuery = await this.drizzleService.db
-  // //       .select()
-  // //       .from(projectMembers)
-  // //       .innerJoin(users, eq(users.uid, memberId))
-  // //       .where(
-  // //         and(
-  // //           eq(projectMembers.projectId, myMembership.projectId),
-  // //           eq(projectMembers.userId, users.id),
-  // //         )
-  // //       );
-
-  // //     if (memberQuery.length === 0) {
-  // //       return {
-  // //         message: 'Member not found in this project',
-  // //         statusCode: 404,
-  // //         error: "not_found",
-  // //         data: null,
-  // //         code: 'member_not_found',
-  // //       };
-  // //     }
-
-  // //     const memberToRemove = memberQuery[0];
-
-  // //     // Cannot remove the owner
-  // //     if (memberToRemove.project_members.projectRole === 'owner') {
-  // //       return {
-  // //         message: 'Cannot remove the project owner',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'cannot_remove_owner',
-  // //       };
-  // //     }
-
-  // //     // Admin cannot remove another admin (only owner can)
-  // //     if (memberToRemove.project_members.projectRole === 'admin' && myMembership.role === 'admin') {
-  // //       return {
-  // //         message: 'Admin cannot remove another admin',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'admin_cannot_remove_admin',
-  // //       };
-  // //     }
-
-  // //     // Remove member
-  // //     await this.drizzleService.db
-  // //       .delete(projectMembers)
-  // //       .where(
-  // //         and(
-  // //           eq(projectMembers.projectId, myMembership.projectId),
-  // //           eq(projectMembers.userId, memberToRemove.users.id)
-  // //         )
-  // //       );
-
-  // //     return {
-  // //       message: 'Member removed successfully',
-  // //       statusCode: 200,
-  // //       error: null,
-  // //       data: { success: true },
-  // //       code: 'member_removed',
-  // //     };
-  // //   } catch (error) {
-  // //     console.error('Error removing member:', error);
-  // //     return {
-  // //       message: 'Failed to remove member',
-  // //       statusCode: 500,
-  // //       error: error.message || "internal_server_error",
-  // //       data: null,
-  // //       code: 'remove_member_failed',
-  // //     };
-  // //   }
-  // // }
-
-  // // async removeInviteLink(myMembership: ProjectGuardResponse, uid: string) {
-  // //   try {
-  // //     if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
-  // //       return {
-  // //         message: 'You do not have permission to remove members',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'remove_member_permission_denied',
-  // //       };
-  // //     }
-
-  // //     // Remove member
-  // //     await this.drizzleService.db
-  // //       .update(bulkInvites)
-  // //       .set({ deletedAt: new Date(), expiresAt: new Date() })
-  // //       .where(
-  // //         and(
-  // //           eq(bulkInvites.uid, uid)
-  // //         )
-  // //       );
-
-  // //     return {
-  // //       message: 'Link removed successfully',
-  // //       statusCode: 200,
-  // //       error: null,
-  // //       data: { success: true },
-  // //       code: 'member_removed',
-  // //     };
-  // //   } catch (error) {
-  // //     return {
-  // //       message: 'Failed to remove link',
-  // //       statusCode: 500,
-  // //       error: error.message || "internal_server_error",
-  // //       data: null,
-  // //       code: 'remove_member_failed',
-  // //     };
-  // //   }
-  // // }
-
-  // // async updateMemberRole(
-  // //   memberId: string,
-  // //   myMembership: ProjectGuardResponse,
-  // //   updateRoleDto: UpdateProjectRoleDto,
-  // // ) {
-  // //   try {
-  // //     // Only owner/admin can update roles
-
-  // //     if (!myMembership || !['owner', 'admin'].includes(myMembership.role)) {
-  // //       return {
-  // //         message: 'You do not have permission to update member roles',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'update_role_permission_denied',
-  // //       };
-  // //     }
-
-  // //     // Find the member to update
-  // //     const memberQuery = await this.drizzleService.db
-  // //       .select({
-  // //         member: projectMembers,
-  // //         user: users,
-  // //       })
-  // //       .from(projectMembers)
-  // //       .innerJoin(users, eq(users.uid, memberId))
-  // //       .where(
-  // //         and(
-  // //           eq(projectMembers.projectId, myMembership.projectId),
-  // //           eq(projectMembers.userId, users.id)
-  // //         )
-  // //       );
-
-  // //     if (memberQuery.length === 0) {
-  // //       return {
-  // //         message: 'Member not found in this project',
-  // //         statusCode: 404,
-  // //         error: "not_found",
-  // //         data: null,
-  // //         code: 'member_not_found',
-  // //       };
-  // //     }
-
-  // //     const memberToUpdate = memberQuery[0];
-
-  // //     // Cannot change owner's role
-  // //     if (memberToUpdate.member.projectRole === 'owner') {
-  // //       return {
-  // //         message: 'Cannot change the role of the project owner',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'cannot_change_owner_role',
-  // //       };
-  // //     }
-
-  // //     // Admin cannot change another admin's role (only owner can)
-  // //     if (myMembership.role === 'admin' && memberToUpdate.member.projectRole === 'admin') {
-  // //       return {
-  // //         message: 'Admin cannot change another admin\'s role',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'admin_cannot_change_admin_role',
-  // //       };
-  // //     }
-
-  // //     // Update role
-  // //     const [result] = await this.drizzleService.db
-  // //       .update(projectMembers)
-  // //       .set({
-  // //         projectRole: updateRoleDto.role,
-  // //         updatedAt: new Date(),
-  // //       })
-  // //       .where(
-  // //         and(
-  // //           eq(projectMembers.projectId, myMembership.projectId),
-  // //           eq(projectMembers.userId, memberToUpdate.user.id)
-  // //         )
-  // //       )
-  // //       .returning();
-
-  // //     return {
-  // //       message: 'Member role updated successfully',
-  // //       statusCode: 200,
-  // //       error: null,
-  // //       data: {
-  // //         userId: memberId,
-  // //         name: memberToUpdate.user.displayName,
-  // //         email: memberToUpdate.user.email,
-  // //         role: result.projectRole,
-  // //       },
-  // //       code: 'member_role_updated',
-  // //     };
-  // //   } catch (error) {
-  // //     console.error('Error updating member role:', error);
-  // //     return {
-  // //       message: 'Failed to update member role',
-  // //       statusCode: 500,
-  // //       error: error.message || "internal_server_error",
-  // //       data: null,
-  // //       code: 'update_member_role_failed',
-  // //     };
-  // //   }
-  // // }
-
+  
 
 
   // // async remove(projectId: number, userId: number) {
