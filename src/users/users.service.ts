@@ -210,8 +210,8 @@ export class UsersService {
 
             await this.userCacheService.refreshAuthUser({
                 ...userData,
-                primaryWorkspace: result.workspaceUid,
-                primaryProject: result.projectUid,
+                primaryWorkspaceUid: result.workspaceUid,
+                primaryProjectUid: result.projectUid,
             });
             return true;
         } catch (error) {
@@ -313,7 +313,7 @@ export class UsersService {
         if (result.length === 0) {
             throw new BadRequestException(`User with ID ${userData.id} not found`);
         }
-        await this.userCacheService.refreshAuthUser({ ...userData, image: userPayload });
+        await this.userCacheService.refreshAuthUser({ ...userData, image: userPayload.avatarUrl });
         return true;
     }
 

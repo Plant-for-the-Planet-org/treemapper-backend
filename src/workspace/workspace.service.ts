@@ -80,8 +80,8 @@ export class WorkspaceService {
             .where(eq(user.id, userData.id))
           await this.userCacheService.refreshAuthUser({
             ...userData,
-            primaryWorkspace: createOrgDto.workspaceUid,
-            primaryProject: createOrgDto.projectUid
+            primaryWorkspaceUid: createOrgDto.workspaceUid,
+            primaryProjectUid: createOrgDto.projectUid
           });
         }
       });

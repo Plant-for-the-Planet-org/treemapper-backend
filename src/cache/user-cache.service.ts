@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { User } from "src/users/entities/user.entity";
+import { ExtendedUser, User } from "src/users/entities/user.entity";
 import { CacheService } from "./cache.service";
 import { CACHE_KEYS, CACHE_TTL } from "./cache-keys";
 
@@ -19,7 +19,7 @@ export class UserCacheService {
         await this.cacheService.set(this.getUseAuthrKey(auth0Id), user, CACHE_TTL.MEDIUM);
     }
 
-    async refreshAuthUser(user: any): Promise<void> {
+    async refreshAuthUser(user: ExtendedUser): Promise<void> {
         await this.cacheService.delete(this.getUseAuthrKey(user.auth0Id));
         await this.cacheService.set(this.getUseAuthrKey(user.auth0Id), user, CACHE_TTL.MEDIUM);
     }
