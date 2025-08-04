@@ -24,7 +24,7 @@ import {
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateSurvey, CreateUserDto } from './dto/create-user.dto';
+import { AvatarDTO, CreateSurvey, CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from './entities/user.entity';
 import { CreatePresignedUrlDto } from './dto/signed-url.dto';
+import { user } from 'src/database/schema';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -41,6 +42,7 @@ export class UsersController {
 
   @Get('me')
   async getProfile(@CurrentUser() users: User) {
+    console.log("IOPSDC", users)
     return {
       uid: users.uid,
       email: users.email,
@@ -51,7 +53,7 @@ export class UsersController {
       slug: users.slug,
       type: users.type,
       country: users.country,
-      url: users.url,
+      url: users.website,
       isPrivate: users.isPrivate,
       bio: users.bio,
       locale: users.locale,
@@ -59,16 +61,34 @@ export class UsersController {
       migratedAt: users.migratedAt,
       existingPlanetUser: users.existingPlanetUser,
       primaryWorkspace: users.primaryWorkspace,
-      primaryProject: users.primaryProject
+      primaryProject: users.primaryProject,
+      workspace: users.workspace,
+      impersonated: users.impersonate !== null ? true : null
     }
   }
-  // @ApiExcludeEndpoint()
-  @Put('migrated')
-  async migrated(@CurrentUser() user: User) {
-    return await this.usersService.migrateSuccess(user.id);
+
+
+
+
+  @Post('onboarding')
+  async onBoardUser(@Body() createSurveyDto: CreateSurvey, @CurrentUser() user: User,) {
+    return await this.usersService.onBoardUser(createSurveyDto, user);
   }
 
-  // @ApiExcludeEndpoint()
+  @Put('avatar')
+  async updateUserAvatar(@Body() avatarDto: AvatarDTO, @CurrentUser() user: User,) {
+    return await this.usersService.updateUserAvatar(avatarDto.avatarUrl, user);
+  }
+
+
+
+
+  //   // @ApiExcludeEndpoint()
+  //   @Put('migrated')
+  //   async migrated(@CurrentUser() user: User) {
+  //     return await this.usersService.migrateSuccess(user.id);
+  //   }
+
   @Post('presign-url')
   async getSignedUrl(
     @Body() dto: CreatePresignedUrlDto,
@@ -85,63 +105,59 @@ export class UsersController {
   }
 
 
-  @Post('onboarding')
-  async create(@Body() createSurveyDto: CreateSurvey, @CurrentUser() user: User,) {
-    return await this.usersService.createSurvey(user.id, user.auth0Id, createSurveyDto, );
-  }
 
 
-  // @Get('stats')
-  // async getStats() {
-  //   return await this.usersService.getUserStats();
-  // }
+  //   @Get('stats')
+  //   async getStats() {
+  //     return await this.usersService.getUserStats();
+  //   }
 
-  // @Get('check-email')
-  // async checkEmail(@Query('email') email: string) {
-  //   const exists = await this.usersService.checkEmailExists(email);
-  //   return { exists };
-  // }
+  //   @Get('check-email')
+  //   async checkEmail(@Query('email') email: string) {
+  //     const exists = await this.usersService.checkEmailExists(email);
+  //     return { exists };
+  //   }
 
-  // @Get('by-guid/:guid')
-  // async findByGuid(@Param('guid') guid: string) {
-  //   return await this.usersService.findByuid(guid);
-  // }
+  //   @Get('by-guid/:guid')
+  //   async findByGuid(@Param('guid') guid: string) {
+  //     return await this.usersService.findByuid(guid);
+  //   }
 
-  // @Get(':id')
-  // async findOne(@Param('id', ParseIntPipe) id: number) {
-  //   return await this.usersService.findOne(id);
-  // }
+  //   @Get(':id')
+  //   async findOne(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.findOne(id);
+  //   }
 
 
-  // @Patch(':id')
-  // async update(
-  //   @Param('id', ParseIntPipe) id: number,
-  //   @Body() updateUserDto: UpdateUserDto,
-  // ) {
-  //   return await this.usersService.update(id, updateUserDto);
-  // }
+  //   @Patch(':id')
+  //   async update(
+  //     @Param('id', ParseIntPipe) id: number,
+  //     @Body() updateUserDto: UpdateUserDto,
+  //   ) {
+  //     return await this.usersService.update(id, updateUserDto);
+  //   }
 
-  // @Patch(':id/deactivate')
-  // async deactivate(@Param('id', ParseIntPipe) id: number) {
-  //   return await this.usersService.deactivate(id);
-  // }
+  //   @Patch(':id/deactivate')
+  //   async deactivate(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.deactivate(id);
+  //   }
 
-  // @Patch(':id/activate')
-  // async activate(@Param('id', ParseIntPipe) id: number) {
-  //   return await this.usersService.activate(id);
-  // }
+  //   @Patch(':id/activate')
+  //   async activate(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.activate(id);
+  //   }
 
 
 
-  // @Delete(':id')
-  // @HttpCode(HttpStatus.OK)
-  // async remove(@Param('id', ParseIntPipe) id: number) {
-  //   return await this.usersService.remove(id);
-  // }
+  //   @Delete(':id')
+  //   @HttpCode(HttpStatus.OK)
+  //   async remove(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.remove(id);
+  //   }
 
-  // @Delete(':id/hard')
-  // @HttpCode(HttpStatus.OK)
-  // async hardDelete(@Param('id', ParseIntPipe) id: number) {
-  //   return await this.usersService.hardDelete(id);
-  // }
+  //   @Delete(':id/hard')
+  //   @HttpCode(HttpStatus.OK)
+  //   async hardDelete(@Param('id', ParseIntPipe) id: number) {
+  //     return await this.usersService.hardDelete(id);
+  //   }
 }
