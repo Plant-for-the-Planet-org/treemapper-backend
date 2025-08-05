@@ -815,38 +815,20 @@ export const projectSpecies = pgTable('project_species', {
   projectId: integer('project_id').notNull().references(() => project.id, { onDelete: 'cascade' }),
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id, { onDelete: 'set null' }),
   isUnknown: boolean('is_unknown').default(false).notNull(),
-  customSpeciesName: text('custom_species_name'),
-  customCommonName: text('custom_common_name'),
-  customImage: text('custom_image'),
+  speciesName:text('species_name'),
+  commonName: text('common_name'),
+  image: text('image'),
   notes: text('notes'),
   favourite: boolean('favourite').default(false).notNull(),
   isDisabled: boolean('is_disabled').default(false),
   addedById: integer('added_by_id').notNull().references(() => user.id, { onDelete: 'set null' }),
-  plannedQuantity: integer('planned_quantity'),
-  actualQuantity: integer('actual_quantity').default(0),
-  priority: text('priority'),
+  metadata:jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   uniqueProjectSpecies: unique('unique_project_species').on(table.projectId, table.scientificSpeciesId),
-  projectSpeciesActiveIdx: index('project_species_active_idx')
-    .on(table.projectId, table.isDisabled)
-    .where(sql`deleted_at IS NULL`),
-  speciesProjectsIdx: index('project_species_usage_idx')
-    .on(table.scientificSpeciesId, table.priority),
-  unknownSpeciesLogic: check('unknown_species_logic',
-    sql`(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)`),
-  unknownSpeciesHasName: check('unknown_species_has_name',
-    sql`is_unknown = false OR custom_species_name IS NOT NULL`),
-  plannedQuantityPositive: check('planned_quantity_positive',
-    sql`planned_quantity IS NULL OR planned_quantity > 0`),
-  actualQuantityNonNegative: check('actual_quantity_non_negative',
-    sql`actual_quantity >= 0`),
-  actualNotExceedPlanned: check('actual_not_exceed_planned',
-    sql`planned_quantity IS NULL OR actual_quantity <= planned_quantity + (planned_quantity * 0.1)`), // Allow 10% overage
-  validPriority: check('valid_priority',
-    sql`priority IS NULL OR priority IN ('high', 'medium', 'low')`),
+  scientificSpeciesIdIdx: index('scientific_species_id_Idx').on(table.scientificSpeciesId)
 }));
 
 

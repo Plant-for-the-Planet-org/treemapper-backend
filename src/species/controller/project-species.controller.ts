@@ -28,27 +28,27 @@ import { ProjectGuardResponse } from '../../projects/projects.service';
 export class ProjectSpeciesController {
   constructor(private readonly userSpeciesService: ProjectSpeciesService) { }
 
-  // @Post('/:id')
-  // @ProjectRoles('owner', 'admin', 'contributor', 'observer')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async create(
-  //   @Membership() membership: ProjectGuardResponse,
-  //   @Body() createDto: CreateUserSpeciesDto
-  // ) {
-  //   return this.userSpeciesService.create(
-  //     membership,
-  //     createDto,
-  //   );
-  // }
+  @Post('/:id')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
+  @UseGuards(ProjectPermissionsGuard)
+  async create(
+    @Membership() membership: ProjectGuardResponse,
+    @Body() createDto: CreateUserSpeciesDto
+  ) {
+    return this.userSpeciesService.create(
+      membership,
+      createDto,
+    );
+  }
 
-  // @Get('/:id')
-  // @ProjectRoles('owner', 'admin', 'contributor', 'observer')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async getAll(
-  //   @Membership() membership: ProjectGuardResponse,
-  // ) {
-  //   return this.userSpeciesService.getAll(membership);
-  // }
+  @Get('/:id')
+  @ProjectRoles('owner', 'admin', 'contributor', 'observer')
+  @UseGuards(ProjectPermissionsGuard)
+  async getAll(
+    @Membership() membership: ProjectGuardResponse,
+  ) {
+    return this.userSpeciesService.getAll(membership);
+  }
 
   // @Put('/:id/species/:species')
   // @ProjectRoles('owner', 'admin', 'contributor', 'observer')

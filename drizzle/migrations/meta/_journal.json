@@ -43,6 +43,13 @@
       "when": 1754360256298,
       "tag": "0005_daffy_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1754367580593,
+      "tag": "0006_bitter_sandman",
+      "breakpoints": true
     }
   ]
 }
