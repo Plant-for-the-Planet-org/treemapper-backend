@@ -1,1 +1,0 @@
-ALTER TABLE "project_member" DROP CONSTRAINT "valid_site_access_logic";

@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1754299078575,
-      "tag": "0000_tan_rattler",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1754333489076,
-      "tag": "0001_curvy_sabretooth",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1754355440108,
-      "tag": "0002_tough_eddie_brock",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1754356265948,
-      "tag": "0003_nosy_quicksilver",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1754356700619,
-      "tag": "0004_skinny_jasper_sitwell",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1754360256298,
-      "tag": "0005_daffy_the_renegades",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1754367580593,
-      "tag": "0006_bitter_sandman",
+      "when": 1754377402460,
+      "tag": "0000_keen_thena",
       "breakpoints": true
     }
   ]

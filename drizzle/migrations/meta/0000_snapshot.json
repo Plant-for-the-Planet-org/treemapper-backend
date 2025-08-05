@@ -1,5 +1,5 @@
 {
-  "id": "49d9510f-626c-4020-9e37-3603e21677f1",
+  "id": "dda6c028-3754-4e44-984a-9a9ce2ff8ed1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -842,14 +842,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "start_date": {
-          "name": "start_date",
+        "intervention_start_date": {
+          "name": "intervention_start_date",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
-        "end_date": {
-          "name": "end_date",
+        "intervention_end_date": {
+          "name": "intervention_end_date",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
@@ -934,12 +934,11 @@
           "notNull": false,
           "default": false
         },
-        "created_at": {
-          "name": "created_at",
+        "edited_at": {
+          "name": "edited_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         },
         "flag_reason": {
           "name": "flag_reason",
@@ -953,6 +952,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
@@ -979,7 +985,7 @@
               "nulls": "last"
             },
             {
-              "expression": "start_date",
+              "expression": "intervention_start_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1050,7 +1056,7 @@
               "nulls": "last"
             },
             {
-              "expression": "start_date",
+              "expression": "intervention_end_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1132,7 +1138,7 @@
       "checkConstraints": {
         "valid_date_range": {
           "name": "valid_date_range",
-          "value": "start_date <= end_date"
+          "value": "intervention_start_date <= intervention_end_date"
         },
         "area_positive": {
           "name": "area_positive",
@@ -1194,18 +1200,11 @@
           "primaryKey": false,
           "notNull": false
         },
-        "planned_count": {
-          "name": "planned_count",
+        "species_count": {
+          "name": "species_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "actual_count": {
-          "name": "actual_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -1283,13 +1282,9 @@
           "name": "unknown_species_logic",
           "value": "(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)"
         },
-        "planned_count_positive": {
-          "name": "planned_count_positive",
-          "value": "planned_count > 0"
-        },
-        "actual_count_non_negative": {
-          "name": "actual_count_non_negative",
-          "value": "actual_count >= 0"
+        "species_count_positive": {
+          "name": "species_count_positive",
+          "value": "species_count > 0"
         }
       },
       "isRLSEnabled": false
@@ -2699,10 +2694,6 @@
         "restricted_sites_valid_access": {
           "name": "restricted_sites_valid_access",
           "value": "site_access != 'limited_access' OR array_length(restricted_sites, 1) > 0"
-        },
-        "valid_site_access_logic": {
-          "name": "valid_site_access_logic",
-          "value": "site_access != 'deny_all' OR project_role IN ('observer')"
         }
       },
       "isRLSEnabled": false
@@ -2742,20 +2733,20 @@
           "notNull": true,
           "default": false
         },
-        "custom_species_name": {
-          "name": "custom_species_name",
+        "species_name": {
+          "name": "species_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "custom_common_name": {
-          "name": "custom_common_name",
+        "common_name": {
+          "name": "common_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "custom_image": {
-          "name": "custom_image",
+        "image": {
+          "name": "image",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2786,22 +2777,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "planned_quantity": {
-          "name": "planned_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "actual_quantity": {
-          "name": "actual_quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "priority": {
-          "name": "priority",
-          "type": "text",
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -2827,39 +2805,11 @@
         }
       },
       "indexes": {
-        "project_species_active_idx": {
-          "name": "project_species_active_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "is_disabled",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "deleted_at IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "project_species_usage_idx": {
-          "name": "project_species_usage_idx",
+        "scientific_species_id_Idx": {
+          "name": "scientific_species_id_Idx",
           "columns": [
             {
               "expression": "scientific_species_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "priority",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2931,32 +2881,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "unknown_species_logic": {
-          "name": "unknown_species_logic",
-          "value": "(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)"
-        },
-        "unknown_species_has_name": {
-          "name": "unknown_species_has_name",
-          "value": "is_unknown = false OR custom_species_name IS NOT NULL"
-        },
-        "planned_quantity_positive": {
-          "name": "planned_quantity_positive",
-          "value": "planned_quantity IS NULL OR planned_quantity > 0"
-        },
-        "actual_quantity_non_negative": {
-          "name": "actual_quantity_non_negative",
-          "value": "actual_quantity >= 0"
-        },
-        "actual_not_exceed_planned": {
-          "name": "actual_not_exceed_planned",
-          "value": "planned_quantity IS NULL OR actual_quantity <= planned_quantity + (planned_quantity * 0.1)"
-        },
-        "valid_priority": {
-          "name": "valid_priority",
-          "value": "priority IS NULL OR priority IN ('high', 'medium', 'low')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.scientific_species": {
@@ -5786,7 +5711,8 @@
         "on-site",
         "off-site",
         "external",
-        "unknown"
+        "unknown",
+        "web-upload"
       ]
     },
     "public.capture_status": {

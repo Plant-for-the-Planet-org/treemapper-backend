@@ -929,7 +929,7 @@ export const intervention = pgTable('intervention', {
   userInterventionsIdx: index('intervention_user_idx')
     .on(table.userId, table.interventionEndDate)
     .where(sql`deleted_at IS NULL`),
-  validDateRange: check('valid_date_range', sql`start_date <= end_date`),
+  validDateRange: check('valid_date_range', sql`intervention_start_date <= intervention_end_date`),
   areaPositive: check('area_positive', sql`area IS NULL OR area >= 0`),
   treeCountsNonNegative: check('tree_counts_non_negative',
     sql`total_tree_count >= 0 AND total_sample_tree_count >= 0`),
@@ -954,7 +954,6 @@ export const interventionSpecies = pgTable('intervention_species', {
   unknownSpeciesLogic: check('unknown_species_logic',
     sql`(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)`),
   speciesCountPositive: check('species_count_positive', sql`species_count > 0`),
-  actualCountNonNegative: check('actual_count_non_negative', sql`actual_count >= 0`),
 }));
 
 export const tree = pgTable('tree', {

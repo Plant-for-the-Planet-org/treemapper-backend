@@ -1,6 +1,6 @@
 CREATE TYPE "public"."audit_action" AS ENUM('create', 'update', 'delete', 'soft_delete', 'restore', 'login', 'logout', 'invite', 'accept_invite', 'decline_invite', 'role_change', 'permission_change', 'export', 'import', 'archive', 'unarchive', 'impersonation');--> statement-breakpoint
 CREATE TYPE "public"."audit_entity" AS ENUM('user', 'workspace', 'workspace_member', 'project', 'project_member', 'site', 'intervention', 'tree', 'tree_record', 'scientific_species', 'project_species', 'species_request', 'project_invite', 'bulk_invite', 'image', 'notification', 'migration');--> statement-breakpoint
-CREATE TYPE "public"."capture_mode" AS ENUM('on-site', 'off-site', 'external', 'unknown');--> statement-breakpoint
+CREATE TYPE "public"."capture_mode" AS ENUM('on-site', 'off-site', 'external', 'unknown', 'web-upload');--> statement-breakpoint
 CREATE TYPE "public"."capture_status" AS ENUM('complete', 'partial', 'incomplete');--> statement-breakpoint
 CREATE TYPE "public"."entity_type" AS ENUM('users', 'projects', 'interventions', 'species', 'sites', 'images');--> statement-breakpoint
 CREATE TYPE "public"."image_entity" AS ENUM('project', 'site', 'user', 'intervention', 'tree');--> statement-breakpoint
@@ -122,8 +122,8 @@ CREATE TABLE "intervention" (
 	"status" "intervention_status" DEFAULT 'planned',
 	"idempotency_key" text NOT NULL,
 	"registration_date" timestamp with time zone NOT NULL,
-	"start_date" timestamp with time zone NOT NULL,
-	"end_date" timestamp with time zone NOT NULL,
+	"intervention_start_date" timestamp with time zone NOT NULL,
+	"intervention_end_date" timestamp with time zone NOT NULL,
 	"location" geometry(Geometry,4326),
 	"area" double precision,
 	"total_tree_count" integer DEFAULT 0,
@@ -136,15 +136,16 @@ CREATE TABLE "intervention" (
 	"image" text,
 	"is_private" boolean DEFAULT false NOT NULL,
 	"flag" boolean DEFAULT false,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"edited_at" timestamp with time zone,
 	"flag_reason" jsonb,
 	"migrated_intervention" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "intervention_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "intervention_hid_unique" UNIQUE("hid"),
 	CONSTRAINT "intervention_idempotency_key_unique" UNIQUE("idempotency_key"),
-	CONSTRAINT "valid_date_range" CHECK (start_date <= end_date),
+	CONSTRAINT "valid_date_range" CHECK (intervention_start_date <= intervention_end_date),
 	CONSTRAINT "area_positive" CHECK (area IS NULL OR area >= 0),
 	CONSTRAINT "tree_counts_non_negative" CHECK (total_tree_count >= 0 AND total_sample_tree_count >= 0),
 	CONSTRAINT "flagged_has_reason" CHECK (flag = false OR flag_reason IS NOT NULL),
@@ -158,14 +159,12 @@ CREATE TABLE "intervention_species" (
 	"scientific_species_id" integer,
 	"is_unknown" boolean DEFAULT false NOT NULL,
 	"species_name" text,
-	"planned_count" integer NOT NULL,
-	"actual_count" integer DEFAULT 0,
+	"species_count" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "intervention_species_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "unknown_species_logic" CHECK ((is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)),
-	CONSTRAINT "planned_count_positive" CHECK (planned_count > 0),
-	CONSTRAINT "actual_count_non_negative" CHECK (actual_count >= 0)
+	CONSTRAINT "species_count_positive" CHECK (species_count > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "migration" (
@@ -330,8 +329,7 @@ CREATE TABLE "project_member" (
 	CONSTRAINT "joined_after_invited" CHECK (invited_at IS NULL OR joined_at IS NULL OR joined_at >= invited_at),
 	CONSTRAINT "active_member_joined" CHECK (status != 'active' OR joined_at IS NOT NULL),
 	CONSTRAINT "inviter_not_self" CHECK (invited_by_id IS NULL OR invited_by_id != user_id),
-	CONSTRAINT "restricted_sites_valid_access" CHECK (site_access != 'limited_access' OR array_length(restricted_sites, 1) > 0),
-	CONSTRAINT "valid_site_access_logic" CHECK (site_access != 'deny_all' OR project_role IN ('observer'))
+	CONSTRAINT "restricted_sites_valid_access" CHECK (site_access != 'limited_access' OR array_length(restricted_sites, 1) > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "project_species" (
@@ -340,27 +338,19 @@ CREATE TABLE "project_species" (
 	"project_id" integer NOT NULL,
 	"scientific_species_id" integer,
 	"is_unknown" boolean DEFAULT false NOT NULL,
-	"custom_species_name" text,
-	"custom_common_name" text,
-	"custom_image" text,
+	"species_name" text,
+	"common_name" text,
+	"image" text,
 	"notes" text,
 	"favourite" boolean DEFAULT false NOT NULL,
 	"is_disabled" boolean DEFAULT false,
 	"added_by_id" integer NOT NULL,
-	"planned_quantity" integer,
-	"actual_quantity" integer DEFAULT 0,
-	"priority" text,
+	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
 	CONSTRAINT "project_species_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "unique_project_species" UNIQUE("project_id","scientific_species_id"),
-	CONSTRAINT "unknown_species_logic" CHECK ((is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)),
-	CONSTRAINT "unknown_species_has_name" CHECK (is_unknown = false OR custom_species_name IS NOT NULL),
-	CONSTRAINT "planned_quantity_positive" CHECK (planned_quantity IS NULL OR planned_quantity > 0),
-	CONSTRAINT "actual_quantity_non_negative" CHECK (actual_quantity >= 0),
-	CONSTRAINT "actual_not_exceed_planned" CHECK (planned_quantity IS NULL OR actual_quantity <= planned_quantity + (planned_quantity * 0.1)),
-	CONSTRAINT "valid_priority" CHECK (priority IS NULL OR priority IN ('high', 'medium', 'low'))
+	CONSTRAINT "unique_project_species" UNIQUE("project_id","scientific_species_id")
 );
 --> statement-breakpoint
 CREATE TABLE "scientific_species" (
@@ -751,10 +741,10 @@ CREATE INDEX "bulk_invite_project_active_idx" ON "bulk_invite" USING btree ("pro
 CREATE INDEX "bulk_invite_token_active_idx" ON "bulk_invite" USING btree ("token","status") WHERE status = 'pending' AND deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "image_entity_lookup_idx" ON "image" USING btree ("entity_type","entity_id");--> statement-breakpoint
 CREATE INDEX "image_primary_idx" ON "image" USING btree ("entity_type","entity_id","is_primary") WHERE is_primary = true AND deleted_at IS NULL;--> statement-breakpoint
-CREATE INDEX "intervention_project_date_range_idx" ON "intervention" USING btree ("project_id","start_date","status") WHERE deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "intervention_project_date_range_idx" ON "intervention" USING btree ("project_id","intervention_start_date","status") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "intervention_project_type_status_idx" ON "intervention" USING btree ("project_id","type","status") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "intervention_location_gist_idx" ON "intervention" USING gist ("location");--> statement-breakpoint
-CREATE INDEX "intervention_user_idx" ON "intervention" USING btree ("user_id","start_date") WHERE deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "intervention_user_idx" ON "intervention" USING btree ("user_id","intervention_end_date") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "intervention_species_intervention_idx" ON "intervention_species" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "migration_id_idx" ON "migration" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "migration_logs_idx" ON "migration_log" USING btree ("migration_id");--> statement-breakpoint
@@ -769,8 +759,7 @@ CREATE INDEX "project_invite_token_active_idx" ON "project_invite" USING btree (
 CREATE INDEX "project_invite_inviter_idx" ON "project_invite" USING btree ("invited_by_id","created_at");--> statement-breakpoint
 CREATE INDEX "project_members_active_idx" ON "project_member" USING btree ("project_id","status") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "project_members_user_active_idx" ON "project_member" USING btree ("user_id","status") WHERE deleted_at IS NULL;--> statement-breakpoint
-CREATE INDEX "project_species_active_idx" ON "project_species" USING btree ("project_id","is_disabled") WHERE deleted_at IS NULL;--> statement-breakpoint
-CREATE INDEX "project_species_usage_idx" ON "project_species" USING btree ("scientific_species_id","priority");--> statement-breakpoint
+CREATE INDEX "scientific_species_id_Idx" ON "project_species" USING btree ("scientific_species_id");--> statement-breakpoint
 CREATE INDEX "species_scientific_name_idx" ON "scientific_species" USING btree ("scientific_name");--> statement-breakpoint
 CREATE INDEX "species_common_name_idx" ON "scientific_species" USING btree ("common_name");--> statement-breakpoint
 CREATE INDEX "species_family_genus_idx" ON "scientific_species" USING btree ("family","genus");--> statement-breakpoint
