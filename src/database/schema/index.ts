@@ -871,20 +871,6 @@ export const speciesRequest = pgTable('species_request', {
   scientificNameDuplicateIdx: index('species_request_duplicate_idx')
     .on(table.scientificName, table.status)
     .where(sql`status IN ('pending', 'approved')`),
-  validUrgency: check('valid_urgency',
-    sql`urgency IN ('low', 'normal', 'high')`),
-  reviewedStatusHasReviewer: check('reviewed_status_has_reviewer',
-    sql`status = 'pending' OR (reviewed_by_id IS NOT NULL AND reviewed_at IS NOT NULL)`),
-  rejectedHasReason: check('rejected_has_reason',
-    sql`status != 'rejected' OR rejection_reason IS NOT NULL`),
-  approvedHasSpecies: check('approved_has_species',
-    sql`status != 'approved' OR created_species_id IS NOT NULL`),
-  duplicateHasReference: check('duplicate_has_reference',
-    sql`duplicate_of_request_id IS NULL OR status = 'rejected'`),
-  reviewedAtAfterCreated: check('reviewed_at_after_created',
-    sql`reviewed_at IS NULL OR reviewed_at >= created_at`),
-  scientificNameFormat: check('scientific_name_format',
-    sql`scientific_name ~* '^[A-Z][a-z]+ [a-z]+( [a-z]+)*$'`),
 }));
 
 export const intervention = pgTable('intervention', {

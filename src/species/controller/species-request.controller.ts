@@ -20,19 +20,19 @@ import { Membership } from 'src/projects/decorators/membership.decorator';
 export class SpeciesRequestController {
   constructor(private readonly speciesRequestService: SpeciesRequestService) { }
 
-  // @Post('/:id')
-  // @ProjectRoles('owner', 'admin', 'contributor')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async createRequest(
-  //   @Body() createDto: CreateSpeciesRequestDto,
-  //   @Membership() membership: any,
-  // ) {
-  //   return this.speciesRequestService.createRequest(
-  //     membership.userId,
-  //     membership.projectId,
-  //     createDto,
-  //   );
-  // }
+  @Post('/:id')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async createRequest(
+    @Body() createDto: CreateSpeciesRequestDto,
+    @Membership() membership: any,
+  ) {
+    return this.speciesRequestService.createRequest(
+      membership.userId,
+      membership.projectId,
+      createDto,
+    );
+  }
 
   //   @Get()
   //   @ApiOperation({ summary: 'Get all species requests (Super Admin only)' })
