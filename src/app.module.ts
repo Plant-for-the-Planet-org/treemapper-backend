@@ -27,8 +27,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     StartupModule,
     ProjectsModule,
     SitesModule,
-    // InterventionsModule,
-    // SpeciesModule,
+    InterventionsModule,
+    SpeciesModule,
     // AnalyticsModule
     // MigrationModule,
     // NotificationModule,

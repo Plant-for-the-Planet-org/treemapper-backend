@@ -15,6 +15,34 @@
       "when": 1754333489076,
       "tag": "0001_curvy_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1754355440108,
+      "tag": "0002_tough_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1754356265948,
+      "tag": "0003_nosy_quicksilver",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1754356700619,
+      "tag": "0004_skinny_jasper_sitwell",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1754360256298,
+      "tag": "0005_daffy_the_renegades",
+      "breakpoints": true
     }
   ]
 }

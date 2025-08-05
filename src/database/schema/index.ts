@@ -119,7 +119,7 @@ export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'bar
 export const siteAccessEnum = pgEnum('site_access', ['all_sites', 'deny_all', 'read_only', 'limited_access']);
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
 export const interventionDiscriminatorEnum = pgEnum('intervention_discriminator', ['plot', 'intervention']);
-export const captureModeEnum = pgEnum('capture_mode', ['on-site', 'off-site', 'external', 'unknown']);
+export const captureModeEnum = pgEnum('capture_mode', ['on-site', 'off-site', 'external', 'unknown','web-upload']);
 export const captureStatusEnum = pgEnum('capture_status', ['complete', 'partial', 'incomplete']);
 export const notificationTypeEnum = pgEnum('notification_type', ['project', 'site', 'member', 'intervention', 'tree', 'species', 'user', 'invite', 'system', 'other']);
 export const workspaceRoleEnum = pgEnum('workspace_role', [
@@ -916,8 +916,8 @@ export const intervention = pgTable('intervention', {
   status: interventionStatusEnum('status').default('planned'),
   idempotencyKey: text('idempotency_key').unique().notNull(),
   registrationDate: timestamp('registration_date', { withTimezone: true }).notNull(),
-  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
-  endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+  interventionStartDate: timestamp('intervention_start_date', { withTimezone: true }).notNull(),
+  interventionEndDate: timestamp('intervention_end_date', { withTimezone: true }).notNull(),
   location: geometryWithGeoJSON(4326)('location'),
   area: doublePrecision('area'),
   totalTreeCount: integer('total_tree_count').default(0),
@@ -930,7 +930,7 @@ export const intervention = pgTable('intervention', {
   image: text('image'),
   isPrivate: boolean('is_private').default(false).notNull(),
   flag: boolean('flag').default(false),
-  editedDate: timestamp('created_at', { withTimezone: true }),
+  editedAt: timestamp('edited_at', { withTimezone: true }),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   migratedIntervention: boolean('migrated_intervention').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -938,14 +938,14 @@ export const intervention = pgTable('intervention', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   projectDateRangeIdx: index('intervention_project_date_range_idx')
-    .on(table.projectId, table.startDate, table.status)
+    .on(table.projectId, table.interventionStartDate, table.status)
     .where(sql`deleted_at IS NULL`),
   projectTypeStatusIdx: index('intervention_project_type_status_idx')
     .on(table.projectId, table.type, table.status)
     .where(sql`deleted_at IS NULL`),
   locationIdx: index('intervention_location_gist_idx').using('gist', table.location),
   userInterventionsIdx: index('intervention_user_idx')
-    .on(table.userId, table.startDate)
+    .on(table.userId, table.interventionEndDate)
     .where(sql`deleted_at IS NULL`),
   validDateRange: check('valid_date_range', sql`start_date <= end_date`),
   areaPositive: check('area_positive', sql`area IS NULL OR area >= 0`),
@@ -964,15 +964,14 @@ export const interventionSpecies = pgTable('intervention_species', {
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id, { onDelete: 'set null' }),
   isUnknown: boolean('is_unknown').default(false).notNull(),
   speciesName: text('species_name'),
-  plannedCount: integer('planned_count').notNull(),
-  actualCount: integer('actual_count').default(0),
+  speciesCount: integer('species_count').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   interventionSpeciesIdx: index('intervention_species_intervention_idx').on(table.interventionId),
   unknownSpeciesLogic: check('unknown_species_logic',
     sql`(is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)`),
-  plannedCountPositive: check('planned_count_positive', sql`planned_count > 0`),
+  speciesCountPositive: check('species_count_positive', sql`species_count > 0`),
   actualCountNonNegative: check('actual_count_non_negative', sql`actual_count >= 0`),
 }));
 
