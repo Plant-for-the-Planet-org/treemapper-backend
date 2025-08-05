@@ -155,15 +155,11 @@ export class WorkspaceService {
 
   async findUsers(userData: User) {
     try {
-      if (!userData.primaryProjectUid) {
+      if (!userData.primaryWorkspaceUid) {
         throw new Error('No workspace set');
       }
 
-      if (userData.workspaceRole === 'member') {
-        throw new Error('Not permitted');
-      }
-
-      const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryProjectUid);
+      const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspaceUid);
       if (!workspaceId) {
         throw new Error('No workspace found');
       }
@@ -205,9 +201,6 @@ export class WorkspaceService {
         throw new Error('No workspace set');
       }
 
-      if (userData.workspaceRole === 'member') {
-        throw new Error('Not permitted');
-      }
 
       const workspaceId = await this.projectCacheService.getWorkspaceId(userData.primaryWorkspaceUid);
       if (!workspaceId) {
@@ -215,24 +208,16 @@ export class WorkspaceService {
       }
 
       const personDetails = await this.drizzle.db
-        .select({ id: user.id, auth: user.auth0Id })
+        .select()
         .from(user)
         .where(eq(user.uid, person))
         .limit(1)
+
       if (personDetails.length === 0) {
         throw 'no person found'
       }
-      // const impoersonateWorked = await this.drizzle.db
-      //   .update(user)
-      //   .set({ impersonate: personDetails[0].auth })
-      //   .where(eq(user.id, userData.id))
-      //   .then(res => res[0])
-      // if (impoersonateWorked) {
-      //   await this.userCacheService.invalidateUser(user)
-      //   return true
-      // } else {
-      //   return false
-      // }
+
+      return await this.userCacheService.refreshAuthUser({ ...personDetails[0], auth0Id: userData.auth0Id, impersonated: true })
     } catch (error) {
       return false
     }
@@ -240,22 +225,14 @@ export class WorkspaceService {
 
   async impersonationexit(userData: any) {
     try {
-
-      // const impoersonateWorked = await this.drizzle.db
-      //   .update(user)
-      //   .set({ impoersonated: null })
-      //   .where(eq(user.uid, userData.impersonate))
-      //   .then(res => res[0])
-      // if (impoersonateWorked) {
-      //   return true
-      // } else {
-      //   return false
-      // }
-    } catch (error) {      return false
+      await this.userCacheService.invalidateUser(userData)
+      return true
+    } catch (error) {
+      return false
     }
   }
 
-  
+
   //   /**
   //    * Get all organizations that a user belongs to
   //    */

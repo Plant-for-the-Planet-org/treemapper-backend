@@ -61,7 +61,7 @@ export class UsersController {
       primaryWorkspaceUid: users.primaryWorkspaceUid,
       primaryProjectUid: users.primaryProjectUid,
       workspace: users.workspaceRole,
-      impersonated: false
+      impersonated: users.impersonated ? true : false
     }
   }
 

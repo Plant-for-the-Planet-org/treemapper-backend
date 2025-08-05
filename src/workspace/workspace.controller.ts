@@ -53,13 +53,13 @@ export class WorkspaceController {
 
 
 
-    // @Post('/primary')
-    // async setPrimaryOrg(
-    //     @Body() createOrganizationDto: SelectOrganizationDto,
-    //     @CurrentUser() user: User,
-    // ): Promise<any> {
-    //     return this.workspaceService.setPrimaryWorkspaceAndProject(createOrganizationDto, user);
-    // }
+    @Post('/primary')
+    async setPrimaryOrg(
+        @Body() createOrganizationDto: SelectOrganizationDto,
+        @CurrentUser() user: User,
+    ): Promise<any> {
+        return this.workspaceService.setPrimaryWorkspaceAndProject(createOrganizationDto, user);
+    }
 
 
 
@@ -75,18 +75,18 @@ export class WorkspaceController {
 
 
 
-    // @Get('/members')
-    // async findUsers(@CurrentUser() user: User): Promise<any[]> {
-    //     return await this.workspaceService.findUsers(user);
-    // }
+    @Get('/members')
+    async findUsers(@CurrentUser() user: User): Promise<any[]> {
+        return await this.workspaceService.findUsers(user);
+    }
 
-    // @Put('/impersonate/:person')
-    // async impoersonateUser(@Param('person') person: string, @CurrentUser() user: User): Promise<boolean> {
-    //     return await this.workspaceService.startImpersonation(person, user);
-    // }
+    @Put('/impersonate/:person')
+    async impoersonateUser(@Param('person') person: string, @CurrentUser() user: User): Promise<boolean> {
+        return await this.workspaceService.startImpersonation(person, user);
+    }
 
-    // @Put('/impersonate/exit')
-    // async impoersonateUserExit(@CurrentUser() user: User): Promise<boolean> {
-    //     return await this.workspaceService.impersonationexit(user);
-    // }
+    @Put('/impersonate/exit')
+    async impoersonateUserExit(@CurrentUser() user: User): Promise<boolean> {
+        return await this.workspaceService.impersonationexit(user);
+    }
 }
