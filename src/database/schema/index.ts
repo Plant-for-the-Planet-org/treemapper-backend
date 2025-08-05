@@ -562,8 +562,6 @@ export const projectMember = pgTable('project_member', {
     sql`invited_by_id IS NULL OR invited_by_id != user_id`),
   restrictedSitesValidAccess: check('restricted_sites_valid_access',
     sql`site_access != 'limited_access' OR array_length(restricted_sites, 1) > 0`),
-  validSiteAccessLogic: check('valid_site_access_logic',
-    sql`site_access != 'deny_all' OR project_role IN ('observer')`),
 }));
 
 export const bulkInvite = pgTable('bulk_invite', {

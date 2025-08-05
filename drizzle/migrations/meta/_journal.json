@@ -8,6 +8,13 @@
       "when": 1754299078575,
       "tag": "0000_tan_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1754333489076,
+      "tag": "0001_curvy_sabretooth",
+      "breakpoints": true
     }
   ]
 }

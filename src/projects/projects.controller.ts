@@ -192,29 +192,10 @@ export class ProjectsController {
   //   }
 
 
-
-
-
   // //   @Get()
   // //   findAll(@Req() req) {
   // //     return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
   // //   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
   // //   @Delete(':id')
@@ -223,33 +204,4 @@ export class ProjectsController {
   // //   remove(@Param('id', ParseIntPipe) id: number, @Req() req) {
   // //     return this.projectsService.remove(id, req.user.id);
   // //   }
-
-
-
-
-  // //   @Get(':id/members')
-  // //   @ProjectRoles('owner', 'admin', 'contributor', 'observer')
-  // //   @UseGuards(ProjectPermissionsGuard)
-  // //   getMembers(@Param('id', ParseIntPipe) id: number) {
-  // //     return this.projectsService.getMembers(id);
-  // //   }
-
-  // //   @Post(':id/members')
-  // //   @ProjectRoles('owner', 'admin')
-  // //   @UseGuards(ProjectPermissionsGuard)
-  // //   addMember(
-  // //     @Param('id', ParseIntPipe) id: number,
-  // //     @Body() addMemberDto: AddProjectMemberDto,
-  // //     @Req() req,
-  // //   ) {
-  // //     return this.projectsService.addMember(id, addMemberDto, req.user.id);
-  // //   }
-
-  // //   @Get(':id/invites')
-  // //   @ProjectRoles('owner', 'admin')
-  // //   @UseGuards(ProjectPermissionsGuard)
-  // //   getProjectInvites(@Param('id', ParseIntPipe) id: number, @Req() req) {
-  // //     return this.projectsService.getProjectInvites(id, req.user.id);
-  // //   }
-
 }
