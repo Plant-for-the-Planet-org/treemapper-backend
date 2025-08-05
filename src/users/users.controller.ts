@@ -98,7 +98,13 @@ export class UsersController {
   }
 
 
-
+  @Patch(':id')
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return await this.usersService.update(id, updateUserDto);
+  }
 
 
   //   @Get('stats')
@@ -117,19 +123,7 @@ export class UsersController {
   //     return await this.usersService.findByuid(guid);
   //   }
 
-  //   @Get(':id')
-  //   async findOne(@Param('id', ParseIntPipe) id: number) {
-  //     return await this.usersService.findOne(id);
-  //   }
 
-
-  //   @Patch(':id')
-  //   async update(
-  //     @Param('id', ParseIntPipe) id: number,
-  //     @Body() updateUserDto: UpdateUserDto,
-  //   ) {
-  //     return await this.usersService.update(id, updateUserDto);
-  //   }
 
   //   @Patch(':id/deactivate')
   //   async deactivate(@Param('id', ParseIntPipe) id: number) {

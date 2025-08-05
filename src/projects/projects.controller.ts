@@ -145,7 +145,7 @@ export class ProjectsController {
   }
 
 
- @Get('invites/:invite/status/link')
+  @Get('invites/:invite/status/link')
   getProjectSingleLinkStatus(@Param('invite') invite: string) {
     return this.projectsService.getProjectSingleLinkStatus(invite);
   }
@@ -159,43 +159,43 @@ export class ProjectsController {
   }
 
 
-    @Delete(':id/members/:memberId')
-    @ProjectRoles('owner', 'admin')
-    @UseGuards(ProjectPermissionsGuard)
-    removeMember(
-      @Param('id') id: string,
-      @Param('memberId') memberId: string,
-      @Membership() membership: any,
-      @Req() req,
-    ) {
-      return this.projectsService.removeMember(id, memberId, membership, req.user.id);
-    }
+  @Delete(':id/members/:memberId')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  removeMember(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @Membership() membership: any,
+    @Req() req,
+  ) {
+    return this.projectsService.removeMember(id, memberId, membership, req.user.id);
+  }
 
 
- 
-
-  //   @Get(':id')
-  //   @ProjectRoles('owner', 'admin')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   findOne(@Membership() membership: ProjectGuardResponse) {
-  //     return this.projectsService.findOne(membership.projectId);
-  //   }
-
-  //   @Patch(':id')
-  //   @ProjectRoles('owner', 'admin')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   update(
-  //     @Body() updateProjectDto: any,
-  //     @Membership() membership: any,
-  //   ): Promise<any> {
-  //     return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
-  //   }
+  @Get(':id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  findOne(@Membership() membership: ProjectGuardResponse) {
+    return this.projectsService.findOne(membership.projectId);
+  }
 
 
-  // //   @Get()
-  // //   findAll(@Req() req) {
-  // //     return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
-  // //   }
+
+  @Patch(':id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  update(
+    @Body() updateProjectDto: any,
+    @Membership() membership: any,
+  ): Promise<any> {
+    return this.projectsService.updateProject(membership.projectId, updateProjectDto, membership.userId);
+  }
+
+
+  // @Get()
+  // findAll(@Req() req) {
+  //   return this.projectsService.findAll(req.user.id, req.user.primaryOrg);
+  // }
 
 
   // //   @Delete(':id')

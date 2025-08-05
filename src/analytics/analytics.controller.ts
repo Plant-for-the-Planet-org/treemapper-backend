@@ -34,27 +34,27 @@ export enum TimeInterval {
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) { }
 
-  // @Get('planting-overview/:id')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async getPlantingOverview(@Query() dto: PlantingOverviewDto, @Membership() membership: any,
-  // ): Promise<PlantingOverviewResponse> {
-  //   return this.analyticsService.getPlantingOverview(dto, membership.projectId);
-  // }
+  @Get('planting-overview/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getPlantingOverview(@Query() dto: PlantingOverviewDto, @Membership() membership: any,
+  ): Promise<PlantingOverviewResponse> {
+    return this.analyticsService.getPlantingOverview(dto, membership.projectId);
+  }
 
-  // @Get('recent-additions/:id')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async getRecentAdditions(@Query() dto: RecentAdditionsDto, @Membership() membership: any): Promise<RecentAdditionsResponse> {
-  //   return this.analyticsService.getRecentAdditions(dto, membership.projectId);
-  // }
+  @Get('recent-additions/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getRecentAdditions(@Query() dto: RecentAdditionsDto, @Membership() membership: any): Promise<RecentAdditionsResponse> {
+    return this.analyticsService.getRecentAdditions(dto, membership.projectId);
+  }
 
-  // @Get('project-kpis/:id')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async getProjectKPIs(@Membership() membership: any): Promise<ProjectKPIsResponse> {
-  //   return this.analyticsService.getProjectKPIs(membership.projectId);
-  // }
+  @Get('project-kpis/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectKPIs(@Membership() membership: any): Promise<ProjectKPIsResponse> {
+    return this.analyticsService.getProjectKPIs(membership.projectId);
+  }
 
 
   // @Get(':id/map')
@@ -65,18 +65,18 @@ export class AnalyticsController {
   // }
 
   
-  // @Post('/:id/export')
-  // @ProjectRoles('owner', 'admin')
-  // @UseGuards(ProjectPermissionsGuard)
-  // async exportInterventionData(
-  //   @Body(ValidationPipe) dto: InterventionExportDto,
-  //   @Req() req: Request,
-  //   @Membership() membership: any
-  // ): Promise<InterventionExportResponse> {
+  @Post('/:id/export')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async exportInterventionData(
+    @Body(ValidationPipe) dto: InterventionExportDto,
+    @Req() req: Request,
+    @Membership() membership: any
+  ): Promise<InterventionExportResponse> {
 
-  //   return this.analyticsService.exportInterventionData(
-  //     dto,
-  //     membership.projectId
-  //   );
-  // }
+    return this.analyticsService.exportInterventionData(
+      dto,
+      membership.projectId
+    );
+  }
 }

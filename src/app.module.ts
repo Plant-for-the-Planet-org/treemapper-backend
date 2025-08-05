@@ -29,7 +29,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     SitesModule,
     InterventionsModule,
     SpeciesModule,
-    // AnalyticsModule
+    AnalyticsModule
     // MigrationModule,
     // NotificationModule,
     // MobileModule,
