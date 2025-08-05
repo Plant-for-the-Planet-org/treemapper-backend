@@ -1,5 +1,5 @@
 {
-  "id": "dda6c028-3754-4e44-984a-9a9ce2ff8ed1",
+  "id": "77fd5387-2b70-4ff0-ab4e-19faa09180df",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -4166,36 +4166,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "valid_urgency": {
-          "name": "valid_urgency",
-          "value": "urgency IN ('low', 'normal', 'high')"
-        },
-        "reviewed_status_has_reviewer": {
-          "name": "reviewed_status_has_reviewer",
-          "value": "status = 'pending' OR (reviewed_by_id IS NOT NULL AND reviewed_at IS NOT NULL)"
-        },
-        "rejected_has_reason": {
-          "name": "rejected_has_reason",
-          "value": "status != 'rejected' OR rejection_reason IS NOT NULL"
-        },
-        "approved_has_species": {
-          "name": "approved_has_species",
-          "value": "status != 'approved' OR created_species_id IS NOT NULL"
-        },
-        "duplicate_has_reference": {
-          "name": "duplicate_has_reference",
-          "value": "duplicate_of_request_id IS NULL OR status = 'rejected'"
-        },
-        "reviewed_at_after_created": {
-          "name": "reviewed_at_after_created",
-          "value": "reviewed_at IS NULL OR reviewed_at >= created_at"
-        },
-        "scientific_name_format": {
-          "name": "scientific_name_format",
-          "value": "scientific_name ~* '^[A-Z][a-z]+ [a-z]+( [a-z]+)*$'"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.survey": {
