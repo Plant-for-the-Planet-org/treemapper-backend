@@ -103,7 +103,12 @@ export class UsersService {
     async onBoardUser(surveyDetails: CreateSurvey, userData: User): Promise<boolean> {
         try {
             this.validateOnboardingData(surveyDetails, userData);
-            const workspaceId = this.determineWorkspaceId(surveyDetails);
+            const workspaceSlug = this.determineWorkspaceId(surveyDetails);
+            const workspaceData = await this.drizzleService.db.select({ id: workspace.id }).from(workspace).where(eq(workspace.slug, workspaceSlug)).limit(1)
+            if (!workspaceData || workspaceData.length === 0) {
+                throw 'Server side workspace issue'
+            }
+            const workspaceId = workspaceData[0].id
             const projectSlug = this.generateUniqueProjectSlug(surveyDetails.projectName);
             const now = new Date();
             const uids = {
@@ -249,10 +254,10 @@ export class UsersService {
         }
     }
 
-    private determineWorkspaceId(surveyDetails: CreateSurvey): number {
-        if (surveyDetails.devMode) return 3;
-        if (surveyDetails.forestCloud) return 1;
-        return 2;
+    private determineWorkspaceId(surveyDetails: CreateSurvey): string {
+        if (surveyDetails.devMode) return 'development-projects';
+        if (surveyDetails.forestCloud) return 'platform-projects';
+        return 'private-projects';
     }
 
     private generateUniqueProjectSlug(projectName: string): string {
@@ -373,7 +378,7 @@ export class UsersService {
         return updateData;
     }
 
-        async invalidateMyCache(user: User,) {
+    async invalidateMyCache(user: User,) {
         return await this.userCacheService.invalidateUser(user);
     }
 

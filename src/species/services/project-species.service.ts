@@ -60,7 +60,7 @@ export class ProjectSpeciesService {
         speciesName: scientificSpeciesData.scientificName,
         isUnknown: false,
         commonName: createDto.commonName,
-        isDisabled: createDto.isNativeSpecies || false,
+        isDisabled: createDto.isDisbaledSpecies || false,
         notes: createDto.description,
         favourite: createDto.favourite || false,
         image: createDto.image || ''
@@ -112,7 +112,7 @@ export class ProjectSpeciesService {
     }
   }
 
-  private async getProjectSpecies(projectId: number,userId:number) {
+  private async getProjectSpecies(projectId: number, userId: number) {
     return this.drizzle.db
       .select({
         // Project species fields
@@ -512,6 +512,146 @@ export class ProjectSpeciesService {
     };
   }
 
+  async updateFavourite(
+    speciesId: string,
+    membership: ProjectGuardResponse,
+    updateDto: { fav: boolean },
+  ) {
+    const existingSpecies = await this.getByUid(speciesId, membership.projectId);
+    if (!existingSpecies) {
+      throw new NotFoundException('User species not found');
+    }
+
+    const updatedSpecies = await this.drizzle.db
+      .update(projectSpecies)
+      .set({
+        favourite: updateDto.fav,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(projectSpecies.id, existingSpecies.id),
+          eq(projectSpecies.projectId, membership.projectId),
+        ),
+      )
+      .returning();
+
+    if (!updatedSpecies.length) {
+      throw new NotFoundException('User species not found');
+    }
+    return false
+  }
+
+  async updateDisbale(
+    speciesId: string,
+    membership: ProjectGuardResponse,
+    updateDto: { disable: boolean },
+  ) {
+    try {
+      const existingSpecies = await this.getByUid(speciesId, membership.projectId);
+      if (!existingSpecies) {
+        throw new NotFoundException('User species not found');
+      }
+
+      const updatedSpecies = await this.drizzle.db
+        .update(projectSpecies)
+        .set({
+          isDisabled: updateDto.disable,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(projectSpecies.id, existingSpecies.id),
+            eq(projectSpecies.projectId, membership.projectId),
+          ),
+        )
+        .returning();
+      console.log("SDC", updatedSpecies)
+
+      if (!updatedSpecies.length) {
+        throw new NotFoundException('User species not found');
+      }
+      return false
+    } catch (error) {
+      console.log("SDC", error)
+    }
+  }
+
+
+  async getByUid(uid: string, projectId: number) {
+    const species = await this.drizzle.db
+      .select({
+        id: projectSpecies.id,
+        uid: projectSpecies.uid,
+        commonName: projectSpecies.commonName,
+        image: projectSpecies.image,
+        description: projectSpecies.notes,
+        notes: projectSpecies.notes,
+        favourite: projectSpecies.favourite,
+        createdAt: projectSpecies.createdAt,
+        updatedAt: projectSpecies.updatedAt,
+        scientificSpecies: {
+          id: scientificSpecies.id,
+          uid: scientificSpecies.uid,
+          scientificName: scientificSpecies.scientificName,
+          commonName: scientificSpecies.commonName,
+          description: scientificSpecies.description,
+          gbifId: scientificSpecies.gbifId,
+        },
+      })
+      .from(projectSpecies)
+      .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
+      .where(
+        and(
+          eq(projectSpecies.uid, uid),
+          eq(projectSpecies.projectId, projectId),
+        ),
+      )
+      .limit(1);
+
+    if (!species.length) {
+      throw new NotFoundException('User species not found');
+    }
+
+    return species[0];
+  }
+
+
+  async update(
+    speciesId: string,
+    membership: ProjectGuardResponse,
+    updateDto: UpdateUserSpeciesDto,
+  ) {
+    const existingSpecies = await this.getByUid(speciesId, membership.projectId);
+    if (!existingSpecies) {
+      throw new NotFoundException('User species not found');
+    }
+
+    const updatedSpecies = await this.drizzle.db
+      .update(projectSpecies)
+      .set({
+        ...updateDto,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(projectSpecies.id, existingSpecies.id),
+          eq(projectSpecies.projectId, membership.projectId),
+        ),
+      )
+      .returning();
+
+    if (!updatedSpecies.length) {
+      throw new NotFoundException('User species not found');
+    }
+
+    return updatedSpecies[0]
+  }
+
+
+
+
+
 
 
   //   async delete(speciesId: string, membership: ProjectGuardResponse) {
@@ -537,139 +677,6 @@ export class ProjectSpeciesService {
   //     return { message: 'Species deleted successfully' };
   //   }
 
-  //   async getByUid(uid: string, projectId: number) {
-  //     const species = await this.drizzle.db
-  //       .select({
-  //         id: projectSpecies.id,
-  //         uid: projectSpecies.uid,
-  //         commonName: projectSpecies.commonName,
-  //         image: projectSpecies.image,
-  //         description: projectSpecies.description,
-  //         notes: projectSpecies.notes,
-  //         favourite: projectSpecies.favourite,
-  //         createdAt: projectSpecies.createdAt,
-  //         updatedAt: projectSpecies.updatedAt,
-  //         scientificSpecies: {
-  //           id: scientificSpecies.id,
-  //           uid: scientificSpecies.uid,
-  //           scientificName: scientificSpecies.scientificName,
-  //           commonName: scientificSpecies.commonName,
-  //           description: scientificSpecies.description,
-  //           gbifId: scientificSpecies.gbifId,
-  //         },
-  //       })
-  //       .from(projectSpecies)
-  //       .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
-  //       .where(
-  //         and(
-  //           eq(projectSpecies.uid, uid),
-  //           eq(projectSpecies.projectId, projectId),
-  //         ),
-  //       )
-  //       .limit(1);
-
-  //     if (!species.length) {
-  //       throw new NotFoundException('User species not found');
-  //     }
-
-  //     return species[0];
-  //   }
-
-  //   async update(
-  //     speciesId: string,
-  //     membership: ProjectGuardResponse,
-  //     updateDto: UpdateUserSpeciesDto,
-  //   ) {
-  //     const existingSpecies = await this.getByUid(speciesId, membership.projectId);
-  //     if (!existingSpecies) {
-  //       throw new NotFoundException('User species not found');
-  //     }
-
-  //     const updatedSpecies = await this.drizzle.db
-  //       .update(projectSpecies)
-  //       .set({
-  //         ...updateDto,
-  //         updatedAt: new Date(),
-  //       })
-  //       .where(
-  //         and(
-  //           eq(projectSpecies.id, existingSpecies.id),
-  //           eq(projectSpecies.projectId, membership.projectId),
-  //         ),
-  //       )
-  //       .returning();
-
-  //     if (!updatedSpecies.length) {
-  //       throw new NotFoundException('User species not found');
-  //     }
-
-  //     return updatedSpecies[0]
-  //   }
-
-  //   async updateFavourite(
-  //     speciesId: string,
-  //     membership: ProjectGuardResponse,
-  //     updateDto: { fav: boolean },
-  //   ) {
-  //     const existingSpecies = await this.getByUid(speciesId, membership.projectId);
-  //     if (!existingSpecies) {
-  //       throw new NotFoundException('User species not found');
-  //     }
-
-  //     const updatedSpecies = await this.drizzle.db
-  //       .update(projectSpecies)
-  //       .set({
-  //         favourite: updateDto.fav,
-  //         updatedAt: new Date(),
-  //       })
-  //       .where(
-  //         and(
-  //           eq(projectSpecies.id, existingSpecies.id),
-  //           eq(projectSpecies.projectId, membership.projectId),
-  //         ),
-  //       )
-  //       .returning();
-
-  //     if (!updatedSpecies.length) {
-  //       throw new NotFoundException('User species not found');
-  //     }
-  //     return false
-  //   }
-
-  //   async updateDisbale(
-  //     speciesId: string,
-  //     membership: ProjectGuardResponse,
-  //     updateDto: { disable: boolean },
-  //   ) {
-  //     try {
-  //       const existingSpecies = await this.getByUid(speciesId, membership.projectId);
-  //       if (!existingSpecies) {
-  //         throw new NotFoundException('User species not found');
-  //       }
-
-  //       const updatedSpecies = await this.drizzle.db
-  //         .update(projectSpecies)
-  //         .set({
-  //           isDisabled: updateDto.disable,
-  //           updatedAt: new Date(),
-  //         })
-  //         .where(
-  //           and(
-  //             eq(projectSpecies.id, existingSpecies.id),
-  //             eq(projectSpecies.projectId, membership.projectId),
-  //           ),
-  //         )
-  //         .returning();
-  //       console.log("SDC", updatedSpecies)
-
-  //       if (!updatedSpecies.length) {
-  //         throw new NotFoundException('User species not found');
-  //       }
-  //       return false
-  //     } catch (error) {
-  //       console.log("SDC", error)
-  //     }
-  //   }
 
 
 
