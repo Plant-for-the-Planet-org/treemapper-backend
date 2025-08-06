@@ -1,6 +1,6 @@
 {
-  "id": "56fae173-58bb-45c3-b7c0-48388cbdfb01",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "8a7ba051-43ba-44a2-9daa-bec31ec294c3",
+  "prevId": "56fae173-58bb-45c3-b7c0-48388cbdfb01",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1196,6 +1196,12 @@
         },
         "species_name": {
           "name": "species_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "common_name": {
+          "name": "common_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false

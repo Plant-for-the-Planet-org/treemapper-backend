@@ -932,6 +932,7 @@ export const interventionSpecies = pgTable('intervention_species', {
   scientificSpeciesId: integer('scientific_species_id').references(() => scientificSpecies.id, { onDelete: 'set null' }),
   isUnknown: boolean('is_unknown').default(false).notNull(),
   speciesName: text('species_name'),
+  commonName: text('common_name'),
   speciesCount: integer('species_count').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

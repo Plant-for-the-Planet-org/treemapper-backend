@@ -6,7 +6,6 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -49,6 +48,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/terminus": "^11.0.0",
     "@turf/boolean-valid": "^7.2.0",
+    "@turf/invariant": "^7.2.0",
     "@types/cache-manager-redis-store": "^3.0.0",
     "@types/ioredis": "^5.0.0",
     "@types/node": "^22.10.7",

@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1754384204080,
-      "tag": "0000_wide_angel",
+      "when": 1754435007175,
+      "tag": "0000_wise_wraith",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1754442484486,
+      "tag": "0001_legal_genesis",
       "breakpoints": true
     }
   ]

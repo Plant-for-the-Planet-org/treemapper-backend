@@ -1,0 +1,1 @@
+ALTER TABLE "intervention_species" ADD COLUMN "common_name" text;
