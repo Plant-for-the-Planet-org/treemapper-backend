@@ -159,6 +159,7 @@ CREATE TABLE "intervention_species" (
 	"scientific_species_id" integer,
 	"is_unknown" boolean DEFAULT false NOT NULL,
 	"species_name" text,
+	"common_name" text,
 	"species_count" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -499,14 +500,7 @@ CREATE TABLE "species_request" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "species_request_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "valid_urgency" CHECK (urgency IN ('low', 'normal', 'high')),
-	CONSTRAINT "reviewed_status_has_reviewer" CHECK (status = 'pending' OR (reviewed_by_id IS NOT NULL AND reviewed_at IS NOT NULL)),
-	CONSTRAINT "rejected_has_reason" CHECK (status != 'rejected' OR rejection_reason IS NOT NULL),
-	CONSTRAINT "approved_has_species" CHECK (status != 'approved' OR created_species_id IS NOT NULL),
-	CONSTRAINT "duplicate_has_reference" CHECK (duplicate_of_request_id IS NULL OR status = 'rejected'),
-	CONSTRAINT "reviewed_at_after_created" CHECK (reviewed_at IS NULL OR reviewed_at >= created_at),
-	CONSTRAINT "scientific_name_format" CHECK (scientific_name ~* '^[A-Z][a-z]+ [a-z]+( [a-z]+)*$')
+	CONSTRAINT "species_request_uid_unique" UNIQUE("uid")
 );
 --> statement-breakpoint
 CREATE TABLE "survey" (
@@ -531,6 +525,7 @@ CREATE TABLE "tree" (
 	"intervention_id" integer NOT NULL,
 	"intervention_species_id" integer NOT NULL,
 	"species_name" text,
+	"common_name" text,
 	"created_by_id" integer NOT NULL,
 	"tag" text,
 	"tree_type" "tree_enum" DEFAULT 'sample',
