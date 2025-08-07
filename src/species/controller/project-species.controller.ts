@@ -24,6 +24,9 @@ import { ProjectRoles } from '../../projects/decorators/project-roles.decorator'
 import { Membership } from '../../projects/decorators/membership.decorator';
 import { ProjectGuardResponse } from '../../projects/projects.service';
 
+
+
+
 @Controller('project-species')
 export class ProjectSpeciesController {
   constructor(private readonly userSpeciesService: ProjectSpeciesService) { }
@@ -47,7 +50,7 @@ export class ProjectSpeciesController {
   async getAll(
     @Membership() membership: ProjectGuardResponse,
   ) {
-    return this.userSpeciesService.getAll(membership);
+    return this.userSpeciesService.getProjectSpeciesAggregated(membership.projectId);
   }
 
   @Put('/:id/species/:species/fav')
