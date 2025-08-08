@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
-import { and, eq, desc, asc, like, gte, lte, inArray, sql, count, isNull, or } from 'drizzle-orm';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, HttpException, HttpStatus } from '@nestjs/common';
+import { and, eq, desc, asc, like, gte, lte, inArray, sql, count, isNull, or, ilike } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import {
   intervention,
@@ -10,6 +10,7 @@ import {
   user,
   interventionSpecies,
   scientificSpecies,
+  projectMember,
 } from '../database/schema/index';
 import {
   InterventionResponseDto,
@@ -21,7 +22,8 @@ import {
   TreeDto,
   SortOrderEnum,
   InterventionType,
-  CaptureModeEnum
+  CaptureModeEnum,
+  UpdateInterventionSpeciesDto
 } from './dto/interventions.dto';
 import { generateUid } from 'src/util/uidGenerator';
 import { generateParentHID } from 'src/util/hidGenerator';
@@ -30,6 +32,39 @@ import { interventionConfigurationSeedData } from 'src/database/schema/intervent
 import { error } from 'console';
 
 import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
+
+
+
+// DTO for ownership transfer request
+export class TransferInterventionOwnershipDto {
+  newOwnerId: number;
+  reason?: string;
+  transferMessage?: string;
+  notifyNewOwner?: boolean = true;
+  notifyOldOwner?: boolean = true;
+}
+
+// Response interface
+interface OwnershipTransferResult {
+  intervention: {
+    id: number;
+    uid: string;
+    hid: string;
+    previousOwner: {
+      id: number;
+      displayName: string;
+      email: string;
+    };
+    newOwner: {
+      id: number;
+      displayName: string;
+      email: string;
+    };
+  };
+  transferredTreeCount: number;
+  changedFields: string[];
+  auditLogId?: number;
+}
 
 
 interface GeoJSONPointGeometry {
@@ -104,6 +139,170 @@ export class InterventionsService {
   constructor(
     private drizzleService: DrizzleService,
   ) { }
+
+  async updateInterventionSpecies(
+    interventionId: string,
+    speciesId: string,
+    updateDto: UpdateInterventionSpeciesDto,
+    userId: number,
+  ) {
+    return await this.drizzleService.db.transaction(async (tx) => {
+      // 1. Validate intervention exists and user has access
+      const getInterventionId = await tx.select({ id: intervention.id }).from(intervention).where(eq(intervention.uid, interventionId)).limit(1)
+      if (!getInterventionId || getInterventionId.length == 0) {
+        throw 'No intervneiton found'
+      }
+
+      const getInterventionSpecies = await tx.select().from(interventionSpecies).where(eq(interventionSpecies.uid, speciesId)).limit(1)
+      if (!getInterventionSpecies || getInterventionSpecies.length == 0) {
+        throw 'No intervneiton found'
+      }
+      // 2. Validate intervention species exists
+
+
+      // 3. Validate new scientific species exists
+      const newSpeciesData = await this.validateScientificSpecies(
+        tx,
+        updateDto.scientificSpeciesId,
+      );
+
+      // 4. Count existing trees and get their HIDs
+      const treeData = await this.getTreeCountAndHids(tx, getInterventionSpecies[0].id);
+
+      // 5. Validate species count against tree count
+      if (updateDto.speciesCount < treeData.count) {
+        const error = new Error('Species count cannot be less than existing tree count') as any;
+        error.code = 'TREE_COUNT_EXCEEDS_SPECIES_COUNT';
+        error.currentTreeCount = treeData.count;
+        error.requestedSpeciesCount = updateDto.speciesCount;
+        error.treeHids = treeData.hids;
+        throw error;
+      }
+
+      // 6. Prepare old values for audit
+      const oldValues = {
+        scientificSpeciesId: getInterventionSpecies[0].scientificSpeciesId,
+        speciesName: getInterventionSpecies[0].speciesName,
+        commonName: getInterventionSpecies[0].commonName,
+        speciesCount: getInterventionSpecies[0].speciesCount,
+      };
+
+      // 7. Update intervention species
+      const updatedSpecies = await tx
+        .update(interventionSpecies)
+        .set({
+          scientificSpeciesId: updateDto.scientificSpeciesId,
+          speciesName: newSpeciesData.scientificName,
+          commonName: newSpeciesData.commonName,
+          speciesCount: updateDto.speciesCount,
+          updatedAt: new Date(),
+        })
+        .where(eq(interventionSpecies.id, getInterventionSpecies[0].id))
+        .returning();
+
+      // 8. Update all linked trees with new species data
+      if (treeData.count > 0) {
+        await tx
+          .update(tree)
+          .set({
+            speciesName: newSpeciesData.scientificName,
+            commonName: newSpeciesData.commonName,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(tree.interventionSpeciesId, getInterventionSpecies[0].id),
+              isNull(tree.deletedAt)
+            )
+          );
+      }
+
+      // 9. Update intervention timestamp
+      await tx
+        .update(intervention)
+        .set({
+          updatedAt: new Date(),
+        })
+        .where(eq(intervention.id, getInterventionId[0].id));
+
+      // 10. Create audit log
+      const newValues = {
+        scientificSpeciesId: updateDto.scientificSpeciesId,
+        speciesName: newSpeciesData.scientificName,
+        commonName: newSpeciesData.commonName,
+        speciesCount: updateDto.speciesCount,
+      };
+
+      const changedFields = this.getChangedFields(oldValues, newValues);
+
+      // await this.auditLogService.createAuditLog({
+      //   action: 'update',
+      //   entityType: 'intervention',
+      //   entityId: speciesId.toString(),
+      //   entityUid: currentSpecies.uid,
+      //   userId: userId,
+      //   workspaceId: null, // You might want to get this from intervention
+      //   projectId: interventionData.projectId,
+      //   oldValues,
+      //   newValues,
+      //   changedFields,
+      //   source: 'web',
+      // });
+
+      return {
+        interventionSpecies: updatedSpecies[0],
+        updatedTreeCount: treeData.count,
+        changedFields,
+      };
+    });
+  }
+
+
+  private async validateScientificSpecies(tx: any, scientificSpeciesId: number) {
+    const species = await tx
+      .select({
+        id: scientificSpecies.id,
+        scientificName: scientificSpecies.scientificName,
+        commonName: scientificSpecies.commonName,
+      })
+      .from(scientificSpecies)
+      .where(
+        and(
+          eq(scientificSpecies.id, scientificSpeciesId),
+          isNull(scientificSpecies.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!species.length) {
+      throw new HttpException(
+        'Scientific species not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return species[0];
+  }
+
+  private async getTreeCountAndHids(tx: any, speciesId: number) {
+    const result = await tx
+      .select({
+        count: sql<number>`count(*)::int`,
+        hids: sql<string[]>`array_agg(${tree.hid})`,
+      })
+      .from(tree)
+      .where(
+        and(
+          eq(tree.interventionSpeciesId, speciesId),
+          isNull(tree.deletedAt)
+        )
+      );
+
+    return {
+      count: result[0]?.count || 0,
+      hids: result[0]?.hids || [],
+    };
+  }
 
 
 
@@ -1071,6 +1270,459 @@ export class InterventionsService {
     return results;
   }
 
+  async transferInterventionOwnership(
+    interventionId: number,
+    transferDto: TransferInterventionOwnershipDto,
+    requesterId: number,
+  ): Promise<OwnershipTransferResult> {
+    return await this.drizzleService.db.transaction(async (tx) => {
+      // 1. Validate intervention exists and get current data
+      const currentIntervention = await this.validateAndGetIntervention(
+        tx,
+        interventionId
+      );
+
+      // 2. Validate requester has permission to transfer ownership
+      await this.validateTransferPermission(
+        tx,
+        currentIntervention.projectId,
+        requesterId,
+        currentIntervention.userId
+      );
+
+      // 3. Validate new owner exists and has project access
+      const newOwner = await this.validateNewOwner(
+        tx,
+        transferDto.newOwnerId,
+        currentIntervention.projectId
+      );
+
+      // 4. Get current owner details for audit
+      const currentOwner = await this.getCurrentOwner(
+        tx,
+        currentIntervention.userId
+      );
+
+      // 5. Prevent self-transfer
+      if (currentIntervention.userId === transferDto.newOwnerId) {
+        throw new HttpException(
+          'Cannot transfer intervention to the same owner',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // 6. Count associated trees for audit purposes
+      const treeCount = await this.getAssociatedTreeCount(tx, interventionId);
+
+      // 7. Prepare audit data
+      const oldValues = {
+        userId: currentIntervention.userId,
+        ownerDisplayName: currentOwner.displayName,
+        ownerEmail: currentOwner.email,
+      };
+
+      const newValues = {
+        userId: transferDto.newOwnerId,
+        ownerDisplayName: newOwner.displayName,
+        ownerEmail: newOwner.email,
+      };
+
+      // 8. Update intervention ownership
+      const updatedIntervention = await tx
+        .update(intervention)
+        .set({
+          userId: transferDto.newOwnerId,
+          updatedAt: new Date(),
+          editedAt: new Date(), // Track when intervention was last edited
+        })
+        .where(eq(intervention.id, interventionId))
+        .returning();
+
+      // 9. Update associated trees ownership (if any)
+      if (treeCount > 0) {
+        await tx
+          .update(tree)
+          .set({
+            createdById: transferDto.newOwnerId,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(tree.interventionId, interventionId),
+              isNull(tree.deletedAt)
+            )
+          );
+      }
+
+      // 10. Create audit log entry
+      const changedFields = this.getChangedFields(oldValues, newValues);
+
+      // Uncomment when audit service is available
+      // const auditEntry = await this.auditLogService.createAuditLog({
+      //   action: 'update',
+      //   entityType: 'intervention',
+      //   entityId: interventionId.toString(),
+      //   entityUid: currentIntervention.uid,
+      //   userId: requesterId,
+      //   workspaceId: null, // You might want to get this from project
+      //   projectId: currentIntervention.projectId,
+      //   oldValues,
+      //   newValues,
+      //   changedFields,
+      //   source: 'web',
+      // });
+
+      // 11. Send notifications (if enabled)
+      if (transferDto.notifyNewOwner || transferDto.notifyOldOwner) {
+        // await this.sendOwnershipTransferNotifications(
+        //   tx,
+        //   {
+        //     intervention: updatedIntervention[0],
+        //     currentOwner,
+        //     newOwner,
+        //     requester: requesterId,
+        //     reason: transferDto.reason,
+        //     message: transferDto.transferMessage,
+        //   },
+        //   {
+        //     notifyNew: transferDto.notifyNewOwner,
+        //     notifyOld: transferDto.notifyOldOwner,
+        //   }
+        // );
+      }
+
+      return {
+        intervention: {
+          id: updatedIntervention[0].id,
+          uid: updatedIntervention[0].uid,
+          hid: updatedIntervention[0].hid,
+          previousOwner: {
+            id: currentOwner.id,
+            displayName: currentOwner.displayName,
+            email: currentOwner.email,
+          },
+          newOwner: {
+            id: newOwner.id,
+            displayName: newOwner.displayName,
+            email: newOwner.email,
+          },
+        },
+        transferredTreeCount: treeCount,
+        changedFields,
+        // auditLogId: auditEntry?.id,
+      };
+    });
+  }
+
+  /**
+   * Validate intervention exists and is not deleted
+   */
+  private async validateAndGetIntervention(tx: any, interventionId: number) {
+    const interventionData = await tx
+      .select({
+        id: intervention.id,
+        uid: intervention.uid,
+        hid: intervention.hid,
+        userId: intervention.userId,
+        projectId: intervention.projectId,
+        type: intervention.type,
+        status: intervention.status,
+      })
+      .from(intervention)
+      .where(
+        and(
+          eq(intervention.id, interventionId),
+          isNull(intervention.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!interventionData.length) {
+      throw new HttpException(
+        'Intervention not found or has been deleted',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    // Prevent transfer of completed/cancelled interventions (optional business rule)
+    if (['completed', 'cancelled', 'failed'].includes(interventionData[0].status)) {
+      throw new HttpException(
+        `Cannot transfer ownership of ${interventionData[0].status} intervention`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return interventionData[0];
+  }
+
+  /**
+   * Validate that the requester has permission to transfer ownership
+   */
+  private async validateTransferPermission(
+    tx: any,
+    projectId: number,
+    requesterId: number,
+    currentOwnerId: number
+  ) {
+    // Check if requester is the current owner
+    const isCurrentOwner = requesterId === currentOwnerId;
+
+    // Check if requester has admin/owner role in project
+    const projectMembership = await tx
+      .select({
+        id: projectMember.id,
+        projectRole: projectMember.projectRole,
+      })
+      .from(projectMember)
+      .where(
+        and(
+          eq(projectMember.projectId, projectId),
+          eq(projectMember.userId, requesterId),
+          eq(projectMember.status, 'active'),
+          isNull(projectMember.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!projectMembership.length) {
+      throw new HttpException(
+        'Access denied: You are not a member of this project',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const hasAdminRights = ['owner', 'admin'].includes(projectMembership[0].projectRole);
+
+    // Allow transfer if user is current owner OR has admin rights
+    if (!isCurrentOwner && !hasAdminRights) {
+      throw new HttpException(
+        'Access denied: Only the current owner or project admins can transfer ownership',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  /**
+   * Validate new owner exists and has project access
+   */
+  private async validateNewOwner(tx: any, newOwnerId: number, projectId: number) {
+    // Check if new owner exists and is active
+    const newOwnerData = await tx
+      .select({
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        isActive: user.isActive,
+      })
+      .from(user)
+      .where(
+        and(
+          eq(user.id, newOwnerId),
+          eq(user.isActive, true),
+          isNull(user.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!newOwnerData.length) {
+      throw new HttpException(
+        'New owner not found or is inactive',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    // Check if new owner has access to the project
+    const newOwnerProjectAccess = await tx
+      .select({
+        id: projectMember.id,
+        projectRole: projectMember.projectRole,
+        status: projectMember.status,
+      })
+      .from(projectMember)
+      .where(
+        and(
+          eq(projectMember.projectId, projectId),
+          eq(projectMember.userId, newOwnerId),
+          eq(projectMember.status, 'active'),
+          isNull(projectMember.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!newOwnerProjectAccess.length) {
+      throw new HttpException(
+        'New owner does not have access to this project',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Ensure new owner has at least contributor role
+    const allowedRoles = ['contributor', 'admin', 'owner'];
+    if (!allowedRoles.includes(newOwnerProjectAccess[0].projectRole)) {
+      throw new HttpException(
+        'New owner must have at least contributor role in the project',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return newOwnerData[0];
+  }
+
+  /**
+   * Get current owner details
+   */
+  private async getCurrentOwner(tx: any, currentOwnerId: number) {
+    const currentOwnerData = await tx
+      .select({
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+      })
+      .from(user)
+      .where(eq(user.id, currentOwnerId))
+      .limit(1);
+
+    if (!currentOwnerData.length) {
+      throw new HttpException(
+        'Current owner not found',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return currentOwnerData[0];
+  }
+
+  /**
+   * Count trees associated with the intervention
+   */
+  private async getAssociatedTreeCount(tx: any, interventionId: number): Promise<number> {
+    const result = await tx
+      .select({
+        count: sql<number>`count(*)::int`,
+      })
+      .from(tree)
+      .where(
+        and(
+          eq(tree.interventionId, interventionId),
+          isNull(tree.deletedAt)
+        )
+      );
+
+    return result[0]?.count || 0;
+  }
+
+  /**
+   * Send ownership transfer notifications
+   */
+  private async sendOwnershipTransferNotifications(
+    tx: any,
+    data: {
+      intervention: any;
+      currentOwner: any;
+      newOwner: any;
+      requester: number;
+      reason?: string;
+      message?: string;
+    },
+    options: {
+      notifyNew: boolean;
+      notifyOld: boolean;
+    }
+  ) {
+    const notifications = [];
+
+    // Notify new owner
+    if (options.notifyNew && data.newOwner.id !== data.requester) {
+      // notifications.push({
+      //   userId: data.newOwner.id,
+      //   type: 'intervention',
+      //   title: 'Intervention Ownership Transferred to You',
+      //   message: `You are now the owner of intervention ${data.intervention.hid}. ${data.message || ''}`,
+      //   entityId: data.intervention.id,
+      //   priority: 'normal',
+      //   actionUrl: `/interventions/${data.intervention.id}`,
+      //   actionText: 'View Intervention',
+      // });
+    }
+
+    // Notify previous owner (if they're not the requester)
+    if (options.notifyOld && data.currentOwner.id !== data.requester) {
+      // notifications.push({
+      //   userId: data.currentOwner.id,
+      //   type: 'intervention',
+      //   title: 'Intervention Ownership Transferred',
+      //   message: `Ownership of intervention ${data.intervention.hid} has been transferred to ${data.newOwner.displayName}. ${data.reason ? `Reason: ${data.reason}` : ''}`,
+      //   entityId: data.intervention.id,
+      //   priority: 'normal',
+      //   actionUrl: `/interventions/${data.intervention.id}`,
+      //   actionText: 'View Intervention',
+      // });
+    }
+
+    // Create notifications in database
+    for (const notification of notifications) {
+      // Uncomment when notification service is available
+      // await this.notificationService.create(notification);
+
+      // Or insert directly into notifications table:
+      // await tx.insert(notifications).values({
+      //   uid: generateUid(), // You'll need to implement this
+      //   ...notification,
+      // });
+    }
+  }
+
+  /**
+   * Get changed fields for audit log
+   */
+  private getChangedFields(oldValues: any, newValues: any): string[] {
+    const changedFields: string[] = [];
+
+    Object.keys(newValues).forEach((key) => {
+      if (oldValues[key] !== newValues[key]) {
+        changedFields.push(key);
+      }
+    });
+
+    return changedFields;
+  }
+
+  /**
+   * Bulk transfer multiple interventions (bonus method)
+   */
+  async bulkTransferInterventionOwnership(
+    interventionIds: number[],
+    transferDto: TransferInterventionOwnershipDto,
+    requesterId: number,
+  ): Promise<{
+    successful: OwnershipTransferResult[];
+    failed: { interventionId: number; error: string }[];
+  }> {
+    const results = {
+      successful: [] as OwnershipTransferResult[],
+      failed: [] as { interventionId: number; error: string }[],
+    };
+
+    // Process each intervention individually to handle partial failures
+    for (const interventionId of interventionIds) {
+      try {
+        const result = await this.transferInterventionOwnership(
+          interventionId,
+          transferDto,
+          requesterId
+        );
+        results.successful.push(result);
+      } catch (error) {
+        results.failed.push({
+          interventionId,
+          error: error.message || 'Unknown error occurred',
+        });
+      }
+    }
+
+    return results;
+  }
+
 
 
 
@@ -1100,4 +1752,13 @@ export class InterventionsService {
   //     return ''
   //   }
   // }
+
+
+  async searchProjectMembers(
+    projectId: number,
+    searchParams: any,
+  ): Promise<any> {
+
+  }
+
 }
