@@ -194,9 +194,9 @@ export class ProjectsService {
           await this.userCacheService.refreshAuthUser({ ...userData, primaryWorkspaceUid: userData.primaryWorkspaceUid, primaryProjectUid: projectData.uid })
         this.notificationService.createNotification({
           userId: userData.id,
-          type: NotificationType.PROJECT_UPDATE,
-          title: 'Personal Project Created',
-          message: `Your personal project ${name} has been created successfully.`
+          type: NotificationType.MEMBER,
+          title: 'New Project Created',
+          message: `Your project ${name} has been created successfully.`
         }).catch(err => console.error('Notification failed:', err));
         return project;
       });
@@ -375,7 +375,12 @@ export class ProjectsService {
         })
         .where(eq(project.id, membership.projectId))
 
-
+      this.notificationService.createNotification({
+        userId: userData.id,
+        type: NotificationType.MEMBER,
+        title: 'New Project Created',
+        message: `Your project ${createProjectDto.projectName} has been created successfully.`
+      }).catch(err => console.error('Notification failed:', err));
       return {
         message: 'Project updated successfully',
         statusCode: 201,
@@ -473,7 +478,14 @@ export class ProjectsService {
         token: invitation.token,
         expiresAt: expiryDate,
       });
+      this.notificationService.createNotification(
+        {
+          userId: membership.userId,
+          type: NotificationType.INVITE,
+          title: 'Invite Sent',
+          message: `Project Invites sent to ${email}.`
 
+        })
       return {
         message: 'Invitation sent successfully',
         statusCode: 201,
@@ -579,7 +591,6 @@ export class ProjectsService {
           updatedAt: new Date()
         })
         .where(eq(projectInvites.id, invite.invite.id));
-
       return {
         message: `Invitation discarded`,
         statusCode: 200,
@@ -850,6 +861,12 @@ export class ProjectsService {
         };
       }
 
+      await this.drizzleService.db.update(user).set({
+        primaryProjectUid: invite.project.uid,
+        primaryWorkspaceUid: invite.workspace.uid
+      }).where(eq(user.id, userId))
+
+
       if (new Date(invite.invite.expiresAt) < new Date()) {
         // await this.drizzleService.db TODO: Expire invite here
         //   .update(projectInvites)
@@ -969,7 +986,7 @@ export class ProjectsService {
     }
   }
 
-  async declineInvite(token: string, email: string) {
+  async declineInvite(token: string, email: string, userData: User) {
     try {
       const invite = await this.drizzleService.db
         .select({
@@ -1006,7 +1023,14 @@ export class ProjectsService {
           updatedAt: new Date()
         })
         .where(eq(projectInvites.id, invite.invite.id));
+      this.notificationService.createNotification(
+        {
+          userId: invite.inviter.id,
+          type: NotificationType.INVITE,
+          title: 'Invitation Decline',
+          message: `Project Invites declined by ${email}.`
 
+        })
       return {
         message: `You have declined the invitation to join ${invite.project.name}`,
         statusCode: 200,
@@ -1105,6 +1129,12 @@ export class ProjectsService {
           )
         )
         .returning();
+
+      await this.drizzleService.db.update(user).set({
+        primaryProjectUid: null,
+        primaryWorkspaceUid: null
+      }).where(eq(user.id, memberQuery[0].user.id))
+
 
       return {
         message: 'Member role updated successfully',
@@ -1437,6 +1467,11 @@ export class ProjectsService {
 
         return membership;
       });
+
+      await this.drizzleService.db.update(user).set({
+        primaryProjectUid: invite.project.uid,
+        primaryWorkspaceUid: invite.workspace.uid
+      }).where(eq(user.id, userId))
 
       return {
         message: `You have successfully joined ${invite.project.name}`,

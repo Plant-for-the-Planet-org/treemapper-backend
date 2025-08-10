@@ -126,8 +126,8 @@ export class ProjectsController {
   }
 
   @Post('invites/decline')
-  declineInvite(@Body() declineInviteDto: DeclineInviteDto, @Req() req) {
-    return this.projectsService.declineInvite(declineInviteDto.token, req.user.email);
+  declineInvite(@Body() declineInviteDto: DeclineInviteDto,@CurrentUser() userData:User) {
+    return this.projectsService.declineInvite(declineInviteDto.token, userData.email, userData);
   }
 
   @Post('invites/accept')

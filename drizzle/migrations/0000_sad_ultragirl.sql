@@ -272,7 +272,6 @@ CREATE TABLE "project" (
 	CONSTRAINT "valid_scale" CHECK (scale IS NULL OR scale IN ('small', 'medium', 'large', 'enterprise')),
 	CONSTRAINT "website_format" CHECK (website IS NULL OR website ~* '^https?://'),
 	CONSTRAINT "primary_project_logic" CHECK (is_primary = false OR (is_primary = true AND is_active = true)),
-	CONSTRAINT "public_project_logic" CHECK (is_personal = false OR is_public = false),
 	CONSTRAINT "flagged_project_reason" CHECK (flag = false OR flag_reason IS NOT NULL)
 );
 --> statement-breakpoint

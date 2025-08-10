@@ -1,1 +1,0 @@
-ALTER TABLE "project" DROP CONSTRAINT "public_project_logic";
