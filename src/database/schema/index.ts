@@ -444,7 +444,7 @@ export const auditLog = pgTable('audit_log', {
   uid: text('uid').notNull().unique(),
   action: auditActionEnum('action').notNull(),
   entityType: auditEntityEnum('entity_type').notNull(),
-  entityId: text('entity_id').notNull(),
+  entityId: integer('entity_id').notNull(),
   entityUid: text('entity_uid'),
   userId: integer('user_id').references(() => user.id, { onDelete: 'set null' }),
   workspaceId: integer('workspace_id').references(() => workspace.id, { onDelete: 'set null' }),
@@ -465,7 +465,7 @@ export const auditLog = pgTable('audit_log', {
     .on(table.workspaceId, table.occurredAt)
     .where(sql`workspace_id IS NOT NULL`),
   validEntityId: check('valid_entity_id',
-    sql`length(trim(entity_id)) > 0`),
+    sql`entity_id > 0`),
   validSource: check('valid_source',
     sql`source IN ('web', 'mobile', 'api', 'system', 'migration')`),
   occurredAtNotFuture: check('occurred_at_not_future',

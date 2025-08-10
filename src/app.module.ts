@@ -15,6 +15,7 @@ import { SpeciesModule } from './species/species.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { MobileModule } from './mobile/mobile.module';
 import { NotificationModule } from './notification/notification.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { NotificationModule } from './notification/notification.module';
     AnalyticsModule,
     MobileModule,
     NotificationModule,
-
+    AuditModule
     // MigrationModule,
   ],
   controllers: [AppController],

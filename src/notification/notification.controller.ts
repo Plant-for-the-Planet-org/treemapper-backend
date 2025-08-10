@@ -43,7 +43,7 @@ export class NotificationController {
     @Body() createNotificationDto: CreateNotificationDto,
     @CurrentUser() userData: User,
   ): Promise<Notification> {
-    return this.notificationService.createNotification(createNotificationDto, userData);
+    return this.notificationService.createNotification(createNotificationDto);
   }
 
   @Post('bulk')

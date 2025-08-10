@@ -29,7 +29,7 @@ CREATE TABLE "audit_log" (
 	"uid" text NOT NULL,
 	"action" "audit_action" NOT NULL,
 	"entity_type" "audit_entity" NOT NULL,
-	"entity_id" text NOT NULL,
+	"entity_id" integer NOT NULL,
 	"entity_uid" text,
 	"user_id" integer,
 	"workspace_id" integer,
@@ -41,7 +41,7 @@ CREATE TABLE "audit_log" (
 	"ip_address" text,
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "audit_log_uid_unique" UNIQUE("uid"),
-	CONSTRAINT "valid_entity_id" CHECK (length(trim(entity_id)) > 0),
+	CONSTRAINT "valid_entity_id" CHECK (entity_id > 0),
 	CONSTRAINT "valid_source" CHECK (source IN ('web', 'mobile', 'api', 'system', 'migration')),
 	CONSTRAINT "occurred_at_not_future" CHECK (occurred_at <= NOW())
 );

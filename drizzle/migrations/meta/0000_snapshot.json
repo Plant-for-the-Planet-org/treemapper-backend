@@ -1,5 +1,5 @@
 {
-  "id": "5108d6b9-5059-41fc-abca-9425f3b9ecc1",
+  "id": "32892dd8-fd04-4fb1-9b77-877e37dc3fe0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -36,7 +36,7 @@
         },
         "entity_id": {
           "name": "entity_id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -231,7 +231,7 @@
       "checkConstraints": {
         "valid_entity_id": {
           "name": "valid_entity_id",
-          "value": "length(trim(entity_id)) > 0"
+          "value": "entity_id > 0"
         },
         "valid_source": {
           "name": "valid_source",

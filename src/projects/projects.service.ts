@@ -19,6 +19,7 @@ import { CACHE_KEYS, CACHE_TTL } from 'src/cache/cache-keys';
 import { CacheService } from 'src/cache/cache.service';
 import { ProjectCacheService } from 'src/cache/project-cache.service';
 import { UserCacheService } from 'src/cache/user-cache.service';
+import { AuditService } from 'src/audit/audit.service';
 
 export interface ProjectGuardResponse { projectId: number, role: string, userId: number, projectName: string, siteAccess: string, restrictedSites: string[] | null }
 
@@ -90,7 +91,7 @@ export class ProjectsService {
     private notificationService: NotificationService,
     private projectCacheService: ProjectCacheService,
     private userCacheService: UserCacheService,
-
+    private auditLogsService: AuditService
   ) { }
 
 
@@ -591,6 +592,12 @@ export class ProjectsService {
           updatedAt: new Date()
         })
         .where(eq(projectInvites.id, invite.invite.id));
+      await this.auditLogsService.createAuditLog('project_invite', {
+        action: 'invite',
+        entityId: invite.invite.id,
+
+
+      })
       return {
         message: `Invitation discarded`,
         statusCode: 200,
@@ -1457,7 +1464,7 @@ export class ProjectsService {
             projectId: invite.invite.projectId,
             userId: userId,
             uid: generateUid('projmem'),
-            projectRole: invite.invite.projectRole,
+            projectRole: invite.invite.projectRole, 
             joinedAt: new Date(),
             bulkInviteId: invite.invite.id,
             siteAccess: 'limited_access',
@@ -1473,6 +1480,15 @@ export class ProjectsService {
         primaryWorkspaceUid: invite.workspace.uid
       }).where(eq(user.id, userId))
 
+      const existingInvite = await this.drizzleService.db.select().from(projectInvites).where(eq(projectInvites.email, email))
+      if (existingInvite) {
+        await this.drizzleService.db.update(projectInvites).set({
+          status: 'discarded',
+          discardedAt: new Date(),
+          discardedById: invite.inviter.id,
+          updatedAt: new Date()
+        })
+      }
       return {
         message: `You have successfully joined ${invite.project.name}`,
         statusCode: 200,
