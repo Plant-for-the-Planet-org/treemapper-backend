@@ -1,6 +1,6 @@
 {
-  "id": "81de28c1-e6ed-4b06-96be-7f4730764f2b",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "b3efa897-fe3d-46e6-921f-10eb86e5da83",
+  "prevId": "81de28c1-e6ed-4b06-96be-7f4730764f2b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2155,10 +2155,6 @@
         "primary_project_logic": {
           "name": "primary_project_logic",
           "value": "is_primary = false OR (is_primary = true AND is_active = true)"
-        },
-        "public_project_logic": {
-          "name": "public_project_logic",
-          "value": "is_personal = false OR is_public = false"
         },
         "flagged_project_reason": {
           "name": "flagged_project_reason",

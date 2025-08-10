@@ -235,7 +235,8 @@ export class ProjectsService {
             description: project.description,
             createdAt: project.createdAt,
             updatedAt: project.updatedAt,
-            location: project.originalGeometry
+            location: project.originalGeometry,
+            deletedAt: project.deletedAt
           },
           projectRole: projectMember.projectRole,
           workspace: {
@@ -273,7 +274,7 @@ export class ProjectsService {
         statusCode: 200,
         error: null,
         data: {
-          projects: projectsResult.map(({ project, projectRole, workspace }) => ({
+          projects: projectsResult.filter(el => el.project.deletedAt === null).map(({ project, projectRole, workspace }) => ({
             ...project,
             userRole: projectRole,
             workspace: workspace
@@ -1835,6 +1836,87 @@ export class ProjectsService {
     }
   }
 
+  async remove(membership: ProjectGuardResponse, userData: User) {
+    try {
+      return await this.drizzleService.db.transaction(async (tx) => {
+        await tx
+          .update(project)
+          .set({
+            isActive: false,
+            deletedAt: new Date()
+          })
+          .where(eq(project.id, membership.projectId));
+
+        // Find other active projects where user is a member
+        const otherProjects = await tx
+          .select({
+            projectUid: project.uid,
+            workspaceUid: workspace.uid,
+            isPrimary: project.isPrimary,
+            isPersonal: project.isPersonal,
+            updatedAt: project.updatedAt
+          })
+          .from(project)
+          .innerJoin(projectMember, eq(projectMember.projectId, project.id))
+          .innerJoin(workspace, eq(workspace.id, project.workspaceId))
+          .where(
+            and(
+              eq(projectMember.userId, membership.userId),
+              eq(project.isActive, true),
+              ne(project.id, membership.projectId) // Exclude the deleted project
+            )
+          )
+          .orderBy(
+            // Priority order: primary projects first, then personal, then by most recent
+            desc(project.isPrimary),
+            desc(project.isPersonal),
+            desc(project.updatedAt)
+          );
+
+        if (!otherProjects || otherProjects.length === 0) {
+          // No other projects, clear primary references
+          await tx
+            .update(user)
+            .set({
+              primaryProjectUid: null,
+              primaryWorkspaceUid: null
+            })
+            .where(eq(user.id, membership.userId));
+        } else {
+          // Set the highest priority project as primary
+          const newPrimaryProject = otherProjects[0];
+          await tx
+            .update(user)
+            .set({
+              primaryWorkspaceUid: newPrimaryProject.workspaceUid,
+              primaryProjectUid: newPrimaryProject.projectUid
+            })
+            .where(eq(user.id, membership.userId));
+        }
+
+        // Always invalidate cache after transaction
+        await this.userCacheService.invalidateUser(userData);
+
+        return {
+          message: 'Project deleted successfully',
+          statusCode: 200,
+          error: null,
+          data: { success: true },
+          code: 'project_deleted',
+        };
+      });
+
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      return {
+        message: 'Failed to delete project',
+        statusCode: 500,
+        error: error.message || "internal_server_error",
+        data: null,
+        code: 'project_delete_failed',
+      };
+    }
+  }
 
 
 
@@ -1912,47 +1994,6 @@ export class ProjectsService {
 
 
 
-  // // async remove(projectId: number, userId: number) {
-  // //   try {
-  // //     // Only owner can delete a project
-  // //     const membership = await this.getMemberRole(projectId, userId);
-
-  // //     if (!membership || membership.role !== 'owner') {
-  // //       return {
-  // //         message: 'Only the project owner can delete the project',
-  // //         statusCode: 403,
-  // //         error: "forbidden",
-  // //         data: null,
-  // //         code: 'delete_permission_denied',
-  // //       };
-  // //     }
-
-  // //     // Soft delete the project
-  // //     await this.drizzleService.db
-  // //       .update(projects)
-  // //       .set({
-  // //         isActive: false
-  // //       })
-  // //       .where(eq(projects.id, projectId));
-
-  // //     return {
-  // //       message: 'Project deleted successfully',
-  // //       statusCode: 200,
-  // //       error: null,
-  // //       data: { success: true },
-  // //       code: 'project_deleted',
-  // //     };
-  // //   } catch (error) {
-  // //     console.error('Error deleting project:', error);
-  // //     return {
-  // //       message: 'Failed to delete project',
-  // //       statusCode: 500,
-  // //       error: error.message || "internal_server_error",
-  // //       data: null,
-  // //       code: 'project_delete_failed',
-  // //     };
-  // //   }
-  // // }
 
   // // async getMembers(projectId: number) {
   // //   try {

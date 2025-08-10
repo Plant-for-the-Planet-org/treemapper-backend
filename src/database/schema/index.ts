@@ -522,8 +522,6 @@ export const project = pgTable('project', {
     sql`website IS NULL OR website ~* '^https?://'`),
   primaryProjectLogic: check('primary_project_logic',
     sql`is_primary = false OR (is_primary = true AND is_active = true)`),
-  publicProjectLogic: check('public_project_logic',
-    sql`is_personal = false OR is_public = false`),
   flaggedProjectReason: check('flagged_project_reason',
     sql`flag = false OR flag_reason IS NOT NULL`),
 }));
