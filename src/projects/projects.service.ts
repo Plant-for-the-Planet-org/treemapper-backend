@@ -222,6 +222,63 @@ export class ProjectsService {
   }
 
 
+  async createMigrationProject(userData: User): Promise<any> {
+    const workspaceId = 1
+    try {
+      const result = await this.drizzleService.db.transaction(async (tx) => {
+        const [projectData] = await tx
+          .insert(project)
+          .values({
+            uid: generateUid('proj'),
+            createdById: userData.id,
+            workspaceId: workspaceId,
+            slug: `${this.generateSlug(userData.displayName)}-${Date.now()}`,
+            name: `${userData.displayName}'s personal project`,
+            isPersonal: true,
+          })
+          .returning();
+
+        await tx
+          .insert(projectMember)
+          .values({
+            uid: generateUid('projmem'),
+            projectId: projectData.id,
+            userId: userData.id,
+            projectRole: 'owner',
+            joinedAt: new Date(),
+          });
+        await tx.update(user)
+          .set({ primaryWorkspaceUid: userData.primaryWorkspaceUid, primaryProjectUid: projectData.uid })
+          .where(eq(user.id, userData.id)),
+          await this.userCacheService.refreshAuthUser({ ...userData, primaryWorkspaceUid: userData.primaryWorkspaceUid, primaryProjectUid: projectData.uid })
+        this.notificationService.createNotification({
+          userId: userData.id,
+          type: NotificationType.MEMBER,
+          title: 'New Project Created',
+          message: `Your personal project has been created successfully.`
+        }).catch(err => console.error('Notification failed:', err));
+        return project;
+      });
+      return {
+        message: 'Personal project created successfully',
+        statusCode: 201,
+        error: null,
+        data: result,
+        code: 'personal_project_created',
+      };
+
+    } catch (error) {
+      console.error('Error creating personal project:', error);
+      return {
+        message: 'Failed to create personal project',
+        statusCode: 500,
+        error: error.message || 'internal_server_error',
+        data: null,
+        code: 'personal_project_creation_failed',
+      };
+    }
+  }
+
 
   async findProjectsAndWorkspace(userData: User) {
     try {

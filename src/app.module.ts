@@ -16,6 +16,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { MobileModule } from './mobile/mobile.module';
 import { NotificationModule } from './notification/notification.module';
 import { AuditModule } from './audit/audit.module';
+import { MigrationModule } from './migrate/migrate.module.ts';
 
 @Module({
   imports: [
@@ -35,8 +36,8 @@ import { AuditModule } from './audit/audit.module';
     AnalyticsModule,
     MobileModule,
     NotificationModule,
-    AuditModule
-    // MigrationModule,
+    AuditModule,
+    MigrationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
