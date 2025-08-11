@@ -371,6 +371,7 @@ export class ProjectsService {
           type: createProjectDto.projectType ?? 'private',
           website: createProjectDto.projectWebsite ?? null,
           description: createProjectDto.description ?? null,
+          target: createProjectDto.target ? Number(createProjectDto.target) : null,
           location: locationValue,
           originalGeometry: createProjectDto.location
         })
@@ -836,7 +837,7 @@ export class ProjectsService {
 
 
 
-  async acceptInvite(token: string, userId: number, email: string) {
+  async acceptInvite(token: string, userId: number, email: string, userData: User) {
     try {
       const invite = await this.drizzleService.db
         .select({
@@ -968,7 +969,7 @@ export class ProjectsService {
 
         return membership;
       });
-
+      await this.userCacheService.invalidateUser(userData)
       return {
         message: `You have successfully joined ${invite.project.name}`,
         statusCode: 200,
@@ -1167,7 +1168,7 @@ export class ProjectsService {
     }
   }
 
-  async removeMember(projectId: string, memberId: string, myMembership: ProjectGuardResponse, currentUserId: number) {
+  async removeMember(memberId: string, myMembership: ProjectGuardResponse, currentUser: User) {
     try {
 
 
@@ -1228,7 +1229,6 @@ export class ProjectsService {
         };
       }
 
-      // Remove member
       await this.drizzleService.db
         .delete(projectMember)
         .where(
@@ -1238,6 +1238,55 @@ export class ProjectsService {
           )
         );
 
+      const otherProjects = await this.drizzleService.db
+        .select({
+          projectUid: project.uid,
+          workspaceUid: workspace.uid,
+          isPrimary: project.isPrimary,
+          isPersonal: project.isPersonal,
+          updatedAt: project.updatedAt,
+          projectId: project.id
+        })
+        .from(projectMember)
+        .innerJoin(project, eq(project.id, projectMember.projectId))
+        .innerJoin(workspace, eq(workspace.id, project.workspaceId))
+        .where(
+          and(
+            eq(projectMember.userId, currentUser.id),
+            eq(project.isActive, true), // Only active projects
+            eq(projectMember.status, 'active'), // Only active memberships
+            isNull(project.deletedAt), // Not soft deleted
+            ne(project.id, myMembership.projectId) // Exclude the project being removed
+          )
+        )
+        .orderBy(
+          // Prioritize: primary projects first, then personal, then most recent
+          desc(project.isPrimary),
+          desc(project.isPersonal),
+          desc(project.updatedAt)
+        );
+
+      if (!otherProjects || otherProjects.length === 0) {
+        // No other projects, clear primary references
+        await this.drizzleService.db
+          .update(user)
+          .set({
+            primaryProjectUid: null,
+            primaryWorkspaceUid: null
+          })
+          .where(eq(user.id, currentUser.id));
+      } else {
+        // Set the highest priority project as primary
+        const newPrimaryProject = otherProjects[0];
+        await this.drizzleService.db
+          .update(user)
+          .set({
+            primaryWorkspaceUid: newPrimaryProject.workspaceUid,
+            primaryProjectUid: newPrimaryProject.projectUid
+          })
+          .where(eq(user.id, currentUser.id));
+      }
+      await this.userCacheService.invalidateUser({ auth0Id: memberToRemove.user.auth0Id })
       return {
         message: 'Member removed successfully',
         statusCode: 200,
@@ -1340,7 +1389,7 @@ export class ProjectsService {
     }
   }
 
-  async acceptLinkInvite(token: string, userId: number, email: string) {
+  async acceptLinkInvite(token: string, userId: number, email: string, userData: User) {
     try {
       // Get bulk invite with project and workspace details in single query
       const invite = await this.drizzleService.db
@@ -1464,7 +1513,7 @@ export class ProjectsService {
             projectId: invite.invite.projectId,
             userId: userId,
             uid: generateUid('projmem'),
-            projectRole: invite.invite.projectRole, 
+            projectRole: invite.invite.projectRole,
             joinedAt: new Date(),
             bulkInviteId: invite.invite.id,
             siteAccess: 'limited_access',
@@ -1489,6 +1538,7 @@ export class ProjectsService {
           updatedAt: new Date()
         })
       }
+      await this.userCacheService.invalidateUser(userData)
       return {
         message: `You have successfully joined ${invite.project.name}`,
         statusCode: 200,
