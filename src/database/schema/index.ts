@@ -171,7 +171,7 @@ export const recordTypeEnum = pgEnum('record_type', [
   'growth_monitoring'
 ]);
 
-export const imageEntityEnum = pgEnum('image_entity', ['project', 'site', 'user', 'intervention', 'tree']);
+export const imageEntityEnum = pgEnum('image_entity', ['project', 'site', 'user', 'intervention', 'tree', 'species']);
 export const treeTypeEnum = pgEnum('tree_enum', ['single', 'sample', 'plot']);
 export const imageTypeEnum = pgEnum('image_type', ['before', 'during', 'after', 'detail', 'overview', 'progress', 'aerial', 'ground', 'record']);
 export const interventionStatusEnum = pgEnum('intervention_status', ['planned', 'active', 'completed', 'failed', 'on-hold', 'cancelled']);
@@ -381,18 +381,9 @@ export const image = pgTable('image', {
 }, (table) => ({
   entityTypeEntityIdIdx: index('image_entity_lookup_idx').on(table.entityType, table.entityId),
   primaryImageIdx: index('image_primary_idx').on(table.entityType, table.entityId, table.isPrimary)
-    .where(sql`is_primary = true AND deleted_at IS NULL`),
-  sizePositive: check('size_positive', sql`size IS NULL OR size > 0`),
-  dimensionsPositive: check('dimensions_positive',
-    sql`(width IS NULL OR width > 0) AND (height IS NULL OR height > 0)`),
-  reasonableFileSize: check('reasonable_file_size',
-    sql`size IS NULL OR size <= 104857600`),
-  primaryImageLogic: check('primary_image_logic',
-    sql`is_primary = false OR (is_primary = true AND deleted_at IS NULL)`),
-  validMimeType: check('valid_mime_type',
-    sql`mime_type IS NULL OR mime_type ~* '^image\/(jpeg|jpg|png|gif|webp|svg\+xml)$'`),
-  filenameRequired: check('filename_required',
-    sql`filename IS NOT NULL AND length(trim(filename)) > 0`)
+    .where(sql`is_primary = true AND deleted_at IS NULL`)
+
+
 }));
 
 export const notifications = pgTable('notifications', {

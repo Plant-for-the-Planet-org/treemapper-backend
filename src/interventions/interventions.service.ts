@@ -11,6 +11,7 @@ import {
   interventionSpecies,
   scientificSpecies,
   projectMember,
+  image,
 } from '../database/schema/index';
 import {
   InterventionResponseDto,
@@ -81,6 +82,12 @@ interface ExtractedCoordinates {
   latitude: number;
   longitude: number;
   altitude: number | null;
+}
+
+
+interface GeoJSONPoint {
+  type: 'Point';
+  coordinates: [number, number] | [number, number, number];
 }
 
 
@@ -347,50 +354,38 @@ export class InterventionsService {
     }
     return { treeCount, error: null }
   }
-  private extractCoordinatesFromGeoJSONTyped(geoJsonFeature: GeoJSONFeature): ExtractedCoordinates {
+  private extractCoordinatesFromPoint(pointGeometry: GeoJSONPoint): ExtractedCoordinates {
     // Validate that input exists
-    if (!geoJsonFeature) {
-      throw new Error('GeoJSON Feature is required');
+    if (!pointGeometry) {
+      throw new Error('Point geometry is required');
     }
 
-    // Validate that it's a Feature
-    if (geoJsonFeature.type !== 'Feature') {
-      throw new Error(`Expected GeoJSON type 'Feature', but received '${geoJsonFeature.type}'`);
-    }
-
-    // Validate that geometry exists
-    if (!geoJsonFeature.geometry) {
-      throw new Error('GeoJSON Feature must contain a geometry');
-    }
-
-    // Validate that geometry is a Point
-    if (geoJsonFeature.geometry.type !== 'Point') {
-      throw new Error(
-        `Expected GeoJSON Feature with Point geometry, but received '${geoJsonFeature.geometry.type}' geometry`
-      );
+    // Validate that it's a Point
+    if (pointGeometry.type !== 'Point') {
+      throw new Error(`Expected Point geometry, but received '${pointGeometry.type}'`);
     }
 
     // Validate coordinates exist and are valid
-    if (!geoJsonFeature.geometry.coordinates || !Array.isArray(geoJsonFeature.geometry.coordinates)) {
-      throw new Error('Invalid or missing coordinates in GeoJSON Point geometry');
+    if (!pointGeometry.coordinates || !Array.isArray(pointGeometry.coordinates)) {
+      throw new Error('Invalid or missing coordinates in Point geometry');
     }
 
-    const coordinates = geoJsonFeature.geometry.coordinates;
+    const coordinates = pointGeometry.coordinates;
 
-    // GeoJSON Point should have exactly 2 or 3 coordinates [longitude, latitude, altitude?]
+    // Point should have exactly 2 or 3 coordinates [longitude, latitude, altitude?]
     if (coordinates.length < 2) {
-      throw new Error('GeoJSON Point coordinates must contain at least longitude and latitude');
+      throw new Error('Point coordinates must contain at least longitude and latitude');
     }
 
     const [longitude, latitude, altitude = null] = coordinates;
 
-    // Validate coordinate ranges
+    // Validate coordinate types and ranges
     if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
-      throw new Error(`Invalid longitude: ${longitude}. Must be between -180 and 180`);
+      throw new Error(`Invalid longitude: ${longitude}. Must be a number between -180 and 180`);
     }
 
     if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) {
-      throw new Error(`Invalid latitude: ${latitude}. Must be between -90 and 90`);
+      throw new Error(`Invalid latitude: ${latitude}. Must be a number between -90 and 90`);
     }
 
     // Validate altitude if present
@@ -413,9 +408,8 @@ export class InterventionsService {
       let projectSiteId: null | number = null;
       const uid = generateUid('inv');
       const idempotencyKey = generateUid('idem')
-      const geometryType = createInterventionDto.geometry.type || 'Point';
-      const geometry = this.getGeoJSONForPostGIS(createInterventionDto.geometry);
-      const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
+      const cleanGeometry = this.getGeoJSONForPostGIS(createInterventionDto.geometry);
+      const locationSQL = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(cleanGeometry)}), 4326)`;
       const { treeCount, error } = this.treeAndSpeciesCount(createInterventionDto)
       const transformedSpecies = createInterventionDto.species.map(el => {
         return {
@@ -470,12 +464,11 @@ export class InterventionsService {
         registrationDate: new Date(),
         interventionStartDate: new Date(createInterventionDto.interventionStartDate),
         interventionEndDate: new Date(createInterventionDto.interventionEndDate),
-        location: locationValue,
+        location: locationSQL,
         originalGeometry: createInterventionDto.geometry,
         captureMode: "web-upload" as CaptureModeEnum,
         captureStatus: CaptureStatus.COMPLETE,
         metadata: createInterventionDto.metadata || null,
-        geometryType: geometryType,
         image: createInterventionDto.image || null,
         totalTreeCount: treeCount
       }
@@ -490,8 +483,6 @@ export class InterventionsService {
         ...el,
         interventionId: result[0].id,
       }))
-      console.log("SCD", finalInterventionSpecies)
-
       const interventionSpecieData = await this.drizzleService.db
         .insert(interventionSpecies)
         .values(finalInterventionSpecies)
@@ -500,7 +491,7 @@ export class InterventionsService {
         throw 'Species creation failed'
       }
       if (createInterventionDto.type === 'single-tree-registration') {
-        const latlongDetails = this.extractCoordinatesFromGeoJSONTyped(createInterventionDto.geometry)
+        const latlongDetails = this.extractCoordinatesFromPoint(createInterventionDto.geometry)
         if (!latlongDetails.latitude || !latlongDetails.longitude) {
           throw 'Location issue'
         }
@@ -514,7 +505,7 @@ export class InterventionsService {
           tag: createInterventionDto.tag,
           treeType: 'single' as const,
           image: createInterventionDto.image || null,
-          location: locationValue,
+          location: locationSQL,
           originalGeometry: createInterventionDto.geometry,
           latitude: latlongDetails.latitude,
           longitude: latlongDetails.longitude,
@@ -530,6 +521,7 @@ export class InterventionsService {
         if (!singleResult) {
           throw new Error('Failed to create singleResult intervention');
         }
+        this.imageUpload('during', singleResult[0].id, 'tree', 'web', createInterventionDto.image, membership.userId)
       }
       return {} as InterventionResponseDto;
     } catch (error) {
@@ -537,6 +529,17 @@ export class InterventionsService {
     }
   }
 
+  async imageUpload(type, id, entity, device, filename, userId) {
+    await this.drizzleService.db.insert(image).values({
+      uid: generateUid('img'),
+      type: type,
+      entityId: id,
+      entityType: entity,
+      deviceType: device,
+      filename: filename,
+      uploadedById:userId
+    })
+  }
 
 
   async getProjectInterventions(
@@ -1035,7 +1038,7 @@ export class InterventionsService {
         });
 
         if (el.type === 'single-tree-registration') {
-          const latlongDetails = this.extractCoordinatesFromGeoJSONTyped(el.geometry);
+          const latlongDetails = this.extractCoordinatesFromPoint(el.geometry);
           if (!latlongDetails.latitude || !latlongDetails.longitude) {
             throw new BadRequestException(`Invalid coordinates for single tree intervention: ${interventionUid}`);
           }

@@ -6,7 +6,7 @@ import {
   ForbiddenException
 } from '@nestjs/common';
 import { DrizzleService } from '../../database/drizzle.service';
-import { intervention, interventionSpecies, projectSpecies, scientificSpecies, user } from '../../database/schema';
+import { image, intervention, interventionSpecies, projectSpecies, scientificSpecies, user } from '../../database/schema';
 import { CreateUserSpeciesDto, UpdateUserSpeciesDto, UserSpeciesFilterDto } from '../dto/user-species.dto';
 import { eq, and, ilike, or, desc, sql, is, isNotNull, isNull } from 'drizzle-orm';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
@@ -19,17 +19,17 @@ export interface KnownSpeciesResponse {
   commonName: string | null;
   speciesName: string;
   image: string | null;
-  
+
   // Project species data
   isInProjectSpecies: boolean;
   isFavourite: boolean;
   projectSpeciesNotes: string | null;
-  
+
   // Intervention usage
   interventionUsageCount: number;
   totalSpecimenCount: number;
   interventionIds: number[];
-  
+
   // Additional metadata
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -114,20 +114,34 @@ export class ProjectSpeciesService {
         image: createDto.image || ''
       })
       .returning();
+    this.imageUpload('during', newUserSpecies[0].id, 'species', 'web', createDto.image, membership.userId)
+
     return newUserSpecies[0];
   }
 
- async getProjectSpeciesAggregated(projectId: number): Promise<ProjectSpeciesAggregatedResponse> {
+  async imageUpload(type, id, entity, device, filename, userId) {
+    await this.drizzle.db.insert(image).values({
+      uid: generateUid('img'),
+      type: type,
+      entityId: id,
+      entityType: entity,
+      deviceType: device,
+      filename: filename,
+      uploadedById: userId
+    })
+  }
+
+  async getProjectSpeciesAggregated(projectId: number): Promise<ProjectSpeciesAggregatedResponse> {
     // Get all known species (with scientificSpeciesId) from both tables
     const knownSpeciesQuery = await this.drizzle.db
       .select({
         scientificSpeciesId: sql<number>`COALESCE(${projectSpecies.scientificSpeciesId}, ${interventionSpecies.scientificSpeciesId})`,
         scientificName: scientificSpecies.scientificName,
-        
+
         // Priority: project species common name first
         commonName: sql<string>`COALESCE(${projectSpecies.commonName}, ${interventionSpecies.commonName})`,
         speciesName: sql<string>`COALESCE(${projectSpecies.speciesName}, ${interventionSpecies.speciesName})`,
-        
+
         // Project species data
         projectSpeciesId: projectSpecies.id,
         projectCommonName: projectSpecies.commonName,
@@ -137,8 +151,8 @@ export class ProjectSpeciesService {
         projectSpeciesImage: projectSpecies.image,
         projectSpeciesCreatedAt: projectSpecies.createdAt,
         projectSpeciesUpdatedAt: projectSpecies.updatedAt,
-        
-      // Intervention data
+
+        // Intervention data
         interventionSpeciesId: interventionSpecies.id,
         interventionCommonName: interventionSpecies.commonName,
         interventionSpeciesName: interventionSpecies.speciesName,
@@ -207,10 +221,10 @@ export class ProjectSpeciesService {
 
     // Process known species aggregation
     const knownSpeciesMap = new Map<number, KnownSpeciesResponse>();
-    
+
     for (const row of knownSpeciesQuery) {
       const scientificSpeciesId = row.scientificSpeciesId;
-      
+
       if (!knownSpeciesMap.has(scientificSpeciesId)) {
         // Initialize aggregated record
         knownSpeciesMap.set(scientificSpeciesId, {
@@ -219,11 +233,11 @@ export class ProjectSpeciesService {
           commonName: row.commonName,
           speciesName: row.speciesName,
           image: row.projectSpeciesImage || null,
-          
+
           isInProjectSpecies: !!row.projectSpeciesId,
           isFavourite: row.isFavourite,
           projectSpeciesNotes: row.projectSpeciesNotes,
-          
+
           interventionUsageCount: 0,
           totalSpecimenCount: 0,
           interventionIds: [],
@@ -231,9 +245,9 @@ export class ProjectSpeciesService {
           updatedAt: row.projectSpeciesUpdatedAt || row.interventionSpeciesUpdatedAt,
         });
       }
-      
+
       const species = knownSpeciesMap.get(scientificSpeciesId)!;
-      
+
       // Update project species data if exists
       if (row.projectSpeciesId && !species.isInProjectSpecies) {
         species.isInProjectSpecies = true;
@@ -241,7 +255,7 @@ export class ProjectSpeciesService {
         species.projectSpeciesNotes = row.projectSpeciesNotes;
         species.image = species.image || row.projectSpeciesImage;
       }
-      
+
       // Aggregate intervention data
       if (row.interventionSpeciesId && row.interventionId) {
         if (!species.interventionIds.includes(row.interventionId)) {
@@ -410,6 +424,9 @@ export class ProjectSpeciesService {
         ),
       )
       .returning();
+    if (updateDto.image) {
+      this.imageUpload('during', updatedSpecies[0].id, 'species', 'web', updateDto.image, membership.userId)
+    }
 
     if (!updatedSpecies.length) {
       throw new NotFoundException('User species not found');

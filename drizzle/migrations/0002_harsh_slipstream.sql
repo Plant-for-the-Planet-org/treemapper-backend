@@ -1,0 +1,1 @@
+ALTER TYPE "public"."image_entity" ADD VALUE 'species';
