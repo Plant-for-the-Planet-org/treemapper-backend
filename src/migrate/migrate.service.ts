@@ -16,6 +16,8 @@ import {
     FlagReasonEntry,
     tree,
     user,
+    image,
+    interventionSpecies,
 } from '../database/schema/index';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
@@ -29,7 +31,27 @@ import { NotificationService } from 'src/notification/notification.service';
 import { NotificationType } from 'src/notification/dto/notification.dto';
 import { User } from 'src/users/entities/user.entity';
 
+interface GeoJSONFeature {
+    type: 'Feature';
+    geometry: GeoJSONPointGeometry;
+    properties?: Record<string, any>;
+}
+interface ExtractedCoordinates {
+    latitude: number;
+    longitude: number;
+    altitude: number | null;
+}
 
+
+interface GeoJSONPoint {
+    type: 'Point';
+    coordinates: [number, number] | [number, number, number];
+}
+
+interface GeoJSONPointGeometry {
+    type: 'Point';
+    coordinates: [number, number] | [number, number, number]; // [lng, lat] or [lng, lat, alt]
+}
 
 
 interface GeoJSONValidationResult {
@@ -154,132 +176,143 @@ export class MigrationService {
     }
 
     async startUserMigration(
-        userId: number,
         planetId: string,
-        email: string,
         authToken: string,
         userData: User
     ): Promise<void> {
         let userMigrationRecord;
         try {
-            userMigrationRecord = await this.createMigrationRecord(userId, planetId, email);
-            console.log("JSDcln", userMigrationRecord)
+            console.log("Migration started")
+            userMigrationRecord = await this.createMigrationRecord(userData.id, planetId);
+            console.log("userMigrationRecord added", userMigrationRecord)
             if (userMigrationRecord.status === 'completed') {
+                console.log("Migration says completed")
                 this.addLog(userMigrationRecord.id, 'info', 'Migration already done', 'users');
                 this.logMigration()
                 return;
             }
 
-            console.log("JSDcln", 1)
 
-            // if (userMigrationRecord.status === 'in_progress') {
-            //     this.addLog(userMigrationRecord.id, 'info', 'Migration in progress', 'users');
-            //     return;
-            // }
-            console.log("JSDcln", 2)
+            if (userMigrationRecord.status === 'in_progress') {
+                console.log("Migration resumed-in progresss")
+                this.addLog(userMigrationRecord.id, 'info', 'Migration in progress', 'users');
+                return;
+            }
 
-            // if (userMigrationRecord.status === 'failed' || userMigrationRecord.status === 'started') {
-            //     await this.continueMigration(userMigrationRecord.id)
-            //     this.addLog(userMigrationRecord.id, 'info', 'Migration resumed', 'users');
-            // }
-
-            console.log("JSDcln", 3)
-
+            if (userMigrationRecord.status === 'failed' || userMigrationRecord.status === 'started') {
+                console.log("Migration found to be old or new")
+                await this.continueMigration(userMigrationRecord.id)
+                this.addLog(userMigrationRecord.id, 'info', 'Migration resumed', 'users');
+            }
 
             let stop = false;
+            console.log("Stop init", stop)
 
             const personalProject = await this.drizzleService.db
-                .select({ id: project.id })
+                .select({ id: project.id, name: project.name })
                 .from(project)
-                .where(and(eq(project.createdById, userId), eq(project.isPersonal, true)))
+                .where(and(eq(project.createdById, userData.id), eq(project.isPersonal, true)))
                 .limit(1);
-
             if (personalProject.length > 0) {
+                console.log("Personal Project Found", personalProject[0].name)
                 this.addLog(userMigrationRecord.id, 'info', 'Persoanl Project Found', 'projects');
             } else {
                 this.addLog(userMigrationRecord.id, 'warning', `Personal project not found. Created new`, 'projects');
                 const newPersonalProject = await this.projectService.createMigrationProject(userData)
+                console.log("Created new project")
                 if (newPersonalProject.statusCode === 201 || newPersonalProject.statusCode === 200) {
                     this.addLog(userMigrationRecord.id, 'info', 'Persoanl Project Created', 'projects');
                 } else {
+                    console.log("Error Occured while creating new project")
                     stop = true
                 }
             }
-            console.log("SCDscd", stop)
-
             if (stop) {
+                console.log("Stop Activated", 1)
                 this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for user and will not proceed further', 'projects');
                 await this.updateMigrationProgress(userMigrationRecord.id, 'user', false, true);
                 return;
             }
 
-
-            // // Step 1: Migrate user
             if (!userMigrationRecord.migratedEntities.user) {
-                stop = await this.migrateUserData(userId, authToken, userMigrationRecord.id);
+                console.log("User migration started")
+                stop = await this.migrateUserData(userData.id, authToken, userMigrationRecord.id);
+            } else {
+                console.log("User migration skipped")
             }
-            console.log("SCDscd", 4, stop)
 
             if (stop) {
+                console.log("User migration error occurred")
                 this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for user and will not proceed further', 'users');
                 await this.updateMigrationProgress(userMigrationRecord.id, 'user', false, true);
                 return;
             } else {
+                console.log("User migration done")
                 await this.updateMigrationProgress(userMigrationRecord.id, 'user', true, false);
             }
-            console.log("SCDscd", 6)
 
 
-            // // Step 2: Migrate Projects
+            // Step 2: Migrate Projects
             if (!userMigrationRecord.migratedEntities.projects) {
-                stop = await this.migrateUserProjects(userId, authToken, userMigrationRecord.id);
+                console.log("Project migration started")
+                stop = await this.migrateUserProjects(userData.id, authToken, userMigrationRecord.id);
             }
-            console.log("SCDscd", 7)
-
-
-            // if (stop) {
-            //     this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for project', 'projects');
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'projects', false, true)
-            //     return
-            // } else {
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'projects', true, false);
-            // }
-
-
-            // // // Step 3: Migrate sites
-            // if (!userMigrationRecord.migratedEntities.sites) {
-            //     stop = await this.migrateUserSites(userId, authToken, userMigrationRecord.id);
-            // }
-
-
-            // if (stop) {
-            //     this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for site', 'sites');
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'sites', false, true);
-            //     return
-            // } else {
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'sites', true, false);
-            // }
-
-
-            // // Step 4: Migrate User Species
-            // if (!userMigrationRecord.migratedEntities.species) {
-            //     stop = await this.migrateUserSpecies(userId, authToken, userMigrationRecord.id, email);
-            // }
-
-
-            // if (stop) {
-            //     this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for species', 'species');
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'species', false, true);
-            //     return
-            // } else {
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'species', true, false);
-            // }
 
 
 
-            // if (!userMigrationRecord.migratedEntities.intervention) {
-            //     stop = await this.migrateUserInterventions(userId, authToken, userMigrationRecord.id);
-            // }
+
+            if (stop) {
+                console.log("Project migration stoped at stop")
+                this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for project', 'projects');
+                await this.updateMigrationProgress(userMigrationRecord.id, 'projects', false, true)
+                return
+            } else {
+                console.log("Project migration done")
+                await this.updateMigrationProgress(userMigrationRecord.id, 'projects', true, false);
+            }
+
+
+            // // Step 3: Migrate sites
+            if (!userMigrationRecord.migratedEntities.sites) {
+                console.log("Site migration started")
+                stop = await this.migrateUserSites(userData.id, authToken, userMigrationRecord.id);
+            }
+
+
+            if (stop) {
+                console.log("Site migration stoped, it's activcate", stop)
+                this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for site', 'sites');
+                await this.updateMigrationProgress(userMigrationRecord.id, 'sites', false, true);
+                return
+            } else {
+                console.log("Site Migrated")
+                await this.updateMigrationProgress(userMigrationRecord.id, 'sites', true, false);
+            }
+
+
+            // Step 4: Migrate User Species
+            if (!userMigrationRecord.migratedEntities.species) {
+                console.log("Species Migration")
+                stop = await this.migrateUserSpecies(userData.id, authToken, userMigrationRecord.id);
+            }
+
+
+            if (stop) {
+                console.log("Species Migration failed", stop)
+                this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for species', 'species');
+                await this.updateMigrationProgress(userMigrationRecord.id, 'species', false, true);
+                return
+            } else {
+                console.log("Species Migration done")
+                await this.updateMigrationProgress(userMigrationRecord.id, 'species', true, false);
+            }
+
+
+
+            if (!userMigrationRecord.migratedEntities.intervention) {
+                console.log("Intervention Migration started")
+                stop = await this.migrateUserInterventions(userData.id, authToken, userMigrationRecord.id);
+            }
 
 
             // if (stop) {
@@ -301,11 +334,10 @@ export class MigrationService {
             //     message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plant.org'
             // })
         } catch (error) {
-            await this.handleMigrationError(userId, userMigrationRecord?.id, error);
+            await this.handleMigrationError(userData.id, userMigrationRecord?.id, error);
             throw error;
         }
     }
-
     private getGeoJSONForPostGIS(locationInput: any): GeoJSONValidationResult {
         // Default invalid result
         const invalidResult: GeoJSONValidationResult = {
@@ -341,15 +373,21 @@ export class MigrationService {
                 }
             }
             // If it's already a geometry object, use it directly
-            else if (['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection'].includes(locationInput.type)) {
+            else if (['Point', 'Polygon', 'MultiPolygon'].includes(locationInput.type)) {
                 geometry = locationInput;
             }
             else {
+                // Any other type (LineString, MultiPoint, MultiLineString, GeometryCollection) is not supported
                 return invalidResult;
             }
 
             // Validate the extracted geometry
             if (!geometry) {
+                return invalidResult;
+            }
+
+            // Only allow Point, Polygon, or MultiPolygon
+            if (!['Point', 'Polygon', 'MultiPolygon'].includes(geometry.type)) {
                 return invalidResult;
             }
 
@@ -361,21 +399,92 @@ export class MigrationService {
             // Remove Z dimension if present
             geometry = this.removeZDimension(geometry);
 
+            // Validate coordinate structure based on geometry type
+            if (!this.validateGeometryCoordinates(geometry)) {
+                return invalidResult;
+            }
+
             // Validate using Turf
             if (!booleanValid(geometry)) {
                 return invalidResult;
             }
 
-            // If we reach here, the geometry is valid
+            // Return only the geometry object (not Feature)
             return {
                 isValid: true,
                 geoJSONType: geometry.type,
-                validatedGeoJSON: geometry
+                validatedGeoJSON: {
+                    type: geometry.type,
+                    coordinates: geometry.coordinates
+                }
             };
 
         } catch (error) {
             this.logger.error(`GeoJSON validation error: ${error.message}`);
             return invalidResult;
+        }
+    }
+
+    private validateGeometryCoordinates(geometry: any): boolean {
+        const { type, coordinates } = geometry;
+
+        try {
+            switch (type) {
+                case 'Point':
+                    // Point: [longitude, latitude]
+                    return Array.isArray(coordinates) &&
+                        coordinates.length === 2 &&
+                        typeof coordinates[0] === 'number' &&
+                        typeof coordinates[1] === 'number' &&
+                        coordinates[0] >= -180 && coordinates[0] <= 180 &&
+                        coordinates[1] >= -90 && coordinates[1] <= 90;
+
+                case 'Polygon':
+                    // Polygon: [[longitude, latitude], ...]
+                    if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+
+                    // Each ring should be an array of coordinate pairs
+                    for (const ring of coordinates) {
+                        if (!Array.isArray(ring) || ring.length < 4) return false; // Minimum 4 points to close
+
+                        for (const coord of ring) {
+                            if (!Array.isArray(coord) ||
+                                coord.length !== 2 ||
+                                typeof coord[0] !== 'number' ||
+                                typeof coord[1] !== 'number' ||
+                                coord[0] < -180 || coord[0] > 180 ||
+                                coord[1] < -90 || coord[1] > 90) {
+                                return false;
+                            }
+                        }
+
+                        // First and last coordinates should be the same (closed ring)
+                        const first = ring[0];
+                        const last = ring[ring.length - 1];
+                        if (first[0] !== last[0] || first[1] !== last[1]) {
+                            return false;
+                        }
+                    }
+                    return true;
+
+                case 'MultiPolygon':
+                    // MultiPolygon: [[[longitude, latitude], ...], ...]
+                    if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+
+                    // Each polygon in the MultiPolygon should be valid
+                    for (const polygon of coordinates) {
+                        const tempGeometry = { type: 'Polygon', coordinates: polygon };
+                        if (!this.validateGeometryCoordinates(tempGeometry)) {
+                            return false;
+                        }
+                    }
+                    return true;
+
+                default:
+                    return false;
+            }
+        } catch (error) {
+            return false;
         }
     }
 
@@ -395,17 +504,18 @@ export class MigrationService {
         };
 
         return {
-            ...geometry,
+            type: geometry.type,
             coordinates: removeZ(geometry.coordinates)
         };
     }
 
-    private async createMigrationRecord(userId: number, planetId: string, email: string) {
+    private async createMigrationRecord(userId: number, planetId: string) {
         const existingMigrtion = await this.drizzleService.db
             .select()
             .from(migration)
             .where(eq(migration.userId, userId))
             .limit(1);
+
         if (existingMigrtion.length > 0) {
             this.addLog(existingMigrtion[0].id, 'warning', 'Migration already exists', 'users');
             this.addLog(existingMigrtion[0].id, 'info', 'Migration Resumed', 'users');
@@ -455,6 +565,7 @@ export class MigrationService {
     }
 
     private async continueMigration(migrationId: number): Promise<void> {
+        console.log("Migration state updated and continue...")
         await this.drizzleService.db
             .update(migration)
             .set({
@@ -466,21 +577,19 @@ export class MigrationService {
 
     private transformUserData(oldUserData: any, userId: number): any {
         const transformedUser = {
-            uid: oldUserData.id, // Use old ID as UID
-            firstname: oldUserData.firstname || null,
-            lastname: oldUserData.lastname || null,
+            uid: oldUserData.id,
+            firstName: oldUserData.firstname || null,
+            lastName: oldUserData.lastname || null,
             displayName: oldUserData.displayName || null,
             image: oldUserData.image || '',
             slug: oldUserData.slug || null,
             type: oldUserData.type,
             country: oldUserData.country,
-            url: oldUserData.url,
-            supportPin: oldUserData.supportPin,
+            website: oldUserData.url,
             isPrivate: oldUserData.isPrivate || false,
             bio: oldUserData.bio || null,
             locale: oldUserData.locale || 'en',
             isActive: true,
-            lastLoginAt: null,
             createdAt: new Date(oldUserData.created) || new Date(),
             updatedAt: new Date(),
             deletedAt: null,
@@ -595,31 +704,31 @@ export class MigrationService {
 
     private async migrateUserProjects(userId: number, authToken: string, migrationId: number): Promise<boolean> {
         try {
-            console.log("sd", "Inside",)
             const projectsResponse = await this.makeApiCall(`/app/profile/projects?_scope=extended`, authToken);
-            console.log("JSDcln", projectsResponse)
+            console.log("Project response recieved", Boolean(projectsResponse.data))
             if (!projectsResponse || projectsResponse === null) {
+                console.log("Project no respinse")
                 this.addLog(migrationId, 'error', `Project migration failed. No response recieved`, 'projects');
                 return true;
             }
             const oldProjects = projectsResponse.data;
-
+            console.log("Project oldProjects", oldProjects.length)
             let stop = false;
             for (const oldProject of oldProjects) {
                 if (stop) {
+                    console.log("Project Stop loop activate")
                     this.addLog(migrationId, 'error', `Project loop stopped`, 'projects');
                     return true
-                }3
+                }
                 try {
-
+                    console.log("Transofrom Project Before", oldProject.id)
                     const transformedProject = this.transformProjectData(oldProject, userId);
-
+                    console.log("Transofrom Project After", oldProject.id)
                     const existingProject = await this.drizzleService.db
                         .select()
                         .from(project)
                         .where(eq(project.uid, transformedProject.uid))
                         .limit(1);
-
                     if (existingProject.length > 0) {
                         this.addLog(migrationId, 'warning', `Project already exist`, 'projects', JSON.stringify(transformedProject));
                     } else {
@@ -635,19 +744,27 @@ export class MigrationService {
                                 }
 
                                 const newProjectId = projectResult[0].id;
-
-                                // Insert project membership
-                                // await tx
-                                //     .insert(projectMember)
-                                //     .values({
-                                //         projectId: newProjectId,
-                                //         userId: userId,
-                                //         workspaceId: 1,
-                                //         uid: generateUid('projmem'),
-                                //         projectRole: 'owner',
-                                //         joinedAt: new Date(),
-                                //     });
-
+                                await tx
+                                    .insert(projectMember)
+                                    .values({
+                                        projectId: newProjectId,
+                                        userId: userId,
+                                        uid: generateUid('projmem'),
+                                        projectRole: 'owner',
+                                        joinedAt: new Date(),
+                                    });
+                                if (transformedProject.image) {
+                                    await tx
+                                        .insert(image)
+                                        .values({
+                                            uid: generateUid('img'),
+                                            filename: transformedProject.image || null,
+                                            entityId: newProjectId,
+                                            entityType: 'project',
+                                            deviceType: "server",
+                                            uploadedById: userId,
+                                        });
+                                }
                                 this.addLog(
                                     migrationId,
                                     'info',
@@ -657,12 +774,14 @@ export class MigrationService {
                                 );
                                 stop = false;
                             } catch (error) {
+                                console.log("error Project Transcation", oldProject.id)
                                 this.addLog(migrationId, 'error', `Projects migration failed: At 12837`, 'projects', JSON.stringify(error.stack));
                                 stop = true
                             }
                         })
                     }
                 } catch (error) {
+                    console.log("error Project Loop", error);
                     this.addLog(migrationId, 'error', `Project migration failed for project at catch block`, 'projects', JSON.stringify(oldProject));
                     stop = true;
                 }
@@ -671,6 +790,7 @@ export class MigrationService {
             this.addLog(migrationId, 'info', `All projects migrated`, 'projects', 'null');
             return false
         } catch (error) {
+            console.log("error Main Project Loop", error);
             this.addLog(migrationId, 'error', `Projects migration failed: ${error.message}`, 'projects', JSON.stringify(error.stack));
             this.updateMigrationProgress(migrationId, 'projects', false, true);
             return true;
@@ -707,31 +827,31 @@ export class MigrationService {
         if (projectGeometry.isValid) {
             locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(projectGeometry.validatedGeoJSON)}), 4326)`
         } else {
-            // flag = true,
-            //     flagReason = [{
-            //         uid: generateUid('flag'),
-            //         type: 'geolocation',
-            //         level: 'high',
-            //         title: 'Location need fix',
-            //         message: 'Please update your project location that is accepted by the system. ',
-            //         updatedAt: new Date(),
-            //         createdAt: new Date()
-            //     }]
+            flag = true,
+                flagReason = [{
+                    uid: generateUid('flag'),
+                    type: 'location',
+                    level: 'error',
+                    title: 'Project Location error',
+                    message: 'There was error while migrating location',
+                    updatedAt: new Date(),
+                    createdAt: new Date()
+                }]
         }
-
         const transformedProject = {
             uid: projectData.id,
             createdById: userId,
             slug: projectData.slug,
-            projectName: projectData.name,
+            name: projectData.name,
             purpose: projectData.classification || 'Unknown',
-            projectType: getProjectScale(projectData.classification),
+            type: getProjectScale(projectData.classification),
             ecosystem: projectData.metadata?.ecosystem || 'Unknown',
-            projectScale: getProjectScale(projectData.classification),
+            scale: getProjectScale(projectData.classification),
             target: getTarget(projectData.unitsTargeted, projectData.countTarget),
             description: projectData.description || 'No description provided',
             classification: projectData.classification || null,
             image: projectData.image || '',
+            workspaceId: 1,
             location: locationValue,
             country: projectData.country || 'de',
             originalGeometry: geometry ? geometry : null,
@@ -739,8 +859,8 @@ export class MigrationService {
             isPublic: projectData.isPublished || false,
             isPrimary: projectData.isFeatured || false,
             isPersonal: false,
-            intensity: projectData.intensity || null,
-            revisionPeriodicityLevel: projectData.revisionPeriodicityLevel || null,
+            intensity: projectData.intensity ? projectData.intensity : null,
+            revisionPeriodicity: projectData.revisionPeriodicityLevel || null,
             metadata: projectData.metadata || {},
             createdAt: projectData.created,
             migratedProject: true,
@@ -755,20 +875,26 @@ export class MigrationService {
         try {
             this.addLog(migrationId, 'info', 'Starting sites migration', 'sites');
             const sitesResponse = await this.makeApiCall(`/app/profile/projects?_scope=extended`, authToken);
+            console.log("Site Response recieved", sitesResponse)
             if (!sitesResponse || sitesResponse === null) {
                 this.addLog(migrationId, 'error', `Site migration failed. No response recieved`, 'projects');
                 return true;
             }
             const allProjects = sitesResponse.data;
+            console.log("Site Response allProjects", allProjects.length)
             let stopProcess = false
             for (const oldSite of allProjects) {
                 try {
+                    console.log("Site oldSite before", oldSite)
                     const stopParentLoop = await this.transformSiteData(oldSite, uid, migrationId);
+                    console.log("Site oldSite after", stopParentLoop)
                     if (stopParentLoop || stopProcess) {
+                        console.log("Site oldSite tranform stopParentLoop", stopParentLoop, stopProcess)
                         this.addLog(migrationId, 'error', `Site Parent loop stopped`, 'sites', JSON.stringify(oldSite));
                         return true
                     }
                 } catch (error) {
+                    console.log("Site oldSite tranform error", error)
                     this.addLog(migrationId, 'error', `Site migration failed for project ${oldSite.properties.id}: ${error.message}`, 'sites', JSON.stringify(oldSite));
                     stopProcess = true
                 }
@@ -776,6 +902,7 @@ export class MigrationService {
             this.addLog(migrationId, 'info', `Sites migration completed`, 'sites');
             return false
         } catch (error) {
+            console.log("Site oldSite tranform outer loop", error)
             this.addLog(migrationId, 'error', `Sites migration failed at parent catch ${error.message}`, 'sites');
             return true
         }
@@ -797,7 +924,7 @@ export class MigrationService {
             return false
         }
         let stopProcess = false
-        for (const site of projectData.sites) {
+        for (const siteData of projectData.sites) {
             if (stopProcess) {
                 this.addLog(migrationId, 'error', `Site loop stopped for project:${projectData.id} `, 'sites', JSON.stringify(projectData));
                 return true
@@ -805,7 +932,7 @@ export class MigrationService {
             const siteExist = await this.drizzleService.db
                 .select()
                 .from(site)
-                .where(eq(site.uid, site.id))
+                .where(eq(site.uid, siteData.id))
                 .limit(1);
             if (siteExist.length > 0) {
                 this.addLog(migrationId, 'warning', `Skipping site migration for project:${projectData.id}. Site already migreated`, 'sites', JSON.stringify(projectData));
@@ -815,37 +942,37 @@ export class MigrationService {
                 let flag = false
                 let flagReason: FlagReasonEntry[] = []
                 let locationValue: any = null;
-                const siteGeometry = this.getGeoJSONForPostGIS(site.geometry);
+                const siteGeometry = this.getGeoJSONForPostGIS(siteData.geometry);
                 if (siteGeometry.isValid) {
                     locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(siteGeometry.validatedGeoJSON)}), 4326)`
                 } else {
-                    // flag = true,
-                    //     flagReason = [{
-                    //         uid: generateUid('flag'),
-                    //         type: 'geolocation',
-                    //         level: 'high',
-                    //         title: 'Location need fix',
-                    //         message: 'Please update your project location that is accepted by the system. ',
-                    //         updatedAt: new Date(),
-                    //         createdAt: new Date()
-                    //     }]
+                    flag = true,
+                        flagReason = [{
+                            uid: generateUid('flag'),
+                            type: 'location',
+                            level: 'error',
+                            title: 'Location need fix',
+                            message: 'Please update your site location that is accepted by the system.',
+                            updatedAt: new Date(),
+                            createdAt: new Date()
+                        }]
                 }
-
                 const insertValues: any = {
-                    uid: site.id,
+                    uid: siteData.id,
                     projectId: projectExist[0].id,
-                    name: site.name,
+                    name: siteData.name,
                     createdById: userId,
-                    description: site.description,
-                    status: site.status,
+                    description: siteData.description,
+                    status: siteData.status,
                     flag,
                     flagReason
                 };
+
                 if (siteGeometry) {
                     insertValues.location = locationValue
                 }
-                if (site.geometry) {
-                    insertValues.originalGeometry = site.geometry;
+                if (siteData.geometry) {
+                    insertValues.originalGeometry = siteData.geometry;
                 }
                 await this.drizzleService.db
                     .insert(site)
@@ -854,45 +981,40 @@ export class MigrationService {
                         throw ''
                     });
             } catch (error) {
-                this.addLog(migrationId, 'error', `Failed to insert site ${site.id} from project ${projectData.slug}: `, 'sites', JSON.stringify(site));
+                console.log("Site oldSite tranform inner", error)
+                this.addLog(migrationId, 'error', `Failed to insert site ${siteData.id} from project ${projectData.slug}: `, 'sites', JSON.stringify(siteData));
                 stopProcess = true;
             }
         }
         this.addLog(migrationId, 'info', `All sites are migrated for project:${projectData.id}.`, 'sites');
         return false
     }
-    private async migrateUserSpecies(uid: number, authToken: string, migrationId: number, email: string): Promise<boolean> {
+
+
+    private async migrateUserSpecies(uid: number, authToken: string, migrationId: number): Promise<boolean> {
         try {
+            console.log("Species mOIgratino")
             this.addLog(migrationId, 'info', 'Starting User Species migration', 'species');
             const speciesResponse = await this.makeApiCall(`/treemapper/species`, authToken);
             if (!speciesResponse || speciesResponse === null) {
+                console.log("Species speciesResponse", false)
                 this.addLog(migrationId, 'error', `Species migration failed. No response recieved`, 'species');
                 return true;
             }
+            console.log("Species response", true)
             let projectId;
             const personalProject = await this.drizzleService.db
                 .select({ id: project.id })
                 .from(project)
                 .where(eq(project.isPersonal, true))
                 .limit(1);
-
-            if (personalProject.length > 0) {
-                projectId = personalProject[0].id
+            if (!personalProject || personalProject.length === 0) {
+                throw 'Project not found for this site'
             } else {
-                const name = email.split('@')[0]
-                const projectName = createProjectTitle(name)
-                const payload = {
-                    projectName,
-                    projectType: 'personal',
-                    "description": "This is your personal project, you can add species to it. You can invite other users to this project.",
-                }
-                this.addLog(migrationId, 'warning', `Personal project not found. Created new`, 'species');
-                // const newPersonalProject = await this.projectService.createPersonalProject(payload.projectName, uid, 1, '')
-                // if (newPersonalProject) {
-                //     projectId = newPersonalProject.data?.id
-                // }
+                projectId = personalProject[0].id
             }
             if (speciesResponse.data.length === 0) {
+                console.log("No Species Found")
                 this.addLog(migrationId, 'info', `Species migration done. No species found`, 'species');
                 return false
             }
@@ -901,19 +1023,26 @@ export class MigrationService {
             const existingSciSpecies = await this.drizzleService.db
                 .select({
                     uid: scientificSpecies.uid,
-                    id: scientificSpecies.id
+                    id: scientificSpecies.id,
+                    scientificName: scientificSpecies.scientificName
                 })
                 .from(scientificSpecies)
                 .where(inArray(scientificSpecies.uid, speciesIds));
 
-            const existingSpeciesMap = new Map(
-                existingSciSpecies.map(species => [species.uid, species.id])
+            const existingSpeciesMapByUid = new Map(
+                existingSciSpecies.map(species => [species.uid, { id: species.id, scientificName: species.scientificName }])
             );
+
+            const existingSpeciesMapByName = new Map(
+                existingSciSpecies.map(species => [species.scientificName, { id: species.id, uid: species.uid }])
+            );
+
             const transformedData = this.transformSpeciesDataWithMapping(
                 cleanData,
                 projectId,
                 uid,
-                existingSpeciesMap
+                existingSpeciesMapByUid,
+                existingSpeciesMapByName
             );
 
             const filteredData = transformedData.filter(el => el.scientificSpeciesId)
@@ -924,12 +1053,14 @@ export class MigrationService {
                     target: [projectSpecies.projectId, projectSpecies.scientificSpeciesId]
                 });
             if (result) {
+                console.log(`Species migration done`, true)
                 this.addLog(migrationId, 'info', `Species migration done`, 'species');
                 return false
             }
             this.addLog(migrationId, 'error', `Species migration failed.(After running bulk)`, 'species');
             return true
         } catch (error) {
+            console.log(`Species migration error outer`, error)
             this.addLog(migrationId, 'error', `Species migration failed.(Catch bolck)`, 'species', JSON.stringify(error));
             return true
         }
@@ -939,41 +1070,46 @@ export class MigrationService {
         cleanData: any[],
         projectId: number,
         uid: number,
-        existingSpeciesMap: Map<string, number>
+        existingSpeciesMapByUid: Map<string, { id: number, scientificName: string }>,
+        existingSpeciesMapByName: Map<string, { id: number, uid: string }>
     ) {
         return cleanData.map(species => {
-            const internalId = existingSpeciesMap.get(species.scientificSpecies);
+            let matchedSpecies: any = null;
+
+            if (species.scientificSpecies) {
+                matchedSpecies = existingSpeciesMapByUid.get(species.scientificSpecies);
+            }
+
+            if (!matchedSpecies && species.scientificName) {
+                matchedSpecies = existingSpeciesMapByName.get(species.scientificName);
+            }
+
             return {
                 uid: species.id,
-                scientificSpeciesId: Number(internalId),
                 projectId: projectId,
                 addedById: uid,
-                workspaceId: 1,
-                isNativeSpecies: false,
-                isDisabled: false,
+                scientificSpeciesId: matchedSpecies?.id || null,
+                // Add both speciesName and commonName for project_species table
+                speciesName: species.scientificName || null,
                 commonName: species.aliases || null,
-                image: species.image || null,
-                description: species.description || null,
-                notes: null, // Not provided in input
                 favourite: true,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                metadata: {
-                    scientificName: species.scientificName,
-                    importedAt: new Date().toISOString(),
-                    planet_record: true,
-                    planet_uid: species.id
-                }
+                image: species.image || null,
+                notes: species.description || null, // Changed from description to notes to match schema
+                isUnknown: !matchedSpecies, // Set to true if no matching scientific species found
             };
         });
     }
+
     private async migrateUserInterventions(uid: number, authToken: string, migrationId: number): Promise<boolean> {
         try {
             this.addLog(migrationId, 'info', 'Starting User intervention migration', 'interventions');
             const { projectMapping, personalProjectId } = await this.buildProjectMapping(uid);
+            console.log("Project mapping done")
             const { siteMapping } = await this.buildSiteMapping(uid);
+            console.log("Site mapping done")
             const needToStop = await this.migrateInterventionWithSampleTrees(uid, projectMapping, authToken, migrationId, personalProjectId, siteMapping)
             if (needToStop) {
+                console.log("Site needToStop activated")
                 throw 'needToStop activated'
             }
             this.addLog(migrationId, 'info', `Interventions migration completed`, 'interventions');
@@ -983,6 +1119,7 @@ export class MigrationService {
             return true
         }
     }
+
     private async buildProjectMapping(userId: number): Promise<{ projectMapping: Map<string, number>, personalProjectId: any }> {
         let personalProjectId: null | number = null
         const projectMapping = new Map<string, number>();
@@ -997,11 +1134,11 @@ export class MigrationService {
             .where(eq(project.createdById, userId));
 
         // Build the mapping
-        for (const project of migratedProjects) {
-            if (project.isPersonal) {
-                personalProjectId = project.id
+        for (const projectData of migratedProjects) {
+            if (projectData.isPersonal) {
+                personalProjectId = projectData.id
             }
-            projectMapping.set(project.oldUuid, project.id);
+            projectMapping.set(projectData.oldUuid, projectData.id);
         }
 
         return { projectMapping, personalProjectId };
@@ -1018,8 +1155,8 @@ export class MigrationService {
             .from(site)
             .where(eq(site.createdById, userId));
         // Build the mapping
-        for (const project of migratedProjects) {
-            siteMapping.set(project.oldUuid, project.id);
+        for (const siteData of migratedProjects) {
+            siteMapping.set(siteData.oldUuid, siteData.id);
         }
         return { siteMapping, personalProjectId: null };
     }
@@ -1057,6 +1194,7 @@ export class MigrationService {
         let hasMore = true;
         let totalProcessed = 0;
         let lastPage: number | null = null;
+        console.log("inside migrateInterventionWithSampleTrees")
         while (hasMore) {
             if (lastPage && currentPage > lastPage) {
                 break;
@@ -1067,12 +1205,15 @@ export class MigrationService {
             );
 
             if (!interventionResponse || interventionResponse === null) {
+                console.log("faield received interventionResponse")
+
                 if (lastPage && currentPage > lastPage) {
                     break;
                 }
                 this.addLog(migrationId, 'error', `interventions migration failed. No response`, 'interventions');
                 return true;
             }
+            console.log("received interventionResponse")
 
             const oldInterventions = interventionResponse.data;
             if (oldInterventions && oldInterventions.length === 0) {
@@ -1102,6 +1243,7 @@ export class MigrationService {
             // Process in transaction
             const parentIntervention: any[] = [];
             const interventionoParentRelatedData = {};
+            const interventionoParentSpeceisRelatedData = {};
 
 
             for (const oldIntervention of oldInterventions.items) {
@@ -1132,8 +1274,10 @@ export class MigrationService {
                 );
                 parentIntervention.push(parentFinalData)
                 interventionoParentRelatedData[`${parentFinalData.uid}`] = treeData
+                interventionoParentSpeceisRelatedData[`${parentFinalData.uid}`] = parentFinalData.species
             }
             const finalInterventionIDMapping: any = [];
+            const finalSpeciesInterventionIDMapping: any = [];
             try {
                 const result = await this.drizzleService.db
                     .insert(intervention)
@@ -1151,27 +1295,84 @@ export class MigrationService {
                     });
                 }
             } catch (error) {
-
                 const chunkResults = await this.insertChunkIndividually(parentIntervention, migrationId);
                 finalInterventionIDMapping.push(...chunkResults)
             }
 
-            finalInterventionIDMapping.forEach(async inv => {
-
+            const promises = finalInterventionIDMapping.map(async (inv) => {
                 if (inv.error) {
+                    return; // Skip entries with errors
                 } else {
-                    const treeMappedData = interventionoParentRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }))
+                    const intersveionSpeciesFial = interventionoParentSpeceisRelatedData[inv.uid].map(e => ({ ...e, interventionId: inv.id }));
+
                     try {
-                        await this.drizzleService.db
+                        const result = await this.drizzleService.db
+                            .insert(interventionSpecies)
+                            .values(intersveionSpeciesFial)
+                            .returning({ id: interventionSpecies.id, uid: interventionSpecies.uid });
+                        if (Array.isArray(result)) {
+                            result.forEach(element => {
+                                finalSpeciesInterventionIDMapping.push({
+                                    id: element.id,
+                                    uid: element.uid,
+                                    success: true,
+                                    error: null
+                                });
+                            });
+                        }
+                    } catch (error) {
+                        const chunkResults = await this.insertInteventionSpeciesInfcidual(intersveionSpeciesFial, migrationId);
+                        finalSpeciesInterventionIDMapping.push(...chunkResults);
+                    }
+                }
+            });
+            const imageUploadData: any = []
+            await Promise.all(promises);
+            const promises2 = finalInterventionIDMapping.map(async (inv) => {
+                if (inv.error) {
+                    return; // Skip entries with errors
+                } else {
+                    const treeMappedData = interventionoParentRelatedData[inv.uid].map((e) => {
+                        const swapUid = finalSpeciesInterventionIDMapping.find(el => el.uid === e.interventionSpeciesId);
+                        return ({ ...e, interventionSpeciesId: swapUid.id, interventionId: inv.id });
+                    });
+
+                    try {
+                        const allTreeResult = await this.drizzleService.db
                             .insert(tree)
                             .values(treeMappedData)
-                            .returning({ id: tree.id, uid: tree.uid });
+                            .returning({ id: tree.id, image: tree.image });
+                        if (Array.isArray(allTreeResult)) {
+                            allTreeResult.forEach(element => {
+                                if (element.image) {
+                                    imageUploadData.push({
+                                        uid: generateUid('img'),
+                                        type: 'during',
+                                        entityId: element.id,
+                                        entityType: 'tree',
+                                        deviceType: 'server',
+                                        filename: element.image,
+                                        uploadedById: userId
+                                    });
+                                }
+                            });
+                        }
+
                     } catch (error) {
-                        await this.insertTreeChunkIndividually(treeMappedData, migrationId);
+                        console.log("chunkResults error", error);
+                        const chunkResults = await this.insertTreeChunkIndividually(treeMappedData, migrationId);
+                        imageUploadData.push(...chunkResults)
                     }
                 }
             });
 
+            await Promise.all(promises2);
+            try {
+                const filterdImage = imageUploadData.filter(el => el.entityId)
+                await this.drizzleService.db.insert(image).values(filterdImage)
+            } catch (error) {
+                console.log("Error occured while uploading images", error)
+            }
             totalProcessed += itemsCount;
             currentPage++;
             // Final check before next iteration
@@ -1219,6 +1420,39 @@ export class MigrationService {
             try {
                 const result = await this.drizzleService.db
                     .insert(tree)
+                    .values(chunk[j])
+                    .returning();
+                interventionIds.push({
+                    uid: generateUid('img'),
+                    type: 'during',
+                    entityId: result[0].id,
+                    entityType: 'tree',
+                    deviceType: 'server',
+                    filename: result[0].image,
+                    uploadedById: result[0].createdById
+                });
+            } catch (error) {
+                this.addLog(migrationId, 'error', `Indivdually Failed to add intervention with id ${chunk[j].uid}`, 'interventions')
+                interventionIds.push({
+                    uid: generateUid('img'),
+                    type: 'during',
+                    entityId: null,
+                    entityType: 'tree',
+                    deviceType: 'server',
+                    filename: null,
+                    uploadedById: null
+                });
+            }
+        }
+        return interventionIds;
+    }
+
+    private async insertInteventionSpeciesInfcidual(chunk: any[], migrationId) {
+        const interventionIds: any = []
+        for (let j = 0; j < chunk.length; j++) {
+            try {
+                const result = await this.drizzleService.db
+                    .insert(interventionSpecies)
                     .values(chunk[j])
                     .returning();
 
@@ -1275,7 +1509,6 @@ export class MigrationService {
         let parentFinalData: any = {}
         let interventionSpecies: any = []
         const interventionSampleTree: any = []
-        let treesPlanted = 0;
         let flag = false
         let flagReason: FlagReasonEntry[] = []
         let locationValue: any = null;
@@ -1284,63 +1517,56 @@ export class MigrationService {
             if (parentGeometry.isValid) {
                 locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(parentGeometry.validatedGeoJSON)}), 4326)`
             } else {
-                // flag = true,
-                //     flagReason = [{
-                //         uid: generateUid('flag'),
-                //         type: 'geolocation',
-                //         level: 'high',
-                //         title: 'Location need fix',
-                //         message: 'Please update your project location that is accepted by the system. ',
-                //         updatedAt: new Date(),
-                //         createdAt: new Date()
-                //     }]
+                flag = true,
+                    flagReason = [{
+                        uid: generateUid('flag'),
+                        type: 'location',
+                        level: 'error',
+                        title: 'Location need fix',
+                        message: 'Please update your project location that is accepted by the system. ',
+                        updatedAt: new Date(),
+                        createdAt: new Date()
+                    }]
             }
 
             if (parentData.plantedSpecies !== null && parentData.plantedSpecies.length > 0) {
                 for (let index = 0; index < parentData.plantedSpecies.length; index++) {
                     const el = parentData.plantedSpecies[index];
-                    treesPlanted = + el.treeCount
                     interventionSpecies.push({
                         "uid": generateUid("invspc"),
-                        "speciesName": el.scientificName || null,
-                        "createdAt": el.created ? new Date(el.created) : new Date(),
-                        "scientificSpeciesId": 0,
-                        "scientificSpeciesUid": el.scientificSpecies || null,
                         "interventionId": 0,
-                        "isUnknown": false,
-                        "otherSpeciesName": el.otherSpecies,
-                        "count": el.treeCount,
+                        "speciesName": el.scientificName || 'Unknown',
+                        "scientificSpeciesId": 0,
+                        "isUnknown": el.scientificSpecies ? false : true,
+                        "commonName": null,
+                        "speciesCount": el.treeCount,
+                        "scientificSpeciesUid": el.scientificSpecies
                     })
                 }
-
             }
             if (parentData.scientificSpecies !== null) {
-                treesPlanted = +1
                 interventionSpecies.push({
                     "uid": generateUid("invspc"),
-                    "speciesName": parentData.scientificName || null,
+                    "speciesName": parentData.scientificName || 'Unknown',
                     "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
                     "scientificSpeciesId": 0,
-                    "scientificSpeciesUid": parentData.scientificSpecies || null,
                     "isUnknown": parentData.otherSpecies ? true : false,
-                    "otherSpeciesName": parentData.otherSpecies || 'Unknown',
+                    "commonName": parentData.otherSpecies || 'Unknown',
                     "interventionId": 0,
-                    "count": 1,
+                    "speciesCount": 1,
+                    "scientificSpeciesUid": parentData.scientificSpecies
                 })
             }
-
             if (parentData.otherSpecies !== null) {
-                treesPlanted = +1
                 interventionSpecies.push({
                     "uid": generateUid("invspc"),
-                    "speciesName": null,
+                    "speciesName": 'Unknown',
                     "createdAt": parentData.interventionStartDate !== null ? new Date(parentData.interventionStartDate) : new Date(),
                     "scientificSpeciesId": null,
-                    "scientificSpeciesUid": null,
                     "isUnknown": true,
                     "interventionId": 0,
-                    "otherSpeciesName": parentData.otherSpecies || 'Unknown',
-                    "count": 1,
+                    "commonName": parentData.otherSpecies || 'Unknown',
+                    "speciesCount": 1,
                 })
             }
             const removedUnknown = interventionSpecies.filter(el => !el.isUnknown).map(el => el.scientificSpeciesUid)
@@ -1352,15 +1578,15 @@ export class MigrationService {
                 const speciesId = el.scientificSpeciesUid !== null ? speciesMapping.get(el.scientificSpeciesUid) : null
                 if (!speciesId) {
                     flag = true
-                    // flagReason.push({
-                    //     uid: generateUid('flag'),
-                    //     type: 'spcies',
-                    //     level: 'high',
-                    //     title: 'Species has some issue',
-                    //     message: 'Please check the spcies data integrity',
-                    //     updatedAt: new Date(),
-                    //     createdAt: new Date()
-                    // })
+                    flagReason.push({
+                        uid: generateUid('flag'),
+                        type: 'species',
+                        level: 'error',
+                        title: 'Species has some issue',
+                        message: 'Please check the spcies data integrity',
+                        updatedAt: new Date(),
+                        createdAt: new Date()
+                    })
                     return el;
                 }
                 return {
@@ -1368,11 +1594,12 @@ export class MigrationService {
                     scientificSpeciesId: speciesId
                 }
             })
+            const totalTrees = finalInterventionSpeciesMapping.reduce((total, species) => total + species.speciesCount, 0);
             parentFinalData['hid'] = parentData.hid
             parentFinalData['uid'] = parentData.id
             parentFinalData['userId'] = userId
             parentFinalData['projectId'] = newProjectId
-            parentFinalData['projectSiteId'] = siteId
+            parentFinalData['siteId'] = siteId
             parentFinalData['type'] = parentData.type
             parentFinalData['idempotencyKey'] = parentData.idempotencyKey
             parentFinalData['captureMode'] = parentData.captureMode,
@@ -1383,8 +1610,9 @@ export class MigrationService {
             parentFinalData['location'] = locationValue
             parentFinalData['originalGeometry'] = parentData.originalGeometry
             parentFinalData['deviceLocation'] = parentData.deviceLocation
-            parentFinalData['treeCount'] = treesPlanted
-            parentFinalData['sampleTreeCount'] = parentData.sampleTreeCount
+            parentFinalData['totalTreeCount'] = totalTrees
+            parentFinalData['totalSampleTreeCount'] = parentData.sampleTreeCount
+            parentFinalData['migratedIntervention'] = true
             parentFinalData['metadata'] = parentData.metadata
             parentFinalData['flag'] = flag
             parentFinalData['flagReason'] = flagReason
@@ -1393,7 +1621,7 @@ export class MigrationService {
             if (parentData.type === "single-tree-registration") {
                 let treeFinalData = {}
                 let singleTreeflag = false
-                let singleTreeFlagreason: any = []
+                let singleTreeFlagreason: FlagReasonEntry[] = []
                 let singleTreeLocation: any = null;
                 const singleTreeGeometry = this.getGeoJSONForPostGIS(parentData.geometry);
                 if (singleTreeGeometry.isValid) {
@@ -1402,8 +1630,8 @@ export class MigrationService {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
-                        type: 'geolocation',
-                        level: 'high',
+                        type: 'location',
+                        level: 'error',
                         title: 'Location need fix',
                         message: 'Please update your tree location that is accepted by the system. ',
                         updatedAt: new Date(),
@@ -1412,44 +1640,46 @@ export class MigrationService {
                 }
 
                 if (parentData.measurements && parentData.measurements.height) {
-                    treeFinalData['height'] = parentData.measurements.height
+                    treeFinalData['currentHeight'] = parentData.measurements.height
                 } else {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'measurements',
-                        level: 'high',
+                        level: 'error',
                         title: 'Measurements height fix',
                         message: 'height of the tree is missing',
                         updatedAt: new Date(),
                         createdAt: new Date()
                     })
-                    treeFinalData['height'] = 0
+                    treeFinalData['currentHeight'] = 0
                 }
 
                 if (parentData.measurements && parentData.measurements.width) {
-                    treeFinalData['width'] = parentData.measurements.width
+                    treeFinalData['currentWidth'] = parentData.measurements.width
                 } else {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'measurements',
-                        level: 'high',
+                        level: 'error',
                         title: 'Measurements width fix',
                         message: 'width of the tree is missing ',
                         updatedAt: new Date(),
                         createdAt: new Date()
                     })
-                    treeFinalData['width'] = 0
+                    treeFinalData['currentWidth'] = 0
                 }
 
                 if (interventionSpecies.length > 0 && interventionSpecies[0].scientificSpeciesId) {
-                    treeFinalData['scientificSpeciesId'] = interventionSpecies[0].scientificSpeciesId
+                    treeFinalData['interventionSpeciesId'] = interventionSpecies[0].uid
                     treeFinalData['speciesName'] = interventionSpecies[0].speciesName
                 }
 
                 if (interventionSpecies.length > 0 && interventionSpecies[0].isUnknown) {
                     treeFinalData['isUnknown'] = true
+                    treeFinalData['speciesName'] = 'Unknown'
+                    treeFinalData['interventionSpeciesId'] = interventionSpecies[0].uid
                 }
 
                 if (!interventionSpecies || interventionSpecies.length === 0) {
@@ -1457,32 +1687,49 @@ export class MigrationService {
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'species',
-                        level: 'high',
+                        level: 'error',
                         title: 'species fix requried',
                         message: 'species of the tree is missing ',
                         updatedAt: new Date(),
                         createdAt: new Date()
                     })
                 }
-
+                let latitude = 0
+                let longitude = 0
+                try {
+                    const latlongDetails = this.extractCoordinatesFromPoint(parentData.originalGeometry)
+                    if (latlongDetails.latitude) {
+                        latitude = latlongDetails.latitude
+                    }
+                    if (latlongDetails.longitude) {
+                        longitude = latlongDetails.longitude
+                    }
+                } catch (error) {
+                    console.log("error in lat loing tree")
+                }
+                const imageData = parentData.coordinates && parentData.coordinates.length > 0 && parentData.coordinates[0].image ? parentData.coordinates[0].image : null
                 let newHID = generateParentHID();
                 treeFinalData['hid'] = newHID
                 treeFinalData['uid'] = generateUid('tree')
                 treeFinalData['createdById'] = userId
-                // treeFinalData['interventionSpeciesId'] = interventionSpecies && interventionSpecies[0] ? interventionSpecies[0].uid : generateUid('temp'),
-                //     treeFinalData['tag'] = parentData.tag
+                treeFinalData['tag'] = parentData.tag
                 treeFinalData['treeType'] = 'single'
                 treeFinalData['location'] = singleTreeLocation
                 treeFinalData['originalGeometry'] = parentData.originalGeometry
                 treeFinalData['status'] = parentData.status || 'alive'
                 treeFinalData['statusReason'] = parentData.statusReason || null
+                treeFinalData['longitude'] = longitude
+                treeFinalData['latitude'] = latitude
                 treeFinalData['plantingDate'] = parentData.planting_date || parentData.interventionStartDate || parentData.registrationDate || new Date()
                 treeFinalData['flag'] = singleTreeflag
                 treeFinalData['flagReason'] = singleTreeFlagreason
+                treeFinalData['image'] = imageData
+                treeFinalData['migratedTree'] = true
+
+
                 interventionSampleTree.push(treeFinalData)
             }
         } catch (error) {
-
             this.addLog(mgID, 'error', "There is error in this intervention", 'interventions', JSON.stringify(error))
         }
         let transofrmedSample = []
@@ -1504,7 +1751,7 @@ export class MigrationService {
                 let plantLocationDate = sampleIntervention.interventionStartDate || sampleIntervention.plantDate || sampleIntervention.registrationDate
                 let treeFinalData = {}
                 let singleTreeflag = false
-                let singleTreeFlagreason: any = []
+                let singleTreeFlagreason: FlagReasonEntry[] = []
                 let invSpeciesId: any = null
                 if (sampleIntervention.otherSpecies !== null) {
                     invSpeciesId = allSpecies.find(el => el.isUnknown === true)
@@ -1512,13 +1759,12 @@ export class MigrationService {
                 if (sampleIntervention.scientificSpecies !== null) {
                     invSpeciesId = allSpecies.find(el => el.scientificSpeciesUid === sampleIntervention.scientificSpecies)
                 }
-
                 if (!invSpeciesId) {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'species',
-                        level: 'high',
+                        level: 'error',
                         title: 'sample species need fix',
                         message: 'Please update your sample trees species',
                         updatedAt: new Date(),
@@ -1531,7 +1777,7 @@ export class MigrationService {
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'species',
-                        level: 'high',
+                        level: 'error',
                         title: 'sample species uid is incorrect need fix',
                         message: 'Please update your sample trees species',
                         updatedAt: new Date(),
@@ -1549,8 +1795,8 @@ export class MigrationService {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
-                        type: 'geolocation',
-                        level: 'high',
+                        type: 'location',
+                        level: 'error',
                         title: 'Location need fix',
                         message: 'Please update your ptreeroject location that is accepted by the system. ',
                         updatedAt: new Date(),
@@ -1559,62 +1805,87 @@ export class MigrationService {
                 }
 
                 if (sampleIntervention.measurements && sampleIntervention.measurements.height) {
-                    treeFinalData['height'] = sampleIntervention.measurements.height
+                    treeFinalData['currentHeight'] = sampleIntervention.measurements.height
                 } else {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'measurements',
-                        level: 'high',
+                        level: 'error',
                         title: 'Measurements height fix',
                         message: 'height of the tree is missing ',
                         updatedAt: new Date(),
                         createdAt: new Date()
                     })
-                    treeFinalData['height'] = 0
+                    treeFinalData['currentHeight'] = 0
 
                 }
 
                 if (sampleIntervention.measurements && sampleIntervention.measurements.width) {
-                    treeFinalData['width'] = sampleIntervention.measurements.width
+                    treeFinalData['currentWidth'] = sampleIntervention.measurements.width
                 } else {
                     singleTreeflag = true
                     singleTreeFlagreason.push({
                         uid: generateUid('flag'),
                         type: 'measurements',
-                        level: 'high',
+                        level: 'error',
                         title: 'Measurements width fix',
                         message: 'width of the tree is missing ',
                         updatedAt: new Date(),
                         createdAt: new Date()
                     })
-                    treeFinalData['width'] = 0
+                    treeFinalData['currentWidth'] = 0
                 }
 
-                if (sampleIntervention.scientificSpeciesId) {
-                    treeFinalData['scientificSpeciesId'] = sampleIntervention.scientificSpeciesId
-                    treeFinalData['speciesName'] = sampleIntervention.speciesName || ''
+                if (sampleIntervention.scientificSpecies) {
+                    treeFinalData['speciesName'] = invSpeciesId.speciesName || 'Not Unknown'
                 } else {
                     treeFinalData['isUnknown'] = true
+                    treeFinalData['speciesName'] = 'Unknown'
                 }
+
+                if (invSpeciesId && invSpeciesId.uid) {
+                    treeFinalData['interventionSpeciesId'] = invSpeciesId.uid
+                }
+
+                let latitude = 0
+                let longitude = 0
+                try {
+                    const latlongDetails = this.extractCoordinatesFromPoint(sampleIntervention.originalGeometry)
+                    if (latlongDetails.latitude) {
+                        latitude = latlongDetails.latitude
+                    }
+                    if (latlongDetails.longitude) {
+                        longitude = latlongDetails.longitude
+                    }
+                } catch (error) {
+                    console.log("error in lat loing tree")
+                }
+
+                const imageData = sampleIntervention.coordinates && sampleIntervention.coordinates.length > 0 && sampleIntervention.coordinates[0].image ? sampleIntervention.coordinates[0].image : null
+
                 treeFinalData['hid'] = sampleIntervention.hid
                 treeFinalData['uid'] = sampleIntervention.id
                 treeFinalData['createdById'] = userId
                 treeFinalData['tag'] = sampleIntervention.tag
                 treeFinalData['treeType'] = 'sample'
-                treeFinalData['interventionSpeciesId'] = invSpeciesId?.uid != null ? invSpeciesId.uid : null;
                 treeFinalData['location'] = singleTreeLocation || null
                 treeFinalData['originalGeometry'] = sampleIntervention.originalGeometry
+                treeFinalData['longitude'] = longitude
+                treeFinalData['latitude'] = latitude
                 treeFinalData['status'] = sampleIntervention.status || 'alive'
                 treeFinalData['statusReason'] = sampleIntervention.statusReason || null
                 treeFinalData['metadata'] = sampleIntervention.metadata || null
                 treeFinalData['plantingDate'] = plantLocationDate ? new Date(plantLocationDate) : new Date(),
                     treeFinalData['flag'] = singleTreeflag
+                treeFinalData['migratedTree'] = true
                 treeFinalData['flagReason'] = singleTreeFlagreason
+                treeFinalData['image'] = imageData
                 allTranformedSampleTrees.push(treeFinalData);
             }
             return allTranformedSampleTrees
         } catch (error) {
+            console.log("allTranformedSampleTrees error", error)
             return []
         }
     }
@@ -1627,6 +1898,52 @@ export class MigrationService {
                 migrationCompletedAt: new Date()
             })
             .where(eq(migration.id, migrationId));
+    }
+
+    private extractCoordinatesFromPoint(pointGeometry: GeoJSONPoint): ExtractedCoordinates {
+        // Validate that input exists
+        if (!pointGeometry) {
+            throw new Error('Point geometry is required');
+        }
+
+        // Validate that it's a Point
+        if (pointGeometry.type !== 'Point') {
+            throw new Error(`Expected Point geometry, but received '${pointGeometry.type}'`);
+        }
+
+        // Validate coordinates exist and are valid
+        if (!pointGeometry.coordinates || !Array.isArray(pointGeometry.coordinates)) {
+            throw new Error('Invalid or missing coordinates in Point geometry');
+        }
+
+        const coordinates = pointGeometry.coordinates;
+
+        // Point should have exactly 2 or 3 coordinates [longitude, latitude, altitude?]
+        if (coordinates.length < 2) {
+            throw new Error('Point coordinates must contain at least longitude and latitude');
+        }
+
+        const [longitude, latitude, altitude = null] = coordinates;
+
+        // Validate coordinate types and ranges
+        if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
+            throw new Error(`Invalid longitude: ${longitude}. Must be a number between -180 and 180`);
+        }
+
+        if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) {
+            throw new Error(`Invalid latitude: ${latitude}. Must be a number between -90 and 90`);
+        }
+
+        // Validate altitude if present
+        if (altitude !== null && typeof altitude !== 'number') {
+            throw new Error(`Invalid altitude: ${altitude}. Must be a number or null`);
+        }
+
+        return {
+            latitude,
+            longitude,
+            altitude
+        };
     }
 }
 

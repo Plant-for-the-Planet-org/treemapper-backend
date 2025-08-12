@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1754844446616,
-      "tag": "0000_wandering_nightshade",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1754876067388,
-      "tag": "0001_violet_iron_lad",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1754878357755,
-      "tag": "0002_harsh_slipstream",
+      "when": 1754970193521,
+      "tag": "0000_needy_nocturne",
       "breakpoints": true
     }
   ]

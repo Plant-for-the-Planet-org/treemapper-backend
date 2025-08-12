@@ -25,8 +25,9 @@ interface GeoJSONGeometry {
   coordinates: number[] | number[][] | number[][][];
 }
 
-export type FlagLevel = 'high' | 'medium' | 'low';
-export type FlagType = 'error' | 'warning' | 'info';
+export type FlagLevel = 'error' | 'warning' | 'info';
+export type FlagEntity = 'location' | 'species' | 'measurements';
+
 
 export const auditActionEnum = pgEnum('audit_action', [
   'create',
@@ -71,7 +72,7 @@ export const auditEntityEnum = pgEnum('audit_entity', [
 
 export interface FlagReasonEntry {
   uid: string;
-  type: FlagType;
+  type: FlagEntity;
   level: FlagLevel;
   title: string;
   message: string;
@@ -114,7 +115,7 @@ export const entityEnum = pgEnum('entity_type', [
 ]);
 export const projectRoleEnum = pgEnum('project_role', ['owner', 'admin', 'contributor', 'observer']);
 export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'declined', 'expired', 'discarded']);
-export const imageUploadDeviceEnum = pgEnum('image_upload_device', ['web', 'mobile']);
+export const imageUploadDeviceEnum = pgEnum('image_upload_device', ['web', 'mobile', 'server']);
 export const siteStatusEnum = pgEnum('site_status', ['planted', 'planting', 'barren', 'reforestation', 'planning']);
 export const siteAccessEnum = pgEnum('site_access', ['all_sites', 'deny_all', 'read_only', 'limited_access']);
 export const speciesRequestStatusEnum = pgEnum('species_request_status', ['pending', 'approved', 'rejected']);
@@ -489,7 +490,7 @@ export const project = pgTable('project', {
   isPublic: boolean('is_public').default(true).notNull(),
   isPrimary: boolean('is_primary').default(false).notNull(),
   isPersonal: boolean('is_personal').default(false).notNull(),
-  intensity: text('intensity'),
+  intensity: integer('intensity'),
   revisionPeriodicity: text('revision_periodicity'),
   migratedProject: boolean('migrated_project').default(false),
   flag: boolean('flag').default(false),
@@ -505,8 +506,6 @@ export const project = pgTable('project', {
     .on(table.createdById, table.isActive),
   locationIdx: index('project_location_gist_idx').using('gist', table.location),
   targetPositive: check('target_positive', sql`target IS NULL OR target > 0`),
-  validIntensity: check('valid_intensity',
-    sql`intensity IS NULL OR intensity IN ('low', 'medium', 'high')`),
   validScale: check('valid_scale',
     sql`scale IS NULL OR scale IN ('small', 'medium', 'large', 'enterprise')`),
   websiteFormat: check('website_format',
@@ -630,26 +629,7 @@ export const site = pgTable('site', {
     .on(table.projectId, table.status)
     .where(sql`deleted_at IS NULL`),
   locationIdx: index('site_location_gist_idx').using('gist', table.location),
-  createdByIdx: index('site_created_by_idx').on(table.createdById),
-  areaPositive: check('area_positive', sql`area IS NULL OR area > 0`),
-  elevationRange: check('elevation_range',
-    sql`elevation IS NULL OR (elevation >= -500 AND elevation <= 9000)`),
-  slopeRange: check('slope_range',
-    sql`slope IS NULL OR (slope >= 0 AND slope <= 90)`),
-  validAspect: check('valid_aspect',
-    sql`aspect IS NULL OR aspect IN ('N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW')`),
-  validAccessibility: check('valid_accessibility',
-    sql`accessibility IS NULL OR accessibility IN ('easy', 'moderate', 'difficult')`),
-  validSoilType: check('valid_soil_type',
-    sql`soil_type IS NULL OR soil_type IN ('clay', 'sand', 'loam', 'rocky', 'peat', 'mixed')`),
-  expectedTreeCountPositive: check('expected_tree_count_positive',
-    sql`expected_tree_count IS NULL OR expected_tree_count > 0`),
-  actualAfterPlanned: check('actual_after_planned',
-    sql`planned_planting_date IS NULL OR actual_planting_date IS NULL OR actual_planting_date >= planned_planting_date`),
-  plantedSiteHasDate: check('planted_site_has_date',
-    sql`status != 'planted' OR actual_planting_date IS NOT NULL`),
-  flaggedSiteReason: check('flagged_site_reason',
-    sql`flag = false OR flag_reason IS NOT NULL`),
+  createdByIdx: index('site_created_by_idx').on(table.createdById)
 }));
 
 
@@ -940,14 +920,16 @@ export const tree = pgTable('tree', {
   interventionSpeciesId: integer('intervention_species_id').notNull().references(() => interventionSpecies.id, { onDelete: 'restrict' }),
   speciesName: text('species_name'),
   commonName: text('common_name'),
+  isUknown: boolean('is_unknown'),
   createdById: integer('created_by_id').notNull().references(() => user.id, { onDelete: 'set null' }),
   tag: text('tag'),
   treeType: treeTypeEnum('tree_type').default('sample'),
   location: geometryWithGeoJSON(4326)('location'),
+  originalGeometry: jsonb('original_geometry'),
   altitude: decimal('altitude', { precision: 8, scale: 2 }),
   accuracy: decimal('accuracy', { precision: 6, scale: 2 }),
-  latitude: doublePrecision('latitude').notNull(),
-  longitude: doublePrecision('longitude').notNull(),
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
   currentHeight: doublePrecision('current_height'),
   currentWidth: doublePrecision('current_width'),
   currentHealthScore: integer('current_health_score'),
@@ -958,7 +940,8 @@ export const tree = pgTable('tree', {
   lastMeasurementDate: timestamp('last_measurement_date', { withTimezone: true }),
   nextMeasurementDate: timestamp('next_measurement_date', { withTimezone: true }),
   image: text('image'),
-  remeasured: boolean().default(false),
+  remeasured: boolean('remeasured').default(false),
+  migratedTree: boolean('migrated_tree').default(false),
   flag: boolean('flag').default(false),
   flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

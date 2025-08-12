@@ -19,9 +19,7 @@ export class MigrationController {
         }
 
         this.migrationService.startUserMigration(
-            req.user.id,
             body.planetId,
-            req.user.email,
             authToken,
             userData
         ).catch(error => {
