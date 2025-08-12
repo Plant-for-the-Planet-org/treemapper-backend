@@ -24,7 +24,12 @@ import {
   SortOrderEnum,
   InterventionType,
   CaptureModeEnum,
-  UpdateInterventionSpeciesDto
+  UpdateInterventionSpeciesDto,
+  InterventionTreesResponse,
+  MapIntervention,
+  MapTree,
+  ProjectMapBounds,
+  ProjectMapResponse
 } from './dto/interventions.dto';
 import { generateUid } from 'src/util/uidGenerator';
 import { generateParentHID } from 'src/util/hidGenerator';
@@ -537,7 +542,7 @@ export class InterventionsService {
       entityType: entity,
       deviceType: device,
       filename: filename,
-      uploadedById:userId
+      uploadedById: userId
     })
   }
 
@@ -774,7 +779,7 @@ export class InterventionsService {
           flag: tree.flag,
           createdAt: tree.createdAt,
           updatedAt: tree.updatedAt,
-          migratedTree:tree.migratedTree
+          migratedTree: tree.migratedTree
         },
         record: {
           id: treeRecord.id,
@@ -891,7 +896,7 @@ export class InterventionsService {
           notes: recordData.notes,
           priorityLevel: recordData.priorityLevel,
           image: recordData.image,
-          
+
           createdAt: recordData.createdAt,
         });
       }
@@ -1765,4 +1770,211 @@ export class InterventionsService {
 
   }
 
+  async getProjectMapInterventions(projectId: number): Promise<any> {
+    try {
+     const interventionsQuery = await this.drizzleService.db
+      .select({
+        id: intervention.id,
+        uid: intervention.uid,
+        hid: intervention.hid,
+        type: intervention.type,
+        status: intervention.status,
+        registrationDate: intervention.registrationDate,
+        interventionStartDate: intervention.interventionStartDate,
+        interventionEndDate: intervention.interventionEndDate,
+        location: sql<GeoJSON.Point | GeoJSON.Polygon | GeoJSON.MultiPolygon>`ST_AsGeoJSON(${intervention.location})::json`,
+        locationGeometryType: sql<'Point' | 'Polygon' | 'MultiPolygon'>`ST_GeometryType(${intervention.location})`,
+        centroid: sql<GeoJSON.Point>`ST_AsGeoJSON(ST_Centroid(${intervention.location}))::json`,
+        area: intervention.area,
+        totalTreeCount: intervention.totalTreeCount,
+        totalSampleTreeCount: intervention.totalSampleTreeCount,
+        description: intervention.description,
+        image: intervention.image,
+      })
+      .from(intervention)
+      .where(
+        and(
+          eq(intervention.projectId, projectId),
+          isNull(intervention.deletedAt),
+          sql`${intervention.location} IS NOT NULL` // Only include interventions with valid locations
+        )
+      )
+      .orderBy(intervention.interventionStartDate);
+
+    const interventions: MapIntervention[] = interventionsQuery.map(row => ({
+      ...row,
+      locationGeometryType: row.locationGeometryType.replace('ST_', '') as 'Point' | 'Polygon' | 'MultiPolygon',
+      registrationDate: row.registrationDate.toISOString(),
+      interventionStartDate: row.interventionStartDate.toISOString(),
+      interventionEndDate: row.interventionEndDate.toISOString(),
+    }));
+
+    // Calculate bounds from all intervention locations (using centroids for polygons)
+    const bounds = this.calculateBounds(interventions);
+
+    return {
+      interventions,
+      bounds,
+      totalInterventions: interventions.length,
+    };
+    } catch (error) {
+      console.log("SDC", error)
+    }
+  }
+
+  /**
+   * Get all trees for a specific intervention
+   */
+  async getInterventionTrees(interventionId: number): Promise<InterventionTreesResponse> {
+    console.log("SDC", interventionId)
+    // Get intervention details
+    const interventionQuery = await this.drizzleService.db
+      .select({
+        id: intervention.id,
+        uid: intervention.uid,
+        hid: intervention.hid,
+        type: intervention.type,
+        status: intervention.status,
+        registrationDate: intervention.registrationDate,
+        interventionStartDate: intervention.interventionStartDate,
+        interventionEndDate: intervention.interventionEndDate,
+        location: sql<GeoJSON.Point>`ST_AsGeoJSON(${intervention.location})::json`,
+        area: intervention.area,
+        totalTreeCount: intervention.totalTreeCount,
+        totalSampleTreeCount: intervention.totalSampleTreeCount,
+        description: intervention.description,
+        image: intervention.image,
+      })
+      .from(intervention)
+      .where(
+        and(
+          eq(intervention.id, interventionId),
+          isNull(intervention.deletedAt)
+        )
+      )
+      .limit(1);
+
+    if (!interventionQuery.length) {
+      throw new Error('Intervention not found');
+    }
+
+    const interventionData: any = {
+      ...interventionQuery[0],
+      registrationDate: interventionQuery[0].registrationDate.toISOString(),
+      interventionStartDate: interventionQuery[0].interventionStartDate.toISOString(),
+      interventionEndDate: interventionQuery[0].interventionEndDate.toISOString(),
+    };
+
+    // Get trees with species information
+    const treesQuery = await this.drizzleService.db
+      .select({
+        id: tree.id,
+        uid: tree.uid,
+        hid: tree.hid,
+        tag: tree.tag,
+        treeType: tree.treeType,
+        location: sql<GeoJSON.Point>`ST_AsGeoJSON(${tree.location})::json`,
+        status: tree.status,
+        currentHeight: tree.currentHeight,
+        currentWidth: tree.currentWidth,
+        currentHealthScore: tree.currentHealthScore,
+        plantingDate: tree.plantingDate,
+        lastMeasurementDate: tree.lastMeasurementDate,
+        image: tree.image,
+
+        // Species information
+        speciesName: sql<string>`COALESCE(${tree.speciesName}, ${interventionSpecies.speciesName}, ${scientificSpecies.scientificName})`,
+        commonName: sql<string>`COALESCE(${tree.commonName}, ${interventionSpecies.commonName}, ${scientificSpecies.commonName})`,
+      })
+      .from(tree)
+      .leftJoin(
+        interventionSpecies,
+        eq(tree.interventionSpeciesId, interventionSpecies.id)
+      )
+      .leftJoin(
+        scientificSpecies,
+        eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id)
+      )
+      .where(
+        and(
+          eq(tree.interventionId, interventionId),
+          isNull(tree.deletedAt),
+          sql`${tree.location} IS NOT NULL` // Only include trees with valid locations
+        )
+      )
+      .orderBy(tree.tag);
+
+    const trees: any[] = treesQuery.map(row => ({
+      ...row,
+      plantingDate: row.plantingDate?.toISOString(),
+      lastMeasurementDate: row.lastMeasurementDate?.toISOString(),
+    }));
+
+    // Calculate bounds for trees with buffer around intervention
+    const treeBounds = this.calculateBounds(trees.map(t => t.location));
+
+    // Add buffer around the bounds for better viewing
+    const bufferedBounds = this.addBufferToBounds(treeBounds);
+
+    return {
+      trees,
+      intervention: interventionData,
+      bounds: bufferedBounds,
+    };
+  }
+
+  /**
+   * Calculate geographic bounds from an array of GeoJSON points
+   */
+  private calculateBounds(locations: GeoJSON.Point[]): ProjectMapBounds {
+    if (locations.length === 0) {
+      // Default to world bounds if no locations
+      return {
+        bounds: [-180, -85, 180, 85],
+        center: [0, 0],
+      };
+    }
+
+    let minLng = Infinity;
+    let minLat = Infinity;
+    let maxLng = -Infinity;
+    let maxLat = -Infinity;
+
+    locations.forEach(location => {
+      const [lng, lat] = location.coordinates;
+      minLng = Math.min(minLng, lng);
+      minLat = Math.min(minLat, lat);
+      maxLng = Math.max(maxLng, lng);
+      maxLat = Math.max(maxLat, lat);
+    });
+
+    return {
+      bounds: [minLng, minLat, maxLng, maxLat],
+      center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
+    };
+  }
+
+  /**
+   * Add buffer around bounds for better map viewing
+   */
+  private addBufferToBounds(bounds: ProjectMapBounds): ProjectMapBounds {
+    const [minLng, minLat, maxLng, maxLat] = bounds.bounds;
+
+    // Calculate buffer as 10% of the span, minimum 0.001 degrees
+    const lngSpan = maxLng - minLng;
+    const latSpan = maxLat - minLat;
+    const lngBuffer = Math.max(lngSpan * 0.1, 0.001);
+    const latBuffer = Math.max(latSpan * 0.1, 0.001);
+
+    return {
+      bounds: [
+        minLng - lngBuffer,
+        minLat - latBuffer,
+        maxLng + lngBuffer,
+        maxLat + latBuffer,
+      ],
+      center: bounds.center,
+    };
+  }
 }
+

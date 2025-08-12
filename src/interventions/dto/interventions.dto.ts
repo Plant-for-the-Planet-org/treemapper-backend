@@ -824,3 +824,78 @@ export class ListMembersQueryDto {
   @IsBoolean()
   activeOnly?: boolean = true;
 }
+
+// types/map.ts
+
+export interface MapIntervention {
+  id: number;
+  uid: string;
+  hid: string;
+  type: string;
+  status: string;
+  registrationDate: string;
+  interventionStartDate: string;
+  interventionEndDate: string;
+  location: GeoJSON.Point;
+  area?: number;
+  totalTreeCount: number;
+  totalSampleTreeCount: number;
+  description?: string;
+  image?: string;
+}
+
+export interface MapTree {
+  id: number;
+  uid: string;
+  hid: string;
+  tag?: string;
+  treeType: string;
+  location: GeoJSON.Point;
+  status: string;
+  speciesName?: string;
+  commonName?: string;
+  currentHeight?: number;
+  currentWidth?: number;
+  currentHealthScore?: number;
+  plantingDate?: string;
+  lastMeasurementDate?: string;
+  image?: string;
+}
+
+export interface ProjectMapBounds {
+  bounds: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
+  center: [number, number]; // [lng, lat]
+}
+
+export interface ProjectMapResponse {
+  interventions: MapIntervention[];
+  bounds: ProjectMapBounds;
+  totalInterventions: number;
+}
+
+export interface InterventionTreesResponse {
+  trees: MapTree[];
+  intervention: MapIntervention;
+  bounds: ProjectMapBounds;
+}
+
+// API Response wrapper
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+// Map component state types
+export interface MapState {
+  selectedInterventionId: number | null;
+  hoveredInterventionId: number | null;
+  selectedTreeId: number | null;
+  isLoadingTrees: boolean;
+  showTreeDetails: boolean;
+}
+
+export interface TreeTooltipData {
+  tree: MapTree;
+  position: { x: number; y: number };
+}

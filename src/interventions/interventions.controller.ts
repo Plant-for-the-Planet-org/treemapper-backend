@@ -170,5 +170,41 @@ export class InterventionsController {
     }
   }
 
+  @Get(':id/map/all')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectMap(req: any, res: any, @Membership() membership: ProjectGuardResponse,) {
+    const data = await this.interventionsService.getProjectMapInterventions(membership.projectId);
+    return data
+  }
+
+  @Get(':id/map/tree')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async getInterventionTrees(req: any, res: any, @Membership() membership: ProjectGuardResponse,) {
+    try {
+      const { interventionId } = req.params;
+
+      if (!interventionId || isNaN(Number(interventionId))) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid intervention ID is required',
+        });
+      }
+
+      const data = await this.interventionsService.getInterventionTrees(membership.projectId);
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error('Error fetching intervention trees:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch tree data',
+      });
+    }
+  }
 
 }
