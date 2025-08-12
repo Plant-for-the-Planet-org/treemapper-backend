@@ -774,6 +774,7 @@ export class InterventionsService {
           flag: tree.flag,
           createdAt: tree.createdAt,
           updatedAt: tree.updatedAt,
+          migratedTree:tree.migratedTree
         },
         record: {
           id: treeRecord.id,
@@ -806,9 +807,7 @@ export class InterventionsService {
       .where(
         and(
           inArray(tree.interventionId, interventionIds),
-          isNull(tree.deletedAt),
-          // Only include trees that have measurement records
-          sql`${tree.lastMeasurementDate} IS NOT NULL`
+          isNull(tree.deletedAt)
         )
       )
       .orderBy(desc(treeRecord.recordedAt));
@@ -864,6 +863,7 @@ export class InterventionsService {
           plantingDate: treeData.plantingDate,
           lastMeasurementDate: treeData.lastMeasurementDate,
           nextMeasurementDate: treeData.nextMeasurementDate,
+          migratedTree: treeData.migratedTree,
           image: treeData.image,
           flag: treeData.flag,
           createdAt: treeData.createdAt,
@@ -891,6 +891,7 @@ export class InterventionsService {
           notes: recordData.notes,
           priorityLevel: recordData.priorityLevel,
           image: recordData.image,
+          
           createdAt: recordData.createdAt,
         });
       }
