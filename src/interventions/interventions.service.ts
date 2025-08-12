@@ -1769,56 +1769,243 @@ export class InterventionsService {
   ): Promise<any> {
 
   }
-
   async getProjectMapInterventions(projectId: number): Promise<any> {
     try {
-     const interventionsQuery = await this.drizzleService.db
-      .select({
-        id: intervention.id,
-        uid: intervention.uid,
-        hid: intervention.hid,
-        type: intervention.type,
-        status: intervention.status,
-        registrationDate: intervention.registrationDate,
-        interventionStartDate: intervention.interventionStartDate,
-        interventionEndDate: intervention.interventionEndDate,
-        location: sql<GeoJSON.Point | GeoJSON.Polygon | GeoJSON.MultiPolygon>`ST_AsGeoJSON(${intervention.location})::json`,
-        locationGeometryType: sql<'Point' | 'Polygon' | 'MultiPolygon'>`ST_GeometryType(${intervention.location})`,
-        centroid: sql<GeoJSON.Point>`ST_AsGeoJSON(ST_Centroid(${intervention.location}))::json`,
-        area: intervention.area,
-        totalTreeCount: intervention.totalTreeCount,
-        totalSampleTreeCount: intervention.totalSampleTreeCount,
-        description: intervention.description,
-        image: intervention.image,
-      })
-      .from(intervention)
-      .where(
-        and(
-          eq(intervention.projectId, projectId),
-          isNull(intervention.deletedAt),
-          sql`${intervention.location} IS NOT NULL` // Only include interventions with valid locations
-        )
-      )
-      .orderBy(intervention.interventionStartDate);
+      // Validate projectId
+      if (!projectId || projectId <= 0) {
+        throw new Error('Invalid project ID provided');
+      }
 
-    const interventions: MapIntervention[] = interventionsQuery.map(row => ({
-      ...row,
-      locationGeometryType: row.locationGeometryType.replace('ST_', '') as 'Point' | 'Polygon' | 'MultiPolygon',
-      registrationDate: row.registrationDate.toISOString(),
-      interventionStartDate: row.interventionStartDate.toISOString(),
-      interventionEndDate: row.interventionEndDate.toISOString(),
-    }));
+      console.log(`Fetching interventions for project: ${projectId}`);
 
-    // Calculate bounds from all intervention locations (using centroids for polygons)
-    const bounds = this.calculateBounds(interventions);
+      let interventionsQuery;
 
-    return {
-      interventions,
-      bounds,
-      totalInterventions: interventions.length,
-    };
+      try {
+        interventionsQuery = await this.drizzleService.db
+          .select({
+            id: intervention.id,
+            uid: intervention.uid,
+            hid: intervention.hid,
+            type: intervention.type,
+            status: intervention.status,
+            registrationDate: intervention.registrationDate,
+            interventionStartDate: intervention.interventionStartDate,
+            interventionEndDate: intervention.interventionEndDate,
+            // Ensure GeoJSON is properly formatted
+            location: sql<GeoJSON.Point | GeoJSON.Polygon | GeoJSON.MultiPolygon>`ST_AsGeoJSON(${intervention.location})::json`,
+            // Clean up geometry type format
+            locationGeometryType: sql<string>`REPLACE(ST_GeometryType(${intervention.location}), 'ST_', '')`,
+            // Only calculate centroid for non-Point geometries
+            centroid: sql<GeoJSON.Point | null>`
+          CASE 
+            WHEN ST_GeometryType(${intervention.location}) = 'ST_Point' THEN NULL
+            ELSE ST_AsGeoJSON(ST_Centroid(${intervention.location}))::json
+          END
+        `,
+            area: intervention.area,
+            totalTreeCount: intervention.totalTreeCount,
+            totalSampleTreeCount: intervention.totalSampleTreeCount,
+            description: intervention.description,
+            image: intervention.image,
+          })
+          .from(intervention)
+          .where(
+            and(
+              eq(intervention.projectId, projectId),
+              isNull(intervention.deletedAt),
+              // Enhanced location validation
+              sql`${intervention.location} IS NOT NULL`,
+              sql`ST_IsValid(${intervention.location}) = true`,
+              // Ensure coordinates are within valid ranges
+              sql`ST_X(ST_Centroid(${intervention.location})) BETWEEN -180 AND 180`,
+              sql`ST_Y(ST_Centroid(${intervention.location})) BETWEEN -90 AND 90`
+            )
+          )
+          .orderBy(intervention.interventionStartDate);
+
+        console.log(`Found ${interventionsQuery.length} interventions for project ${projectId}`);
+
+        // Process and validate the results
+        const interventions: any[] = interventionsQuery
+          .map(row => {
+            try {
+              // Validate and process dates
+              const registrationDate = row.registrationDate instanceof Date
+                ? row.registrationDate.toISOString()
+                : new Date(row.registrationDate).toISOString();
+
+              const interventionStartDate = row.interventionStartDate instanceof Date
+                ? row.interventionStartDate.toISOString()
+                : new Date(row.interventionStartDate).toISOString();
+
+              const interventionEndDate = row.interventionEndDate instanceof Date
+                ? row.interventionEndDate.toISOString()
+                : new Date(row.interventionEndDate).toISOString();
+
+              // Validate location data
+              if (!row.location || typeof row.location !== 'object') {
+                console.warn(`Invalid location for intervention ${row.hid}:`, row.location);
+                return null;
+              }
+
+              // Ensure coordinates are valid numbers
+              if (row.location.type === 'Point') {
+                const [lng, lat] = row.location.coordinates;
+                if (typeof lng !== 'number' || typeof lat !== 'number' ||
+                  Math.abs(lng) > 180 || Math.abs(lat) > 90) {
+                  console.warn(`Invalid coordinates for intervention ${row.hid}:`, lng, lat);
+                  return null;
+                }
+              }
+
+              return {
+                ...row,
+                locationGeometryType: row.locationGeometryType as 'Point' | 'Polygon' | 'MultiPolygon',
+                registrationDate,
+                interventionStartDate,
+                interventionEndDate,
+                // Ensure numeric values
+                totalTreeCount: Number(row.totalTreeCount) || 0,
+                totalSampleTreeCount: Number(row.totalSampleTreeCount) || 0,
+                area: row.area ? Number(row.area) : null,
+              };
+            } catch (error) {
+              console.error(`Error processing intervention ${row.hid}:`, error);
+              return null;
+            }
+          })
+          .filter(Boolean); // Remove null entries
+
+        console.log(`Successfully processed ${interventions.length} valid interventions`);
+
+        if (interventions.length === 0) {
+          console.warn(`No valid interventions found for project ${projectId}`);
+          return {
+            interventions: [],
+            bounds: {
+              bounds: [-180, -85, 180, 85],
+              center: [0, 0],
+            },
+            totalInterventions: 0,
+          };
+        }
+
+        // Calculate bounds from all intervention locations
+        const bounds = this.calculateBounds(interventions);
+
+        console.log('Calculated bounds:', bounds);
+
+        return {
+          interventions,
+          bounds,
+          totalInterventions: interventions.length,
+        };
+
+      } catch (error) {
+        console.error('Error fetching project map interventions:', error);
+
+        // Re-throw with more context
+        throw new Error(`Failed to fetch map interventions for project ${projectId}: ${error.message}`);
+      }
+    } catch (e) {
+
+    }
+  }
+
+  private calculateBounds(interventions: any[]): {
+    bounds: [number, number, number, number];
+    center: [number, number];
+  } {
+    try {
+      if (interventions.length === 0) {
+        return {
+          bounds: [-180, -85, 180, 85],
+          center: [0, 0],
+        };
+      }
+
+      let minLng = Infinity;
+      let maxLng = -Infinity;
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+
+      interventions.forEach(intervention => {
+        try {
+          let coords: number[] = [];
+
+          // Get coordinates based on geometry type
+          if (intervention.location.type === 'Point') {
+            coords = intervention.location.coordinates;
+          } else if (intervention.centroid && intervention.centroid.coordinates) {
+            coords = intervention.centroid.coordinates;
+          } else {
+            // Fallback: calculate centroid manually for polygons
+            if (intervention.location.type === 'Polygon' &&
+              intervention.location.coordinates &&
+              intervention.location.coordinates[0]) {
+              const ring = intervention.location.coordinates[0];
+              let lngSum = 0;
+              let latSum = 0;
+              ring.forEach((coord: number[]) => {
+                lngSum += coord[0];
+                latSum += coord[1];
+              });
+              coords = [lngSum / ring.length, latSum / ring.length];
+            }
+          }
+
+          if (coords.length >= 2) {
+            const [lng, lat] = coords;
+
+            // Validate coordinates
+            if (typeof lng === 'number' && typeof lat === 'number' &&
+              Math.abs(lng) <= 180 && Math.abs(lat) <= 90) {
+              minLng = Math.min(minLng, lng);
+              maxLng = Math.max(maxLng, lng);
+              minLat = Math.min(minLat, lat);
+              maxLat = Math.max(maxLat, lat);
+            } else {
+              console.warn(`Invalid coordinates in bounds calculation: ${lng}, ${lat}`);
+            }
+          }
+        } catch (error) {
+          console.warn(`Error processing intervention coordinates for bounds:`, intervention.hid, error);
+        }
+      });
+
+      // Check if we found any valid coordinates
+      if (!isFinite(minLng) || !isFinite(maxLng) || !isFinite(minLat) || !isFinite(maxLat)) {
+        console.warn('No valid coordinates found for bounds calculation');
+        return {
+          bounds: [-180, -85, 180, 85],
+          center: [0, 0],
+        };
+      }
+
+      // Add padding (10% of the range, minimum 0.001 degrees)
+      const lngPadding = Math.max((maxLng - minLng) * 0.1, 0.001);
+      const latPadding = Math.max((maxLat - minLat) * 0.1, 0.001);
+
+      const bounds: [number, number, number, number] = [
+        Math.max(minLng - lngPadding, -180),
+        Math.max(minLat - latPadding, -85),
+        Math.min(maxLng + lngPadding, 180),
+        Math.min(maxLat + latPadding, 85),
+      ];
+
+      const center: [number, number] = [
+        (minLng + maxLng) / 2,
+        (minLat + maxLat) / 2,
+      ];
+
+      return { bounds, center };
+
     } catch (error) {
-      console.log("SDC", error)
+      console.error('Error calculating bounds:', error);
+      return {
+        bounds: [-180, -85, 180, 85],
+        center: [0, 0],
+      };
     }
   }
 
@@ -1923,36 +2110,7 @@ export class InterventionsService {
     };
   }
 
-  /**
-   * Calculate geographic bounds from an array of GeoJSON points
-   */
-  private calculateBounds(locations: GeoJSON.Point[]): ProjectMapBounds {
-    if (locations.length === 0) {
-      // Default to world bounds if no locations
-      return {
-        bounds: [-180, -85, 180, 85],
-        center: [0, 0],
-      };
-    }
 
-    let minLng = Infinity;
-    let minLat = Infinity;
-    let maxLng = -Infinity;
-    let maxLat = -Infinity;
-
-    locations.forEach(location => {
-      const [lng, lat] = location.coordinates;
-      minLng = Math.min(minLng, lng);
-      minLat = Math.min(minLat, lat);
-      maxLng = Math.max(maxLng, lng);
-      maxLat = Math.max(maxLat, lat);
-    });
-
-    return {
-      bounds: [minLng, minLat, maxLng, maxLat],
-      center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
-    };
-  }
 
   /**
    * Add buffer around bounds for better map viewing
