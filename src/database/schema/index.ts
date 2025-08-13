@@ -905,6 +905,8 @@ export const interventionSpecies = pgTable('intervention_species', {
   speciesCount: integer('species_count').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+
 }, (table) => ({
   interventionSpeciesIdx: index('intervention_species_intervention_idx').on(table.interventionId),
   unknownSpeciesLogic: check('unknown_species_logic',

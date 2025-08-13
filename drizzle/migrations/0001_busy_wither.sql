@@ -1,0 +1,1 @@
+ALTER TABLE "intervention_species" ADD COLUMN "deleted_at" timestamp with time zone;
