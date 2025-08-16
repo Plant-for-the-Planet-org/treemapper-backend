@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "v3_approved_at" timestamp with time zone;

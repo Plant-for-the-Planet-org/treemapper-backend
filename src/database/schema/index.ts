@@ -282,6 +282,7 @@ export const user = pgTable('user', {
   migratedAt: timestamp('migrated_at', { withTimezone: true }),
   existingPlanetUser: boolean('existing_planet_user').default(false),
   workspaceRole: workspaceRoleEnum('workspace_role').default('member'),
+  v3ApprovedAt: timestamp('v3_approved_at', { withTimezone: true })
 }, () => ({
   emailFormat: check('email_format', sql`email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'`),
 }));

@@ -6,9 +6,11 @@ import { DrizzleService } from '../database/drizzle.service';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { CaptureStatus } from 'src/interventions/interventions.service';
-import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies } from 'src/database/schema';
+import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user } from 'src/database/schema';
 import { booleanValid } from '@turf/boolean-valid';
 import { getType } from '@turf/invariant';
+import { User } from 'src/users/entities/user.entity';
+import { MigrationService } from 'src/migrate/migrate.service';
 
 export interface ProjectWithSitesResponse {
   id: string;
@@ -58,6 +60,8 @@ interface GeoJSONPointGeometry {
 export class MobileService {
   constructor(
     private drizzleService: DrizzleService,
+    private migrateService: MigrationService,
+
   ) { }
 
   getGeoJSONForPostGIS(locationInput: any): any {
@@ -218,6 +222,32 @@ export class MobileService {
         }
       });
     });
+  }
+
+  async getMyDetails(userData: User, token: string) {
+    if (userData.v3ApprovedAt) {
+      return {
+        country: '',
+        created: '',
+        displayName: userData.displayName,
+        email: userData.email,
+        firstName: userData.firstName,
+        id: userData.uid,
+        image: userData.image,
+        isPrivate: userData,
+        lastName: userData.lastName,
+        locale: userData.locale,
+        name: userData.displayName,
+        slug: userData.slug,
+        type: 'private',
+        v3Approved: userData.v3ApprovedAt
+      };
+    }
+
+    const existingPlanetUser = await this.migrateService.checkUserInttc(token, userData.id);
+    
+
+
   }
 
 

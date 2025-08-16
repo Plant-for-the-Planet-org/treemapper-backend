@@ -32,6 +32,7 @@ export class MobileController {
   }
 
 
+
   @Get('user/profile')
   async getUserDetails(
     @CurrentUser() user: ExtendedUser,
@@ -50,7 +51,15 @@ export class MobileController {
       name: user.displayName,
       slug: user.slug,
       type: 'private',
+      v3Approved: user.v3Approved
     };
+  }
+
+  @Get('user/me')
+  async getMyDetails(
+    @CurrentUser() userData: ExtendedUser,
+  ): Promise<any> {
+    return await this.appservice.getMyDetails(userData);
   }
 
   @Get('user/projects')
@@ -77,15 +86,15 @@ export class MobileController {
   //   }
 
 
-    @Post('project/:id/intervention')
-    @ProjectRoles('owner', 'admin', 'contributor')
-    @UseGuards(ProjectPermissionsGuard)
-    async createNewInterventionWeb(
-      @Body() createInterventionDto: any,
-      @Membership() membership: any
-    ): Promise<InterventionResponseDto> {
-      return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
-    }
+  @Post('project/:id/intervention')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async createNewInterventionWeb(
+    @Body() createInterventionDto: any,
+    @Membership() membership: any
+  ): Promise<InterventionResponseDto> {
+    return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
+  }
 
   //   @Post('image/intervention')
   //   async updateInterventionImage(
