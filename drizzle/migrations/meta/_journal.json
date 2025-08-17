@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1755340328703,
-      "tag": "0000_loud_squadron_supreme",
+      "when": 1755411536280,
+      "tag": "0000_fancy_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1755417008265,
+      "tag": "0001_new_synch",
       "breakpoints": true
     }
   ]

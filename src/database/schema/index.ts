@@ -456,13 +456,7 @@ export const auditLog = pgTable('audit_log', {
     .where(sql`user_id IS NOT NULL`),
   workspaceAuditIdx: index('audit_log_workspace_audit_idx')
     .on(table.workspaceId, table.occurredAt)
-    .where(sql`workspace_id IS NOT NULL`),
-  validEntityId: check('valid_entity_id',
-    sql`entity_id > 0`),
-  validSource: check('valid_source',
-    sql`source IN ('web', 'mobile', 'api', 'system', 'migration')`),
-  occurredAtNotFuture: check('occurred_at_not_future',
-    sql`occurred_at <= NOW()`),
+    .where(sql`workspace_id IS NOT NULL`)
 }))
 
 

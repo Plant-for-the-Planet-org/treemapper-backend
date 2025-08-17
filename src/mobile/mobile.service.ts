@@ -6,11 +6,15 @@ import { DrizzleService } from '../database/drizzle.service';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { CaptureStatus } from 'src/interventions/interventions.service';
-import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies } from 'src/database/schema';
+import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies, notifications } from 'src/database/schema';
 import { booleanValid } from '@turf/boolean-valid';
 import { getType } from '@turf/invariant';
-import { User } from 'src/users/entities/user.entity';
+import { ExtendedUser, User } from 'src/users/entities/user.entity';
 import { MigrationService } from 'src/migrate/migrate.service';
+import { WorkspaceService } from 'src/workspace/workspace.service';
+import { boolean } from 'drizzle-orm/gel-core';
+import { async } from 'rxjs';
+import { ProjectCacheService } from 'src/cache/project-cache.service';
 
 
 
@@ -91,7 +95,7 @@ interface CreateSiteResponse {
 
 interface CreateProjectRequest {
   name: string;
-  workspaceId: number;
+  workspaceType: string;
   userId: number;
   projectType?: string;
   target?: number;
@@ -171,6 +175,7 @@ export class MobileService {
   constructor(
     private drizzleService: DrizzleService,
     private migrateService: MigrationService,
+    private projectCacheService: ProjectCacheService,
 
   ) { }
 
@@ -457,9 +462,62 @@ export class MobileService {
 
       // Rest of your mapping logic remains the same...
       const response: any[] = userProjects.map(({ project: proj }) => ({
-        // ... your existing mapping
-        sites: filteredSitesByProject[proj.id] || []
-      }));
+        id: proj.uid,
+        geometry: proj.originalGeometry,
+        properties: {
+          id: proj.uid,
+          uid: proj.uid,
+          createdById: proj.createdById,
+          workspaceId: proj.workspaceId,
+          slug: proj.slug,
+          name: proj.name,
+          description: proj.description,
+          purpose: proj.purpose || '',
+          type: proj.type,
+          ecosystem: proj.ecosystem,
+          scale: proj.scale,
+          classification: proj.classification,
+          target: proj.target,
+          website: proj.website,
+          image: proj.image,
+          videoUrl: proj.videoUrl,
+          country: proj.country || '',
+          location: proj.location,
+          isActive: proj.isActive,
+          isPublic: proj.isPublic,
+          isPrimary: proj.isPrimary,
+          isPersonal: proj.isPersonal,
+          intensity: proj.intensity,
+          revisionPeriodicity: proj.revisionPeriodicity,
+          migratedProject: proj.migratedProject,
+          flag: proj.flag,
+          flagReason: proj.flagReason,
+          metadata: proj.metadata,
+          createdAt: proj.createdAt,
+          updatedAt: proj.updatedAt,
+          deletedAt: proj.deletedAt,
+          allowDonations: false,
+          countTarget: 0,
+          currency: '',
+          isApproved: '',
+          isFeatured: '',
+          isPublished: '',
+          isTopProject: '',
+          reviews: '',
+          taxDeductionCountries: '',
+          tpo: '',
+          unit: '',
+          unitCost: '',
+          unitType: '',
+          unitsContributed: '',
+          unitsTargeted: '',
+          countPlanted: 0,
+          treeCost: 0,
+          paymentDefaults: '',
+          minTreeCount: '',
+          revisionPeriodicityLevel: '',
+          sites: filteredSitesByProject[proj.id] || []
+        }}))
 
       return response;
 
@@ -502,54 +560,26 @@ export class MobileService {
     };
   }
 
-  async createNewProject(createProjectData: CreateProjectRequest, userId: number): Promise<CreateProjectResponse> {
-    const { name, workspaceId, projectType, target } = createProjectData;
 
+
+  async createNewProject(createProjectData: CreateProjectRequest, userData: ExtendedUser): Promise<CreateProjectResponse> {
+    const { name, workspaceType, projectType, target } = createProjectData;
+    const { id: userId, primaryProjectUid } = userData;
+    const workspaceData = await this.drizzleService.db.select({ id: workspace.id, uid: workspace.uid }).from(workspace).where(eq(workspace.slug, workspaceType)).limit(1)
+    if (!workspaceData || workspaceData.length === 0) {
+      throw 'Server side workspace issue'
+    }
     try {
       // Start a transaction
       return await this.drizzleService.db.transaction(async (tx) => {
 
-        // 1. Verify workspace exists and is active
-        const workspaceRecord = await tx
-          .select()
-          .from(workspace)
-          .where(
-            and(
-              eq(workspace.id, workspaceId),
-              eq(workspace.isActive, true),
-              isNull(workspace.deletedAt)
-            )
-          )
-          .limit(1);
 
-        if (workspaceRecord.length === 0) {
-          throw new Error('Workspace not found or inactive');
-        }
-
-        // 2. Verify user exists and is active
-        const userRecord = await tx
-          .select()
-          .from(user)
-          .where(
-            and(
-              eq(user.id, userId),
-              eq(user.isActive, true),
-              isNull(user.deletedAt)
-            )
-          )
-          .limit(1);
-
-        if (userRecord.length === 0) {
-          throw new Error('User not found or inactive');
-        }
-
-        // 3. Check if user is already a workspace member, if not add them
         let workspaceMemberRecord = await tx
           .select()
           .from(workspaceMember)
           .where(
             and(
-              eq(workspaceMember.workspaceId, workspaceId),
+              eq(workspaceMember.workspaceId, workspaceData[0].id),
               eq(workspaceMember.userId, userId),
             )
           )
@@ -563,7 +593,7 @@ export class MobileService {
             .insert(workspaceMember)
             .values({
               uid: generateUid('workmem'),
-              workspaceId: workspaceId,
+              workspaceId: workspaceData[0].id,
               userId: userId,
               role: 'member',
               status: 'active',
@@ -588,7 +618,7 @@ export class MobileService {
           .values({
             uid: generateUid('proj'),
             createdById: userId,
-            workspaceId: workspaceId,
+            workspaceId: workspaceData[0].id,
             slug: uniqueSlug,
             name: name.trim(),
             type: projectType || null,
@@ -629,7 +659,7 @@ export class MobileService {
           entityId: createdProject.id,
           entityUid: createdProject.uid,
           userId: userId,
-          workspaceId: workspaceId,
+          workspaceId: workspaceData[0].id,
           projectId: createdProject.id,
           newValues: {
             name: createdProject.name,
@@ -641,14 +671,12 @@ export class MobileService {
           occurredAt: new Date(),
         });
 
-        // 8. Update user's primary project if they don't have one
-        const currentUser = userRecord[0];
-        if (!currentUser.primaryProjectUid) {
+        if (!primaryProjectUid) {
           await tx
             .update(user)
             .set({
               primaryProjectUid: createdProject.uid,
-              primaryWorkspaceUid: workspaceRecord[0].uid,
+              primaryWorkspaceUid: workspaceData[0].uid,
               updatedAt: new Date(),
             })
             .where(eq(user.id, userId));

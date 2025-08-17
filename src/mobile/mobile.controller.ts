@@ -60,13 +60,11 @@ export class MobileController {
 
 
   @Post('project')
-  @ProjectRoles('owner', 'admin', 'contributor')
-  @UseGuards(ProjectPermissionsGuard)
   async createNewProject(
     @Body() createInterventionDto: any,
-    @Membership() membership: any
+    @CurrentUser() userData:ExtendedUser
   ): Promise<any> {
-    return this.appservice.createNewProject(createInterventionDto, membership.userId);
+    return this.appservice.createNewProject(createInterventionDto, userData);
   }
 
 
