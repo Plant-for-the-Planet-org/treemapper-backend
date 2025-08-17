@@ -91,7 +91,7 @@ export interface MigrationProgress {
     };
 }
 export interface MigrationCheckResult {
-    migrationNeeded: boolean;
+    oldUser: boolean;
     planetId: string
 }
 
@@ -109,7 +109,7 @@ export class MigrationService {
     ) { }
 
 
-    async checkUserInttc(accessToken: string, userId: number): Promise<MigrationCheckResult> {
+    async checkUserInttc(accessToken: string, userData: User): Promise<MigrationCheckResult> {
         try {
             const response = await firstValueFrom(
                 this.httpService.get(`${process.env.OLD_BACKEND_URL}/app/profile`, {
@@ -121,14 +121,13 @@ export class MigrationService {
                     },
                 })
             );
-
             if (response.status == 303) {
                 // await this.usersetvice.migrateSuccess(userId)
-                await this.drizzleService.db.update(user).set({ existingPlanetUser: false, migratedAt: new Date() }).where(eq(user.id, userId))
-                return { migrationNeeded: false, planetId: '' };
-
+                await this.drizzleService.db.update(user).set({ existingPlanetUser: false, migratedAt: new Date(), v3ApprovedAt: new Date() }).where(eq(user.id, userData.id))
+                await this.usersetvice.invalidateMyCache(userData)
+                return { oldUser: false, planetId: '' };
             }
-            return { migrationNeeded: true, planetId: response.data.id };
+            return { oldUser: true, planetId: response.data.id };
         } catch (error) {
             if (error.response) {
                 throw new HttpException(

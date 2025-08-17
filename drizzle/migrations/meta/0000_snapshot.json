@@ -1,5 +1,5 @@
 {
-  "id": "4a4abbe3-a896-4adb-be07-f9f58d9abc4f",
+  "id": "79269063-e17a-41d0-8e82-9276ef12bc04",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1200,6 +1200,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -5161,6 +5167,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'member'"
+        },
+        "v3_approved_at": {
+          "name": "v3_approved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

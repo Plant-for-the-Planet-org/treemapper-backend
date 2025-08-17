@@ -157,6 +157,7 @@ CREATE TABLE "intervention_species" (
 	"species_count" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
 	CONSTRAINT "intervention_species_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "unknown_species_logic" CHECK ((is_unknown = false AND scientific_species_id IS NOT NULL) OR (is_unknown = true AND scientific_species_id IS NULL)),
 	CONSTRAINT "species_count_positive" CHECK (species_count > 0)
@@ -616,6 +617,7 @@ CREATE TABLE "user" (
 	"migrated_at" timestamp with time zone,
 	"existing_planet_user" boolean DEFAULT false,
 	"workspace_role" "workspace_role" DEFAULT 'member',
+	"v3_approved_at" timestamp with time zone,
 	CONSTRAINT "user_uid_unique" UNIQUE("uid"),
 	CONSTRAINT "user_auth0_id_unique" UNIQUE("auth0_id"),
 	CONSTRAINT "user_email_unique" UNIQUE("email"),

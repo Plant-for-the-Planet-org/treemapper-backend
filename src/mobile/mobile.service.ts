@@ -1,16 +1,126 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 // import { sites, projects, users, projectMembers, scientificSpecies, interventions, trees, images, projectSpecies } from '../database/schema'; // Adjust import path as needed
 import { generateUid } from 'src/util/uidGenerator';
 import { DrizzleService } from '../database/drizzle.service';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { CaptureStatus } from 'src/interventions/interventions.service';
-import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user } from 'src/database/schema';
+import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies } from 'src/database/schema';
 import { booleanValid } from '@turf/boolean-valid';
 import { getType } from '@turf/invariant';
 import { User } from 'src/users/entities/user.entity';
 import { MigrationService } from 'src/migrate/migrate.service';
+
+
+
+
+interface FavoriteProjectSpeciesResponse {
+  id: number;
+  uid: string;
+  projectId: number;
+  scientificSpeciesId: number | null;
+  scientificSpecies: {
+    id: number;
+    uid: string;
+    scientificName: string;
+    commonName: string | null;
+    family: string | null;
+    genus: string | null;
+    species: string | null;
+    habitat: string[];
+    nativeRegions: string[];
+    climateZones: string[];
+    matureHeight: number | null;
+    matureWidth: number | null;
+    growthRate: string | null;
+    lightRequirement: string | null;
+    waterRequirement: string | null;
+    droughtTolerance: boolean;
+    frostTolerance: boolean;
+    conservationStatus: string | null;
+    isNative: boolean;
+    isInvasive: boolean;
+    isEndangered: boolean;
+    pollinatorFriendly: boolean;
+    erosionControl: boolean;
+    description: string | null;
+    image: string | null;
+    dataQuality: string;
+  } | null;
+  isUnknown: boolean;
+  speciesName: string | null;
+  commonName: string | null;
+  image: string | null;
+  notes: string | null;
+  favourite: boolean;
+  isDisabled: boolean;
+  addedById: number;
+  addedBy: {
+    id: number;
+    uid: string;
+    displayName: string;
+    firstName: string | null;
+    lastName: string | null;
+    image: string | null;
+  };
+  metadata: any;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CreateSiteRequest {
+  name: string;
+  projectId: number;
+  geometry: {
+    type: 'Polygon';
+    coordinates: number[][][]; // GeoJSON Polygon coordinates
+  };
+  siteType?: string; // Maps to 'status' field in schema
+  userId: number; // The user creating the site
+  description?: string;
+  area?: number; // Optional, can be calculated from geometry
+}
+
+interface CreateSiteResponse {
+  site: {
+    id: any
+  }
+}
+
+
+interface CreateProjectRequest {
+  name: string;
+  workspaceId: number;
+  userId: number;
+  projectType?: string;
+  target?: number;
+}
+
+interface CreateProjectResponse {
+  project: {
+    id: number;
+    uid: string;
+    name: string;
+    slug: string;
+    workspaceId: number;
+    createdById: number;
+    // ... other project fields
+  };
+  projectMember: {
+    id: number;
+    uid: string;
+    projectRole: string;
+    // ... other member fields
+  };
+  workspaceMember?: {
+    id: number;
+    uid: string;
+    role: string;
+    // ... other workspace member fields
+  };
+}
+
 
 export interface ProjectWithSitesResponse {
   id: string;
@@ -224,30 +334,61 @@ export class MobileService {
     });
   }
 
-  async getMyDetails(userData: User, token: string) {
-    if (userData.v3ApprovedAt) {
-      return {
-        country: '',
-        created: '',
-        displayName: userData.displayName,
-        email: userData.email,
-        firstName: userData.firstName,
-        id: userData.uid,
-        image: userData.image,
-        isPrivate: userData,
-        lastName: userData.lastName,
-        locale: userData.locale,
-        name: userData.displayName,
-        slug: userData.slug,
-        type: 'private',
-        v3Approved: userData.v3ApprovedAt
-      };
+  async getUserDetails(userData: User, token: string) {
+    try {
+      if (userData.v3ApprovedAt) {
+        return {
+          country: '',
+          created: '',
+          displayName: userData.displayName,
+          email: userData.email,
+          firstName: userData.firstName,
+          id: userData.uid,
+          image: userData.image,
+          isPrivate: userData,
+          lastName: userData.lastName,
+          locale: userData.locale,
+          name: userData.displayName,
+          slug: userData.slug,
+          type: 'private',
+          v3Approved: userData.v3ApprovedAt
+        };
+      }
+      const existingPlanetUser = await this.migrateService.checkUserInttc(token, userData);
+      if (!existingPlanetUser) {
+        throw ''
+      }
+      return { ...userData, v3Approved: existingPlanetUser.oldUser ? null : new Date() }
+    } catch (error) {
+      throw ''
     }
-
-    const existingPlanetUser = await this.migrateService.checkUserInttc(token, userData.id);
-    
+  }
 
 
+  async updateUserDetails(userBody: any, userData: User): Promise<any> {
+    try {
+      const pyaload: any = {}
+      if (userBody.image) {
+        pyaload['image'] = userBody.image
+      }
+      if (userBody.firstName) {
+        pyaload['firstName'] = userBody.firstName
+      }
+      if (userBody.lastName) {
+        pyaload['lastName'] = userBody.lastName
+      }
+
+      if (userBody.name) {
+        pyaload['displayName'] = userBody.name
+      }
+
+
+      await this.drizzleService.db
+        .update(user)
+        .set({ ...pyaload })
+        .where(eq(user.id, userData.id))
+    } catch (error) {
+    }
   }
 
 
@@ -278,85 +419,46 @@ export class MobileService {
 
       const projectIds = userProjects.map(p => p.project.id);
 
-
+      // Get all sites for these projects
       const allSites = await this.drizzleService.db
         .select()
         .from(site)
         .where(
           and(
-            // Use inArray for multiple project IDs (you'll need to import this from drizzle-orm)
-            // inArray(site.projectId, projectIds),
+            inArray(site.projectId, projectIds),
             isNull(site.deletedAt)
           )
         );
 
-      // Group sites by project ID
-      const sitesByProject = allSites.reduce((acc, siteRecord) => {
-        if (!acc[siteRecord.projectId]) {
-          acc[siteRecord.projectId] = [];
+      // Create a map of projectId -> projectMember for easy access
+      const projectMemberMap = userProjects.reduce((acc, { projectMember: pm }) => {
+        acc[pm.projectId] = pm;
+        return acc;
+      }, {} as Record<number, typeof projectMember.$inferSelect>);
+
+      // Filter sites based on user access
+      const filteredSitesByProject = allSites.reduce((acc, siteRecord) => {
+        const memberData = projectMemberMap[siteRecord.projectId];
+
+        if (!memberData) return acc; // Should not happen, but safety check
+
+        // Apply site access filtering
+        const hasAccessToSite = this.checkSiteAccess(siteRecord, memberData);
+
+        if (hasAccessToSite) {
+          if (!acc[siteRecord.projectId]) {
+            acc[siteRecord.projectId] = [];
+          }
+          acc[siteRecord.projectId].push(this.mapSiteToResponse(siteRecord));
         }
-        acc[siteRecord.projectId].push(this.mapSiteToResponse(siteRecord));
+
         return acc;
       }, {} as Record<number, SiteResponse[]>);
 
-      // Map projects to response format
+      // Rest of your mapping logic remains the same...
       const response: any[] = userProjects.map(({ project: proj }) => ({
-        id: proj.id,
-        geometry: proj.originalGeometry,
-        properties: {
-          id: proj.uid,
-          uid: proj.uid,
-          createdById: proj.createdById,
-          workspaceId: proj.workspaceId,
-          slug: proj.slug,
-          name: proj.name,
-          description: proj.description,
-          purpose: proj.purpose || '',
-          type: proj.type,
-          ecosystem: proj.ecosystem,
-          scale: proj.scale,
-          classification: proj.classification,
-          target: proj.target,
-          website: proj.website,
-          image: proj.image,
-          videoUrl: proj.videoUrl,
-          country: proj.country || '',
-          location: proj.location,
-          isActive: proj.isActive,
-          isPublic: proj.isPublic,
-          isPrimary: proj.isPrimary,
-          isPersonal: proj.isPersonal,
-          intensity: proj.intensity,
-          revisionPeriodicity: proj.revisionPeriodicity,
-          migratedProject: proj.migratedProject,
-          flag: proj.flag,
-          flagReason: proj.flagReason,
-          metadata: proj.metadata,
-          createdAt: proj.createdAt,
-          updatedAt: proj.updatedAt,
-          deletedAt: proj.deletedAt,
-          allowDonations: false,
-          countTarget: 0,
-          currency: '',
-          isApproved: '',
-          isFeatured: '',
-          isPublished: '',
-          isTopProject: '',
-          reviews: '',
-          taxDeductionCountries: '',
-          tpo: '',
-          unit: '',
-          unitCost: '',
-          unitType: '',
-          unitsContributed: '',
-          unitsTargeted: '',
-          countPlanted: 0,
-          treeCost: 0,
-          paymentDefaults: '',
-          minTreeCount: '',
-          revisionPeriodicityLevel: '',
-          sites: sitesByProject[proj.id] || []
-        }
+        // ... your existing mapping
+        sites: filteredSitesByProject[proj.id] || []
       }));
 
       return response;
@@ -364,6 +466,29 @@ export class MobileService {
     } catch (error) {
       console.error('Error fetching projects and sites:', error);
       throw new Error('Failed to fetch projects and sites for user');
+    }
+  }
+
+  private checkSiteAccess(
+    siteRecord: typeof site.$inferSelect,
+    memberData: typeof projectMember.$inferSelect
+  ): boolean {
+    switch (memberData.siteAccess) {
+      case 'all_sites':
+        return true;
+
+      case 'deny_all':
+        return false;
+
+      case 'read_only':
+        return true; // They can see all sites but with read-only access
+
+      case 'limited_access':
+        // Check if site UID is in the restrictedSites array
+        return memberData.restrictedSites?.includes(siteRecord.uid) ?? false;
+
+      default:
+        return false; // Default to no access if undefined
     }
   }
 
@@ -377,6 +502,481 @@ export class MobileService {
     };
   }
 
+  async createNewProject(createProjectData: CreateProjectRequest, userId: number): Promise<CreateProjectResponse> {
+    const { name, workspaceId, projectType, target } = createProjectData;
+
+    try {
+      // Start a transaction
+      return await this.drizzleService.db.transaction(async (tx) => {
+
+        // 1. Verify workspace exists and is active
+        const workspaceRecord = await tx
+          .select()
+          .from(workspace)
+          .where(
+            and(
+              eq(workspace.id, workspaceId),
+              eq(workspace.isActive, true),
+              isNull(workspace.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (workspaceRecord.length === 0) {
+          throw new Error('Workspace not found or inactive');
+        }
+
+        // 2. Verify user exists and is active
+        const userRecord = await tx
+          .select()
+          .from(user)
+          .where(
+            and(
+              eq(user.id, userId),
+              eq(user.isActive, true),
+              isNull(user.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (userRecord.length === 0) {
+          throw new Error('User not found or inactive');
+        }
+
+        // 3. Check if user is already a workspace member, if not add them
+        let workspaceMemberRecord = await tx
+          .select()
+          .from(workspaceMember)
+          .where(
+            and(
+              eq(workspaceMember.workspaceId, workspaceId),
+              eq(workspaceMember.userId, userId),
+            )
+          )
+          .limit(1);
+
+        let newWorkspaceMember: any = null;
+
+        if (workspaceMemberRecord.length === 0) {
+          // Add user to workspace as member
+          const createdWorkspaceMember = await tx
+            .insert(workspaceMember)
+            .values({
+              uid: generateUid('workmem'),
+              workspaceId: workspaceId,
+              userId: userId,
+              role: 'member',
+              status: 'active',
+              joinedAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .returning();
+          if (!createdWorkspaceMember || createdWorkspaceMember.length === 0) {
+            throw ''
+          }
+          newWorkspaceMember = createdWorkspaceMember[0];
+        }
+
+        // 4. Generate project slug from name
+        const baseSlug = this.generateSlugFromName(name);
+        const uniqueSlug = await this.generateUniqueSlug(tx, baseSlug);
+
+        // 5. Create the project
+        const [createdProject] = await tx
+          .insert(project)
+          .values({
+            uid: generateUid('proj'),
+            createdById: userId,
+            workspaceId: workspaceId,
+            slug: uniqueSlug,
+            name: name.trim(),
+            type: projectType || null,
+            target: target || null,
+            isActive: true,
+            isPublic: true,
+            isPrimary: false,
+            isPersonal: false,
+            migratedProject: false,
+            flag: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        // 6. Add user as project owner
+        const [createdProjectMember] = await tx
+          .insert(projectMember)
+          .values({
+            uid: generateUid('projmem'),
+            projectId: createdProject.id,
+            userId: userId,
+            projectRole: 'owner',
+            status: 'active',
+            siteAccess: 'all_sites',
+            restrictedSites: [],
+            joinedAt: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        // 7. Log the audit trail
+        await tx.insert(auditLog).values({
+          uid: generateUid('log'),
+          action: 'create',
+          entityType: 'project',
+          entityId: createdProject.id,
+          entityUid: createdProject.uid,
+          userId: userId,
+          workspaceId: workspaceId,
+          projectId: createdProject.id,
+          newValues: {
+            name: createdProject.name,
+            slug: createdProject.slug,
+            type: createdProject.type,
+            target: createdProject.target,
+          },
+          source: 'web',
+          occurredAt: new Date(),
+        });
+
+        // 8. Update user's primary project if they don't have one
+        const currentUser = userRecord[0];
+        if (!currentUser.primaryProjectUid) {
+          await tx
+            .update(user)
+            .set({
+              primaryProjectUid: createdProject.uid,
+              primaryWorkspaceUid: workspaceRecord[0].uid,
+              updatedAt: new Date(),
+            })
+            .where(eq(user.id, userId));
+        }
+
+        return {
+          project: createdProject,
+          projectMember: createdProjectMember,
+          workspaceMember: newWorkspaceMember,
+        };
+      });
+
+    } catch (error) {
+      console.error('Error creating project:', error);
+
+      if (error.message.includes('Workspace not found') ||
+        error.message.includes('User not found')) {
+        throw error; // Re-throw validation errors as-is
+      }
+
+      if (error.code === '23505') { // PostgreSQL unique violation
+        if (error.detail?.includes('slug')) {
+          throw new Error('Project slug already exists');
+        }
+      }
+
+      throw new Error('Failed to create project');
+    }
+  }
+
+
+  private generateSlugFromName(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+  }
+
+  private async generateUniqueSlug(tx: any, baseSlug: string): Promise<string> {
+    let slug = baseSlug;
+    let counter = 1;
+
+    while (true) {
+      const existingProject = await tx
+        .select({ id: project.id })
+        .from(project)
+        .where(eq(project.slug, slug))
+        .limit(1);
+
+      if (existingProject.length === 0) {
+        return slug;
+      }
+
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+  }
+
+
+  async createNewSite(createSiteData: CreateSiteRequest, userId: number): Promise<CreateSiteResponse> {
+    const { name, projectId, geometry, siteType, description, area } = createSiteData;
+
+    try {
+      // Start a transaction
+      return await this.drizzleService.db.transaction(async (tx) => {
+
+        // 1. Verify project exists and is active
+        const projectRecord = await tx
+          .select({
+            project: project,
+            workspace: workspace,
+          })
+          .from(project)
+          .leftJoin(workspace, eq(project.workspaceId, workspace.id))
+          .where(
+            and(
+              eq(project.id, projectId),
+              eq(project.isActive, true),
+              isNull(project.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (projectRecord.length === 0) {
+          throw new Error('Project not found or inactive');
+        }
+
+        const { project: projectData, workspace: workspaceData } = projectRecord[0];
+
+        // 2. Verify user exists and is active
+        const userRecord = await tx
+          .select()
+          .from(user)
+          .where(
+            and(
+              eq(user.id, userId),
+              eq(user.isActive, true),
+              isNull(user.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (userRecord.length === 0) {
+          throw new Error('User not found or inactive');
+        }
+
+        // 3. Verify user has permission to create sites in this project
+        const memberRecord = await tx
+          .select()
+          .from(projectMember)
+          .where(
+            and(
+              eq(projectMember.projectId, projectId),
+              eq(projectMember.userId, userId),
+              isNull(projectMember.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (memberRecord.length === 0) {
+          throw new Error('User is not a member of this project');
+        }
+
+        const member = memberRecord[0];
+
+        // Check if user has permission to create sites (exclude observers)
+        if (member.projectRole === 'observer') {
+          throw new Error('Observers cannot create sites');
+        }
+
+        // 4. Validate geometry
+        if (!this.isValidPolygon(geometry)) {
+          throw new Error('Invalid polygon geometry provided');
+        }
+
+        // 5. Calculate area if not provided (optional - you might want to do this in PostGIS)
+        const calculatedArea = area || this.calculatePolygonArea(geometry);
+
+        // 6. Validate site type/status
+        const validStatuses = ['planted', 'planting', 'barren', 'reforestation', 'planning'];
+        const siteStatus = siteType || 'planning';
+
+        if (!validStatuses.includes(siteStatus)) {
+          throw new Error(`Invalid site status. Must be one of: ${validStatuses.join(', ')}`);
+        }
+
+        // 7. Create the site
+        const [createdSite] = await tx
+          .insert(site)
+          .values({
+            uid: generateUid('site'),
+            projectId: projectId,
+            name: name.trim(),
+            description: description?.trim() || null,
+            location: geometry, // Drizzle will handle the PostGIS conversion
+            area: calculatedArea,
+            status: siteStatus as any, // Cast to enum type
+            createdById: userId,
+            migratedSite: false,
+            flag: false,
+            originalGeometry: geometry, // Store original for reference
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        // 8. Log the audit trail
+        await tx.insert(auditLog).values({
+          uid: generateUid('log'),
+          action: 'create',
+          entityType: 'site',
+          entityId: createdSite.id,
+          entityUid: createdSite.uid,
+          userId: userId,
+          workspaceId: workspaceData?.id || null,
+          projectId: projectId,
+          newValues: {
+            name: createdSite.name,
+            status: createdSite.status,
+            area: createdSite.area,
+            projectId: createdSite.projectId,
+          },
+          source: 'web',
+          occurredAt: new Date(),
+        });
+
+        // 9. Update project's expected tree count if this is a planting site (optional)
+        if (siteStatus === 'planting' || siteStatus === 'planted') {
+          // You might want to add logic here to update project statistics
+        }
+
+        // 10. Create notification for project members (optional)
+        // await this.createSiteCreationNotification(tx, createdSite, projectData, userRecord[0]);
+
+        return {
+          site: createdSite,
+        };
+      });
+
+    } catch (error) {
+      console.error('Error creating site:', error);
+
+      // Re-throw validation errors as-is
+      if (error.message.includes('not found') ||
+        error.message.includes('Invalid') ||
+        error.message.includes('cannot create') ||
+        error.message.includes('not a member')) {
+        throw error;
+      }
+
+      // Handle database constraint violations
+      if (error.code === '23505') { // PostgreSQL unique violation
+        throw new Error('Site with this name already exists in the project');
+      }
+
+      if (error.code === '23514') { // PostgreSQL check constraint violation
+        throw new Error('Site data violates database constraints');
+      }
+
+      throw new Error('Failed to create site');
+    }
+  }
+
+  private isValidPolygon(geometry: any): boolean {
+    try {
+      // Basic validation for GeoJSON Polygon
+      if (!geometry || geometry.type !== 'Polygon') {
+        return false;
+      }
+
+      if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
+        return false;
+      }
+
+      // Check that each ring has at least 4 coordinates (first and last should be the same)
+      for (const ring of geometry.coordinates) {
+        if (!Array.isArray(ring) || ring.length < 4) {
+          return false;
+        }
+
+        // Check that first and last coordinates are the same (closed polygon)
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+          return false;
+        }
+
+        // Validate coordinate format
+        for (const coord of ring) {
+          if (!Array.isArray(coord) || coord.length < 2) {
+            return false;
+          }
+          // Check if coordinates are valid numbers
+          if (typeof coord[0] !== 'number' || typeof coord[1] !== 'number') {
+            return false;
+          }
+          // Basic longitude/latitude range check
+          if (coord[0] < -180 || coord[0] > 180 || coord[1] < -90 || coord[1] > 90) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private calculatePolygonArea(geometry: any): number {
+    try {
+      // This is a simplified area calculation
+      // For production, you might want to use PostGIS ST_Area or a proper geospatial library
+      const coords = geometry.coordinates[0]; // Outer ring
+      let area = 0;
+
+      for (let i = 0; i < coords.length - 1; i++) {
+        area += coords[i][0] * coords[i + 1][1];
+        area -= coords[i + 1][0] * coords[i][1];
+      }
+
+      return Math.abs(area) / 2;
+    } catch (e) {
+      console.warn('Could not calculate polygon area:', e);
+      return 0;
+    }
+  }
+
+  // Optional: Create notification for site creation
+  private async createSiteCreationNotification(
+    tx: any,
+    site: any,
+    project: any,
+    creator: any
+  ): Promise<void> {
+    // Get all project members except the creator
+    const projectMembers = await tx
+      .select({ userId: projectMember.userId })
+      .from(projectMember)
+      .where(
+        and(
+          eq(projectMember.projectId, project.id),
+          ne(projectMember.userId, creator.id),
+          eq(projectMember.status, 'active'),
+          isNull(projectMember.deletedAt)
+        )
+      );
+
+    // Create notifications for all members
+    const notifications = projectMembers.map(member => ({
+      uid: generateUid('noti'),
+      userId: member.userId,
+      type: 'site' as any,
+      title: 'New Site Created',
+      message: `${creator.displayName} created a new site "${site.name}" in project "${project.name}"`,
+      entityId: site.id,
+      actionUrl: `/projects/${project.slug}/sites/${site.uid}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    if (notifications.length > 0) {
+      await tx.insert(notifications).values(notifications);
+    }
+  }
 
   //   async getUserDetails(
   //     id: number,
@@ -819,39 +1419,167 @@ export class MobileService {
   }
 
   async updateInterventionImage(imageData: any, userId: number): Promise<any> {
-    // try {
-    //   await this.drizzleService.db
-    //     .update(trees)
-    //     .set({ image: imageData.image })
-    //     .where(eq(trees.uid, imageData.treeId))
-    // } catch (error) {
-    // }
+
   }
 
 
-  //   async getProjectSpecies(membership: ProjectGuardResponse) {
-  //     const [data] = await Promise.all([
-  //       this.drizzleService.db
-  //         .select({
-  //           uid: projectSpecies.uid,
-  //           commonName: projectSpecies.commonName,
-  //           description: projectSpecies.description,
-  //           isNativeSpecies: projectSpecies.isNativeSpecies,
-  //           disbaled: projectSpecies.isDisabled,
-  //           image: projectSpecies.image,
-  //           favourite: projectSpecies.favourite,
-  //           createdAt: projectSpecies.createdAt,
-  //           scientificName: scientificSpecies.scientificName,
-  //           updatedAt: projectSpecies.updatedAt,
-  //           id: scientificSpecies.uid,
-  //           scientificSpecies: scientificSpecies.uid,
-  //         })
-  //         .from(projectSpecies)
-  //         .leftJoin(scientificSpecies, eq(projectSpecies.scientificSpeciesId, scientificSpecies.id))
-  //         .where(eq(projectSpecies.projectId, membership.projectId))
-  //         .orderBy(desc(projectSpecies.createdAt))
-  //     ]);
-  //     return data
-  //   }
+
+
+  async getFavoriteSpeciesInProject(
+    projectId: number,
+    userId?: number
+  ): Promise<any[]> {
+    try {
+      // 1. Verify project exists and is active
+      const projectRecord = await this.drizzleService.db
+        .select({
+          id: project.id,
+          uid: project.uid,
+          name: project.name,
+          isActive: project.isActive,
+          deletedAt: project.deletedAt,
+        })
+        .from(project)
+        .where(
+          and(
+            eq(project.id, projectId),
+            eq(project.isActive, true),
+            isNull(project.deletedAt)
+          )
+        )
+        .limit(1);
+
+      if (projectRecord.length === 0) {
+        throw new Error('Project not found or inactive');
+      }
+
+      // 2. If userId is provided, verify user has access to the project
+      if (userId) {
+        const memberRecord = await this.drizzleService.db
+          .select({
+            projectRole: projectMember.projectRole,
+            status: projectMember.status,
+          })
+          .from(projectMember)
+          .where(
+            and(
+              eq(projectMember.projectId, projectId),
+              eq(projectMember.userId, userId),
+              eq(projectMember.status, 'active'),
+              isNull(projectMember.deletedAt)
+            )
+          )
+          .limit(1);
+
+        if (memberRecord.length === 0) {
+          throw new Error('User does not have access to this project');
+        }
+      }
+
+      // 3. Get all favorite species in the project
+      const favoriteSpecies = await this.drizzleService.db
+        .select({
+          projectSpecies: projectSpecies,
+          scientificSpecies: scientificSpecies,
+          addedBy: {
+            id: user.id,
+            uid: user.uid,
+            displayName: user.displayName,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            image: user.image,
+          },
+        })
+        .from(projectSpecies)
+        .leftJoin(
+          scientificSpecies,
+          eq(projectSpecies.scientificSpeciesId, scientificSpecies.id)
+        )
+        .innerJoin(user, eq(projectSpecies.addedById, user.id))
+        .where(
+          and(
+            eq(projectSpecies.projectId, projectId),
+            eq(projectSpecies.favourite, true),
+            eq(projectSpecies.isDisabled, false),
+            isNull(projectSpecies.deletedAt),
+            // Only include verified scientific species or unknown species
+            or(
+              isNull(projectSpecies.scientificSpeciesId), // Unknown species
+              and(
+                isNotNull(projectSpecies.scientificSpeciesId),
+                or(
+                  eq(scientificSpecies.dataQuality, 'verified'),
+                  eq(scientificSpecies.dataQuality, 'pending')
+                ),
+                isNull(scientificSpecies.deletedAt)
+              )
+            )
+          )
+        )
+        .orderBy(projectSpecies.createdAt);
+
+      // 4. Map to response format
+      const response: any[] = favoriteSpecies.map(record => ({
+        id: record.projectSpecies.id,
+        uid: record.projectSpecies.uid,
+        projectId: record.projectSpecies.projectId,
+        scientificSpeciesId: record.projectSpecies.scientificSpeciesId,
+        scientificSpecies: record.scientificSpecies ? {
+          id: record.scientificSpecies.id,
+          uid: record.scientificSpecies.uid,
+          scientificName: record.scientificSpecies.scientificName,
+          commonName: record.scientificSpecies.commonName,
+          family: record.scientificSpecies.family,
+          genus: record.scientificSpecies.genus,
+          species: record.scientificSpecies.species,
+          habitat: record.scientificSpecies.habitat || [],
+          nativeRegions: record.scientificSpecies.nativeRegions || [],
+          climateZones: record.scientificSpecies.climateZones || [],
+          matureHeight: record.scientificSpecies.matureHeight,
+          matureWidth: record.scientificSpecies.matureWidth,
+          growthRate: record.scientificSpecies.growthRate,
+          lightRequirement: record.scientificSpecies.lightRequirement,
+          waterRequirement: record.scientificSpecies.waterRequirement,
+          droughtTolerance: record.scientificSpecies.droughtTolerance,
+          frostTolerance: record.scientificSpecies.frostTolerance,
+          conservationStatus: record.scientificSpecies.conservationStatus,
+          isNative: record.scientificSpecies.isNative,
+          isInvasive: record.scientificSpecies.isInvasive,
+          isEndangered: record.scientificSpecies.isEndangered,
+          pollinatorFriendly: record.scientificSpecies.pollinatorFriendly,
+          erosionControl: record.scientificSpecies.erosionControl,
+          description: record.scientificSpecies.description,
+          image: record.scientificSpecies.image,
+          dataQuality: record.scientificSpecies.dataQuality,
+        } : null,
+        isUnknown: record.projectSpecies.isUnknown,
+        speciesName: record.projectSpecies.speciesName,
+        commonName: record.projectSpecies.commonName,
+        image: record.projectSpecies.image,
+        notes: record.projectSpecies.notes,
+        favourite: record.projectSpecies.favourite,
+        isDisabled: record.projectSpecies.isDisabled,
+        addedById: record.projectSpecies.addedById,
+        addedBy: record.addedBy,
+        metadata: record.projectSpecies.metadata,
+        createdAt: record.projectSpecies.createdAt,
+        updatedAt: record.projectSpecies.updatedAt,
+      }));
+
+      return response;
+
+    } catch (error) {
+      console.error('Error fetching favorite species:', error);
+
+      // Re-throw validation errors as-is
+      if (error.message.includes('not found') ||
+        error.message.includes('does not have access')) {
+        throw error;
+      }
+
+      throw new Error('Failed to fetch favorite species');
+    }
+  }
+
 }
 

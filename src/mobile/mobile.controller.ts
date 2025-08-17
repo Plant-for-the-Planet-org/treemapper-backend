@@ -5,6 +5,7 @@ import {
   Body,
   UseGuards,
   Req,
+  Headers, Put
 } from '@nestjs/common';
 import { ProjectRoles } from './decorators/project-roles.decorator';
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard';
@@ -35,31 +36,19 @@ export class MobileController {
 
   @Get('user/profile')
   async getUserDetails(
-    @CurrentUser() user: ExtendedUser,
+    @CurrentUser() userData: ExtendedUser,
+    @Headers('authorization') authorization: string,
   ): Promise<any> {
-    return {
-      country: '',
-      created: '',
-      displayName: user.displayName,
-      email: user.email,
-      firstName: user.firstName,
-      id: user.uid,
-      image: user.image,
-      isPrivate: false,
-      lastName: user.lastName,
-      locale: user.locale,
-      name: user.displayName,
-      slug: user.slug,
-      type: 'private',
-      v3Approved: user.v3Approved
-    };
+    return this.appservice.getUserDetails(userData, authorization)
   }
 
-  @Get('user/me')
-  async getMyDetails(
-    @CurrentUser() userData: ExtendedUser,
-  ): Promise<any> {
-    return await this.appservice.getMyDetails(userData);
+
+  @Post('user/profile')
+  async updateProfieDetails(
+    @CurrentUser() userData: User,
+    @Body() userBody: any,
+  ): Promise<InterventionResponseDto> {
+    return this.appservice.updateUserDetails(userBody, userData);
   }
 
   @Get('user/projects')
@@ -69,22 +58,27 @@ export class MobileController {
     return await this.appservice.getProjectsAndSitesForUser(req.user.id);
   }
 
-  //   @Get('species/:id')
-  //   @ProjectRoles('owner', 'admin', 'contributor')
-  //   @UseGuards(ProjectPermissionsGuard)
-  //   async getProjectSpecies(
-  //     @Membership() membership: ProjectGuardResponse
-  //   ): Promise<any> {
-  //     return await this.appservice.getProjectSpecies(membership);
-  //   }
 
-  //   @Post('presigned-url')
-  //   async getSignedUrl(
-  //     @Body() dto: CreatePresignedUrlDto,
-  //     @CurrentUser() user: User) {
-  //     return await this.usersService.generateR2Url(dto);
-  //   }
+  @Post('project')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async createNewProject(
+    @Body() createInterventionDto: any,
+    @Membership() membership: any
+  ): Promise<any> {
+    return this.appservice.createNewProject(createInterventionDto, membership.userId);
+  }
 
+
+  @Post('site')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async createNewSite(
+    @Body() createInterventionDto: any,
+    @Membership() membership: any
+  ): Promise<any> {
+    return this.appservice.createNewSite(createInterventionDto, membership.userId);
+  }
 
   @Post('project/:id/intervention')
   @ProjectRoles('owner', 'admin', 'contributor')
@@ -95,6 +89,26 @@ export class MobileController {
   ): Promise<InterventionResponseDto> {
     return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
   }
+  @Post('presigned-url')
+  async getSignedUrl(
+    @Body() dto: CreatePresignedUrlDto,
+    @CurrentUser() user: User) {
+    return await this.usersService.generateR2Url(dto);
+  }
+
+
+
+
+  @Get('species/:id')
+  @ProjectRoles('owner', 'admin', 'contributor')
+  @UseGuards(ProjectPermissionsGuard)
+  async getProjectSpecies(
+    @Membership() membership: ProjectGuardResponse
+  ): Promise<any> {
+    return await this.appservice.getFavoriteSpeciesInProject(membership.projectId, membership.userId);
+  }
+
+
 
   //   @Post('image/intervention')
   //   async updateInterventionImage(
