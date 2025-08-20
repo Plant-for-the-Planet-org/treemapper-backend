@@ -107,6 +107,39 @@ export class EmailService {
     });
   }
 
+
+  async sendRequestEmail({
+    inviterEmail,
+    inviterName,
+    memberName,
+    memberEmail,
+    projectName,
+    projectId,
+  }: {
+    inviterEmail: string;
+    inviterName: string;
+    memberName: string;
+    memberEmail: string;
+    projectName: string;
+    projectId: string | number;
+  }): Promise<boolean> {
+    const projectUrl = `${this.frontendUrl}/projects/${projectId}`;
+
+    return this.sendTemplateEmail({
+      to: inviterEmail,
+      subject: `${memberName} accepted your invitation to ${projectName}`,
+      templateName: 'invite-accepted',
+      context: {
+        inviterName,
+        memberName,
+        memberEmail,
+        projectName,
+        projectUrl,
+      },
+    });
+  }
+
+
   /**
    * Send notification when an invite is declined
    */

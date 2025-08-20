@@ -203,6 +203,19 @@ const geometryWithGeoJSON = (srid?: number) =>
     },
   });
 
+export const migrationRequest = pgTable('migration_request', {
+  id: serial('id').primaryKey(),
+  uid: text('uid').notNull().unique(),
+  userId: integer('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  status: migrationStatusEnum('status').default('in_progress').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull().$onUpdate(() => new Date()),
+  flag: boolean('flag').default(false),
+  flagReason: jsonb('flag_reason').$type<FlagReasonEntry[]>(),
+}, (table) => ({
+  migrationReqeuestIdIdx: index('migration_request_id_idx').on(table.userId)
+}))
+
 
 
 
@@ -1044,6 +1057,7 @@ export const userRelations = relations(user, ({ many }) => ({
   interventions: many(intervention, { relationName: 'userInterventions' }),
   notifications: many(notifications),
   migrations: many(migration),
+  migrationRequest: many(migrationRequest),
   speciesRequests: many(speciesRequest, { relationName: 'requestedBy' }),
   reviewedSpeciesRequests: many(speciesRequest, { relationName: 'reviewedBy' }),
   workspaceMemberships: many(workspaceMember),
@@ -1199,6 +1213,13 @@ export const migrationRelations = relations(migration, ({ one, many }) => ({
     references: [user.id],
   }),
   logs: many(migrationLog),
+}));
+
+export const migrationRequestRelation = relations(migrationRequest, ({ one, many }) => ({
+  user: one(user, {
+    fields: [migrationRequest.userId],
+    references: [user.id],
+  }),
 }));
 
 export const migrationLogRelations = relations(migrationLog, ({ one }) => ({

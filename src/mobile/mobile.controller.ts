@@ -56,7 +56,7 @@ export class MobileController {
   @Post('project')
   async createNewProject(
     @Body() createInterventionDto: any,
-    @CurrentUser() userData:ExtendedUser
+    @CurrentUser() userData: ExtendedUser
   ): Promise<any> {
     return this.appservice.createNewProject(createInterventionDto, userData);
   }
@@ -104,12 +104,11 @@ export class MobileController {
 
 
 
-  //   @Post('image/intervention')
-  //   async updateInterventionImage(
-  //     @Req() req: any,
-  //     @Body() imageData: any,
-  //   ): Promise<InterventionResponseDto> {
-  //     return this.appservice.updateInterventionImage(imageData, req.user.id);
-  //   }
+  @Post('request/features')
+  async requestMigration(
+    @CurrentUser() userData: any,
+  ): Promise<any> {
+    return await this.appservice.requestMigration(userData);
+  }
 
 }
