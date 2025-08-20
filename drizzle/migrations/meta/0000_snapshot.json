@@ -1,5 +1,5 @@
 {
-  "id": "fc0718c8-be29-41c6-8ea8-770c020801f1",
+  "id": "ea548be4-d677-4f64-98ed-654f8ce264df",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -228,20 +228,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "valid_entity_id": {
-          "name": "valid_entity_id",
-          "value": "entity_id > 0"
-        },
-        "valid_source": {
-          "name": "valid_source",
-          "value": "source IN ('web', 'mobile', 'api', 'system', 'migration')"
-        },
-        "occurred_at_not_future": {
-          "name": "occurred_at_not_future",
-          "value": "occurred_at <= NOW()"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.bulk_invite": {

@@ -27,12 +27,6 @@ import { UsersService } from 'src/users/users.service';
 export class MobileController {
   constructor(private readonly appservice: MobileService, private readonly usersService: UsersService,) { }
 
-  @Get('health')
-  async mobileHealthCheck() {
-    return "Mobile Api running"
-  }
-
-
 
   @Get('user/profile')
   async getUserDetails(
@@ -87,7 +81,9 @@ export class MobileController {
   ): Promise<InterventionResponseDto> {
     return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
   }
-  @Post('presigned-url')
+
+
+  @Post('signedurl')
   async getSignedUrl(
     @Body() dto: CreatePresignedUrlDto,
     @CurrentUser() user: User) {

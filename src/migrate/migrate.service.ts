@@ -91,8 +91,7 @@ export interface MigrationProgress {
     };
 }
 export interface MigrationCheckResult {
-    oldUser: boolean;
-    planetId: string
+    existingPlanetUser?: boolean, country?: string, uid?: string, locale?: string, type?:string
 }
 
 @Injectable()
@@ -122,12 +121,14 @@ export class MigrationService {
                 })
             );
             if (response.status == 303) {
-                // await this.usersetvice.migrateSuccess(userId)
-                await this.drizzleService.db.update(user).set({ existingPlanetUser: false, migratedAt: new Date(), v3ApprovedAt: new Date() }).where(eq(user.id, userData.id))
+                await this.drizzleService.db.update(user).set({ existingPlanetUser: false, v3ApprovedAt: new Date() }).where(eq(user.id, userData.id))
                 await this.usersetvice.invalidateMyCache(userData)
-                return { oldUser: false, planetId: '' };
+                return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale };
+            } else {
+                await this.drizzleService.db.update(user).set({ existingPlanetUser: true, type: response.data.type, country: response.data.country, uid: response.data.id, locale: response.data.locale }).where(eq(user.id, userData.id))
+                await this.usersetvice.invalidateMyCache(userData)
+                return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale, type: response.data.type};
             }
-            return { oldUser: true, planetId: response.data.id };
         } catch (error) {
             if (error.response) {
                 throw new HttpException(

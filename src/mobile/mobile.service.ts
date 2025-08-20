@@ -341,29 +341,66 @@ export class MobileService {
 
   async getUserDetails(userData: User, token: string) {
     try {
-      if (userData.v3ApprovedAt) {
+      if (userData.v3ApprovedAt || userData.existingPlanetUser) {
         return {
-          country: '',
-          created: '',
+          country: userData.country,
+          created: userData.createdAt,
           displayName: userData.displayName,
           email: userData.email,
           firstName: userData.firstName,
           id: userData.uid,
           image: userData.image,
-          isPrivate: userData,
+          isPrivate: false,
           lastName: userData.lastName,
           locale: userData.locale,
           name: userData.displayName,
           slug: userData.slug,
-          type: 'private',
-          v3Approved: userData.v3ApprovedAt
-        };
+          type: userData.type,
+          v3Approved: userData.v3ApprovedAt ? true : false
+        }
       }
+
+
       const existingPlanetUser = await this.migrateService.checkUserInttc(token, userData);
       if (!existingPlanetUser) {
         throw ''
       }
-      return { ...userData, v3Approved: existingPlanetUser.oldUser ? null : new Date() }
+
+      if (!existingPlanetUser.existingPlanetUser) {
+        return {
+          country: userData.country,
+          created: userData.createdAt,
+          displayName: userData.displayName,
+          email: userData.email,
+          firstName: userData.firstName,
+          id: userData.uid,
+          image: userData.image,
+          isPrivate: false,
+          lastName: userData.lastName,
+          locale: userData.locale,
+          name: userData.displayName,
+          slug: userData.slug,
+          type: userData.type,
+          v3Approved: userData.v3ApprovedAt
+        }
+      } else {
+        return {
+          country: existingPlanetUser.country,
+          created: userData.createdAt,
+          displayName: userData.displayName,
+          email: userData.email,
+          firstName: userData.firstName,
+          id: existingPlanetUser.uid,
+          image: userData.image,
+          isPrivate: false,
+          lastName: userData.lastName,
+          locale: existingPlanetUser.locale,
+          name: userData.displayName,
+          slug: userData.slug,
+          type: existingPlanetUser.type,
+          v3Approved: userData.v3ApprovedAt
+        }
+      }
     } catch (error) {
       throw ''
     }
@@ -517,7 +554,8 @@ export class MobileService {
           minTreeCount: '',
           revisionPeriodicityLevel: '',
           sites: filteredSitesByProject[proj.id] || []
-        }}))
+        }
+      }))
 
       return response;
 
