@@ -1508,145 +1508,41 @@ export class MobileService {
 
 
   async getFavoriteSpeciesInProject(
-    projectId: number,
-    userId?: number
+    projectId: number
   ): Promise<any[]> {
     try {
-      // 1. Verify project exists and is active
-      const projectRecord = await this.drizzleService.db
-        .select({
-          id: project.id,
-          uid: project.uid,
-          name: project.name,
-          isActive: project.isActive,
-          deletedAt: project.deletedAt,
-        })
-        .from(project)
-        .where(
-          and(
-            eq(project.id, projectId),
-            eq(project.isActive, true),
-            isNull(project.deletedAt)
-          )
-        )
-        .limit(1);
-
-      if (projectRecord.length === 0) {
-        throw new Error('Project not found or inactive');
-      }
-
-      // 2. If userId is provided, verify user has access to the project
-      if (userId) {
-        const memberRecord = await this.drizzleService.db
-          .select({
-            projectRole: projectMember.projectRole,
-            status: projectMember.status,
-          })
-          .from(projectMember)
-          .where(
-            and(
-              eq(projectMember.projectId, projectId),
-              eq(projectMember.userId, userId),
-              eq(projectMember.status, 'active'),
-              isNull(projectMember.deletedAt)
-            )
-          )
-          .limit(1);
-
-        if (memberRecord.length === 0) {
-          throw new Error('User does not have access to this project');
-        }
-      }
-
-      // 3. Get all favorite species in the project
       const favoriteSpecies = await this.drizzleService.db
         .select({
           projectSpecies: projectSpecies,
           scientificSpecies: scientificSpecies,
-          addedBy: {
-            id: user.id,
-            uid: user.uid,
-            displayName: user.displayName,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            image: user.image,
-          },
         })
         .from(projectSpecies)
         .leftJoin(
           scientificSpecies,
           eq(projectSpecies.scientificSpeciesId, scientificSpecies.id)
         )
-        .innerJoin(user, eq(projectSpecies.addedById, user.id))
         .where(
           and(
             eq(projectSpecies.projectId, projectId),
             eq(projectSpecies.favourite, true),
             eq(projectSpecies.isDisabled, false),
             isNull(projectSpecies.deletedAt),
-            // Only include verified scientific species or unknown species
-            or(
-              isNull(projectSpecies.scientificSpeciesId), // Unknown species
-              and(
-                isNotNull(projectSpecies.scientificSpeciesId),
-                or(
-                  eq(scientificSpecies.dataQuality, 'verified'),
-                  eq(scientificSpecies.dataQuality, 'pending')
-                ),
-                isNull(scientificSpecies.deletedAt)
-              )
-            )
           )
         )
-        .orderBy(projectSpecies.createdAt);
 
-      // 4. Map to response format
       const response: any[] = favoriteSpecies.map(record => ({
-        id: record.projectSpecies.id,
-        uid: record.projectSpecies.uid,
-        projectId: record.projectSpecies.projectId,
-        scientificSpeciesId: record.projectSpecies.scientificSpeciesId,
-        scientificSpecies: record.scientificSpecies ? {
-          id: record.scientificSpecies.id,
-          uid: record.scientificSpecies.uid,
-          scientificName: record.scientificSpecies.scientificName,
-          commonName: record.scientificSpecies.commonName,
-          family: record.scientificSpecies.family,
-          genus: record.scientificSpecies.genus,
-          species: record.scientificSpecies.species,
-          habitat: record.scientificSpecies.habitat || [],
-          nativeRegions: record.scientificSpecies.nativeRegions || [],
-          climateZones: record.scientificSpecies.climateZones || [],
-          matureHeight: record.scientificSpecies.matureHeight,
-          matureWidth: record.scientificSpecies.matureWidth,
-          growthRate: record.scientificSpecies.growthRate,
-          lightRequirement: record.scientificSpecies.lightRequirement,
-          waterRequirement: record.scientificSpecies.waterRequirement,
-          droughtTolerance: record.scientificSpecies.droughtTolerance,
-          frostTolerance: record.scientificSpecies.frostTolerance,
-          conservationStatus: record.scientificSpecies.conservationStatus,
-          isNative: record.scientificSpecies.isNative,
-          isInvasive: record.scientificSpecies.isInvasive,
-          isEndangered: record.scientificSpecies.isEndangered,
-          pollinatorFriendly: record.scientificSpecies.pollinatorFriendly,
-          erosionControl: record.scientificSpecies.erosionControl,
-          description: record.scientificSpecies.description,
-          image: record.scientificSpecies.image,
-          dataQuality: record.scientificSpecies.dataQuality,
-        } : null,
-        isUnknown: record.projectSpecies.isUnknown,
-        speciesName: record.projectSpecies.speciesName,
-        commonName: record.projectSpecies.commonName,
+        scientificSpecies: record.scientificSpecies?.uid,
+        scientificName: record.projectSpecies.speciesName,
+        aliases: record.projectSpecies.commonName,
         image: record.projectSpecies.image,
-        notes: record.projectSpecies.notes,
+        description: record.projectSpecies.notes,
+        id: record.projectSpecies.uid,
         favourite: record.projectSpecies.favourite,
         isDisabled: record.projectSpecies.isDisabled,
-        addedById: record.projectSpecies.addedById,
-        addedBy: record.addedBy,
         metadata: record.projectSpecies.metadata,
         createdAt: record.projectSpecies.createdAt,
         updatedAt: record.projectSpecies.updatedAt,
-      }));
+      }))
 
       return response;
 

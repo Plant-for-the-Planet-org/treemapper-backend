@@ -99,7 +99,7 @@ export class MobileController {
   async getProjectSpecies(
     @Membership() membership: ProjectGuardResponse
   ): Promise<any> {
-    return await this.appservice.getFavoriteSpeciesInProject(membership.projectId, membership.userId);
+    return await this.appservice.getFavoriteSpeciesInProject(membership.projectId);
   }
 
 

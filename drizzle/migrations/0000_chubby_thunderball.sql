@@ -192,6 +192,18 @@ CREATE TABLE "migration_log" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "migration_request" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"uid" text NOT NULL,
+	"user_id" integer NOT NULL,
+	"status" "migration_status" DEFAULT 'in_progress' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"flag" boolean DEFAULT false,
+	"flag_reason" jsonb,
+	CONSTRAINT "migration_request_uid_unique" UNIQUE("uid")
+);
+--> statement-breakpoint
 CREATE TABLE "notifications" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uid" text NOT NULL,
@@ -682,6 +694,7 @@ ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_interven
 ALTER TABLE "intervention_species" ADD CONSTRAINT "intervention_species_scientific_species_id_scientific_species_id_fk" FOREIGN KEY ("scientific_species_id") REFERENCES "public"."scientific_species"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "migration" ADD CONSTRAINT "migration_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "migration_log" ADD CONSTRAINT "migration_log_migration_id_migration_id_fk" FOREIGN KEY ("migration_id") REFERENCES "public"."migration"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "migration_request" ADD CONSTRAINT "migration_request_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project" ADD CONSTRAINT "project_created_by_id_user_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project" ADD CONSTRAINT "project_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -727,6 +740,7 @@ CREATE INDEX "intervention_user_idx" ON "intervention" USING btree ("user_id","i
 CREATE INDEX "intervention_species_intervention_idx" ON "intervention_species" USING btree ("intervention_id");--> statement-breakpoint
 CREATE INDEX "migration_id_idx" ON "migration" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "migration_logs_idx" ON "migration_log" USING btree ("migration_id");--> statement-breakpoint
+CREATE INDEX "migration_request_id_idx" ON "migration_request" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "notifications_user_unread_active_idx" ON "notifications" USING btree ("user_id","is_read","is_archived") WHERE is_read = false AND is_archived = false;--> statement-breakpoint
 CREATE INDEX "notifications_user_list_idx" ON "notifications" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "notifications_scheduled_processing_idx" ON "notifications" USING btree ("scheduled_for") WHERE scheduled_for IS NOT NULL AND sent_at IS NULL;--> statement-breakpoint

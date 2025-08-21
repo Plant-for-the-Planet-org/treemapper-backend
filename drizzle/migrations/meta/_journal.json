@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1755650547096,
-      "tag": "0000_unique_legion",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1755670453719,
-      "tag": "0001_dry_carnage",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1755670634609,
-      "tag": "0002_strange_wallop",
+      "when": 1755736683477,
+      "tag": "0000_chubby_thunderball",
       "breakpoints": true
     }
   ]
