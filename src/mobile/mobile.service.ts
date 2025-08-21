@@ -342,17 +342,16 @@ export class MobileService {
     });
   }
 
-  async requestMigration(userData: User) {
+  async requestMigration(userData: User, token: string) {
     try {
       await this.drizzleService.db.insert(migrationRequest).values({
         uid: generateUid("mgrreq"),
         userId: userData.id,
       })
-      return true
+      await this.emailService.sendMigrationRequestEmail({ memberEmail: userData.email, memberId: userData.uid, memberName: userData.displayName, memberType: userData.type , token})
     } catch (error) {
       return null
     }
-    // await this.emailService.sendInviteAcceptedEmail
   }
 
   async getUserDetails(userData: User, token: string) {

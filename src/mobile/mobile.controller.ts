@@ -106,9 +106,11 @@ export class MobileController {
 
   @Post('request/features')
   async requestMigration(
+    @Body() body: { token: string },
     @CurrentUser() userData: any,
   ): Promise<any> {
-    return await this.appservice.requestMigration(userData);
+
+    return await this.appservice.requestMigration(userData, body.token);
   }
 
 }

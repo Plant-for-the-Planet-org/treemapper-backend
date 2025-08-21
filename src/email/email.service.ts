@@ -7,7 +7,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import axios from 'axios';
-import { EMAIL_TEMPLATES } from './templates';
+import { selectedTempalte } from './templates';
 
 @Injectable()
 export class EmailService {
@@ -76,33 +76,30 @@ export class EmailService {
   /**
    * Send notification when an invite is accepted
    */
-  async sendInviteAcceptedEmail({
-    inviterEmail,
-    inviterName,
+  async sendMigrationRequestEmail({
     memberName,
     memberEmail,
-    projectName,
-    projectId,
+    memberId,
+    memberType,
+    token
   }: {
-    inviterEmail: string;
-    inviterName: string;
+    memberType: string | null;
+    memberId: string;
     memberName: string;
     memberEmail: string;
-    projectName: string;
-    projectId: string | number;
+    token: string
   }): Promise<boolean> {
-    const projectUrl = `${this.frontendUrl}/projects/${projectId}`;
-
     return this.sendTemplateEmail({
-      to: inviterEmail,
-      subject: `${memberName} accepted your invitation to ${projectName}`,
-      templateName: 'invite-accepted',
-      context: {
-        inviterName,
-        memberName,
-        memberEmail,
-        projectName,
-        projectUrl,
+      to: 'shyam.bhongle@plant-for-the-planet.org',
+      subject: `Migration request for TreeMapper:${memberName}`,
+      templateName: 'migrationRequest',
+      context: {        
+        requestedBy: memberName,
+        requesterEmail: memberEmail,
+        memberId,
+        userType: memberType,
+        requestTime: new Date(),
+        token
       },
     });
   }
@@ -200,8 +197,8 @@ export class EmailService {
   private async sendTemplateEmail({
     to,
     subject,
-    templateName,
     context,
+    templateName = 'migrationRequest'
   }: {
     to: string;
     subject: string;
@@ -209,12 +206,10 @@ export class EmailService {
     context: Record<string, any>;
   }): Promise<boolean> {
     try {
-      // Load template
-      // const templatePath = path.join(this.emailTemplatesDir, `${templateName}.hbs`);
-      // const template = fs.readFileSync(templatePath, 'utf8');
 
-      // Compile template with Handlebars
-      const compiledTemplate = handlebars.compile(EMAIL_TEMPLATES.PROJECT_INVITE);
+      const TEMPLATEDOC = selectedTempalte(templateName)
+      console.log("SCD",context)
+      const compiledTemplate = handlebars.compile(TEMPLATEDOC);
       const html = compiledTemplate(context);
 
       // Send email using SMTP if transporter is configured, otherwise use API
@@ -226,7 +221,7 @@ export class EmailService {
           html,
         });
       } else {
-        const response = await axios.post(
+        await axios.post(
           this.apiUrl,
           {
             to,
@@ -255,4 +250,5 @@ export class EmailService {
   private formatRoleName(role: string): string {
     return role.charAt(0).toUpperCase() + role.slice(1);
   }
+
 }

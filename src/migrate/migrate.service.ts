@@ -1,6 +1,6 @@
 import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { async, firstValueFrom, generate } from 'rxjs';
+import { async, firstValueFrom, generate, retry } from 'rxjs';
 
 
 
@@ -91,7 +91,7 @@ export interface MigrationProgress {
     };
 }
 export interface MigrationCheckResult {
-    existingPlanetUser?: boolean, country?: string, uid?: string, locale?: string, type?:string
+    existingPlanetUser?: boolean, country?: string, uid?: string, locale?: string, type?: string
 }
 
 @Injectable()
@@ -127,7 +127,7 @@ export class MigrationService {
             } else {
                 await this.drizzleService.db.update(user).set({ existingPlanetUser: true, type: response.data.type, country: response.data.country, uid: response.data.id, locale: response.data.locale }).where(eq(user.id, userData.id))
                 await this.usersetvice.invalidateMyCache(userData)
-                return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale, type: response.data.type};
+                return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale, type: response.data.type };
             }
         } catch (error) {
             if (error.response) {
@@ -177,10 +177,13 @@ export class MigrationService {
 
     async startUserMigration(
         planetId: string,
-        authToken: string,
-        userData: User
+        authToken: string
     ): Promise<void> {
         let userMigrationRecord;
+        const [userData] = await this.drizzleService.db.select().from(user).where(eq(user.uid, planetId));
+        if (!userData) {
+            throw 'no user found'
+        }
         try {
             console.log("Migration started")
             userMigrationRecord = await this.createMigrationRecord(userData.id, planetId);
@@ -315,24 +318,24 @@ export class MigrationService {
             }
 
 
-            // if (stop) {
-            //     this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for intervention', 'interventions');
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', false, true);
-            //     return
-            // } else {
-            //     await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
-            // }
+            if (stop) {
+                this.addLog(userMigrationRecord.id, 'error', 'Migration stopped for intervention', 'interventions');
+                await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', false, true);
+                return
+            } else {
+                await this.updateMigrationProgress(userMigrationRecord.id, 'interventions', true, false);
+            }
 
-            // await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
-            // await this.completeMigration(userMigrationRecord.id);
-            // await this.usersetvice.resetUserCache()
-            // await this.drizzleService.db.update(users).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(users.id, userId))
-            // await this.notificationService.createNotification({
-            //     userId: userId,
-            //     type: NotificationType.SYSTEM_UPDATE,
-            //     title: 'Migration Completed',
-            //     message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plant.org'
-            // })
+            await this.updateMigrationProgress(userMigrationRecord.id, 'images', true, false);
+            await this.completeMigration(userMigrationRecord.id);
+            await this.usersetvice.invalidateMyCache(userData)
+            await this.drizzleService.db.update(user).set({ existingPlanetUser: true, migratedAt: new Date() }).where(eq(user.id, userData.id))
+            await this.notificationService.createNotification({
+                userId: userData.id,
+                type: NotificationType.SYSTEM,
+                title: 'Migration Completed',
+                message: 'All your data from old TreeMapper app was migrated successfully. If you see any issue please contact us on info@plant-for-the-plant.org'
+            })
         } catch (error) {
             await this.handleMigrationError(userData.id, userMigrationRecord?.id, error);
             throw error;
@@ -1338,6 +1341,9 @@ export class MigrationService {
                     });
 
                     try {
+                        if (treeMappedData.length === 0) {
+                            return []
+                        }
                         const allTreeResult = await this.drizzleService.db
                             .insert(tree)
                             .values(treeMappedData)
@@ -1369,7 +1375,9 @@ export class MigrationService {
             await Promise.all(promises2);
             try {
                 const filterdImage = imageUploadData.filter(el => el.entityId)
-                await this.drizzleService.db.insert(image).values(filterdImage)
+                if (filterdImage.length > 0) {
+                    await this.drizzleService.db.insert(image).values(filterdImage)
+                }
             } catch (error) {
                 console.log("Error occured while uploading images", error)
             }
