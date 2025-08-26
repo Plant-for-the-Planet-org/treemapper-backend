@@ -1264,7 +1264,7 @@ export class MobileService {
           id: 0,
           name: 'Unknown'
         }
-
+        console.log("SDC",tranformedSpecies)
         if (tranformedSpecies[0].isUnknown) {
           const interventionSpeciesData = await this.drizzleService.db
             .select()
@@ -1281,11 +1281,12 @@ export class MobileService {
           const interventionSpeciesData = await this.drizzleService.db
             .select()
             .from(interventionSpecies)
-            .where(eq(interventionSpecies.scientificSpeciesId, tranformedSpecies[0].id))
+            .where(eq(interventionSpecies.scientificSpeciesId, tranformedSpecies[0].scientificSpeciesId))
             .limit(1);
           if (!existingParent || existingParent.length === 0) {
             throw ''
           } else {
+            console.log("SDC","SDC",interventionSpeciesData)
             sampleSpeciesData.id = interventionSpeciesData[0].id
             sampleSpeciesData.name = interventionSpeciesData[0].speciesName || ''
           }
