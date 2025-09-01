@@ -121,7 +121,7 @@ export class MigrationService {
                 })
             );
             if (response.status == 303) {
-                await this.drizzleService.db.update(user).set({ existingPlanetUser: false, v3ApprovedAt: new Date() }).where(eq(user.id, userData.id))
+                await this.drizzleService.db.update(user).set({ existingPlanetUser: false}).where(eq(user.id, userData.id))
                 await this.usersetvice.invalidateMyCache(userData)
                 return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale };
             } else {
