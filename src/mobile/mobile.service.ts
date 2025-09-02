@@ -14,7 +14,7 @@ import { MigrationService } from 'src/migrate/migrate.service';
 import { WorkspaceService } from 'src/workspace/workspace.service';
 import { boolean } from 'drizzle-orm/gel-core';
 import { async } from 'rxjs';
-import { ProjectCacheService } from 'src/cache/project-cache.service';
+import { UserCacheService } from 'src/cache/user-cache.service'
 import { EmailService } from 'src/email/email.service';
 
 
@@ -177,7 +177,7 @@ export class MobileService {
     private drizzleService: DrizzleService,
     private migrateService: MigrationService,
     private emailService: EmailService,
-
+    private userCacheService: UserCacheService,
   ) { }
 
   getGeoJSONForPostGIS(locationInput: any): any {
@@ -348,11 +348,13 @@ export class MobileService {
         uid: generateUid("mgrreq"),
         userId: userData.id,
       })
+      await this.userCacheService.setUserByAuthMigration(token, userData.auth0Id)
       await this.emailService.sendMigrationRequestEmail({ memberEmail: userData.email, memberId: userData.uid, memberName: userData.displayName, memberType: userData.type , token})
     } catch (error) {
       return null
     }
   }
+
 
   async getUserDetails(userData: User, token: string) {
     try {

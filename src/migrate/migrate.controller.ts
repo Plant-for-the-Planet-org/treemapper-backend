@@ -12,15 +12,14 @@ export class MigrationController {
 
     @Post('start')
     async startMigration(@Body() body: { planetId: string, token: string }, @CurrentUser() userData: User) {
-        // if (userData.type !== 'superadmin') {
-        //     throw new Error('No authorized to migrate user');
-        // }
-        if (!body.planetId || !body.token) {
+        if (userData.type !== 'superadmin') {
+            throw new Error('No authorized to migrate user');
+        }
+        if (!body.planetId) {
             throw "Bad request"
         }
         this.migrationService.startUserMigration(
-            body.planetId,
-            body.token
+            body.planetId
         ).catch(error => {
             console.error('Migration failed:', error);
         });

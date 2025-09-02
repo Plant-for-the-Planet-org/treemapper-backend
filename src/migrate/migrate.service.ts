@@ -30,6 +30,7 @@ import { generateParentHID } from 'src/util/hidGenerator';
 import { NotificationService } from 'src/notification/notification.service';
 import { NotificationType } from 'src/notification/dto/notification.dto';
 import { User } from 'src/users/entities/user.entity';
+import { UserCacheService } from 'src/cache/user-cache.service';
 
 interface GeoJSONFeature {
     type: 'Feature';
@@ -104,6 +105,7 @@ export class MigrationService {
         private httpService: HttpService,
         private usersetvice: UsersService,
         private projectService: ProjectsService,
+        private userCacheService: UserCacheService,
         private notificationService: NotificationService,
     ) { }
 
@@ -121,7 +123,7 @@ export class MigrationService {
                 })
             );
             if (response.status == 303) {
-                await this.drizzleService.db.update(user).set({ existingPlanetUser: false}).where(eq(user.id, userData.id))
+                await this.drizzleService.db.update(user).set({ existingPlanetUser: false }).where(eq(user.id, userData.id))
                 await this.usersetvice.invalidateMyCache(userData)
                 return { existingPlanetUser: true, country: response.data.country, uid: response.data.id, locale: response.data.locale };
             } else {
@@ -177,15 +179,20 @@ export class MigrationService {
 
     async startUserMigration(
         planetId: string,
-        authToken: string
     ): Promise<void> {
         let userMigrationRecord;
         const [userData] = await this.drizzleService.db.select().from(user).where(eq(user.uid, planetId));
         if (!userData) {
             throw 'no user found'
         }
+        let authToken = await this.userCacheService.getUserByAuthMigration(userData.auth0Id);
+        if (!authToken) {
+            throw 'no user found'
+        }
+        if(typeof authToken!=='string'){
+            authToken = ''
+        }
         try {
-            console.log("Migration started")
             userMigrationRecord = await this.createMigrationRecord(userData.id, planetId);
             console.log("userMigrationRecord added", userMigrationRecord)
             if (userMigrationRecord.status === 'completed') {
