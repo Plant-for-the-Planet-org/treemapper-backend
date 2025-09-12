@@ -208,7 +208,6 @@ export class EmailService {
     try {
 
       const TEMPLATEDOC = selectedTempalte(templateName)
-      console.log("SCD",context)
       const compiledTemplate = handlebars.compile(TEMPLATEDOC);
       const html = compiledTemplate(context);
 
