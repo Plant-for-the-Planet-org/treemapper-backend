@@ -13,12 +13,12 @@ import {
     projectSpecies,
     projectMember,
     scientificSpecies,
-    FlagReasonEntry,
     tree,
     user,
     image,
     interventionSpecies,
 } from '../database/schema/index';
+import { FlagReasonEntry } from 'src/database/schema/type';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleService } from 'src/database/drizzle.service';
 import { generateUid } from 'src/util/uidGenerator';
