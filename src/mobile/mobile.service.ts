@@ -398,7 +398,7 @@ export class MobileService {
           name: userData.displayName,
           slug: userData.slug,
           type: userData.type,
-          v3Approved: userData.v3ApprovedAt
+          v3Approved: true
         }
       } else {
         return {
@@ -415,7 +415,7 @@ export class MobileService {
           name: userData.displayName,
           slug: userData.slug,
           type: existingPlanetUser.type,
-          v3Approved: userData.v3ApprovedAt
+          v3Approved: false
         }
       }
     } catch (error) {
@@ -620,7 +620,8 @@ export class MobileService {
   async createNewProject(createProjectData: CreateProjectRequest, userData: ExtendedUser): Promise<CreateProjectResponse> {
     const { name, workspaceType, projectType, target } = createProjectData;
     const { id: userId, primaryProjectUid } = userData;
-    const workspaceData = await this.drizzleService.db.select({ id: workspace.id, uid: workspace.uid }).from(workspace).where(eq(workspace.slug, workspaceType)).limit(1)
+    console.log('Creating project in workspace type:', name, workspaceType, projectType, target);
+    const workspaceData = await this.drizzleService.db.select({ id: workspace.id, uid: workspace.uid }).from(workspace).where(eq(workspace.slug, 'private-projects')).limit(1)
     if (!workspaceData || workspaceData.length === 0) {
       throw 'Server side workspace issue'
     }
@@ -677,7 +678,7 @@ export class MobileService {
             slug: uniqueSlug,
             name: name.trim(),
             type: projectType || null,
-            target: target || null,
+            target: target? target : null,
             isActive: true,
             isPublic: true,
             isPrimary: false,
