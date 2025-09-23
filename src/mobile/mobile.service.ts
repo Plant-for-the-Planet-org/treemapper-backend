@@ -6,19 +6,119 @@ import { DrizzleService } from '../database/drizzle.service';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { CaptureStatus } from 'src/interventions/interventions.service';
-import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies, notifications, migrationRequest } from 'src/database/schema';
+import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies, notifications, migrationRequest, treeRecord } from 'src/database/schema';
 import { booleanValid } from '@turf/boolean-valid';
 import { getType } from '@turf/invariant';
 import { ExtendedUser, User } from 'src/users/entities/user.entity';
 import { MigrationService } from 'src/migrate/migrate.service';
 import { WorkspaceService } from 'src/workspace/workspace.service';
 import { boolean } from 'drizzle-orm/gel-core';
-import { async } from 'rxjs';
+import { async, skip } from 'rxjs';
 import { UserCacheService } from 'src/cache/user-cache.service'
 import { EmailService } from 'src/email/email.service';
 
+export interface RemeasurementDto {
+  tree: string; // Tree UID
+  type: 'measurement' | 'status';
+  
+  // For measurement type
+  height?: number;
+  width?: number;
+  
+  // For status type
+  status?: 'dead' | 'alive' | 'unknown' | 'removed' | 'sick';
+  statusReason?: string;
+  
+  // Common fields
+  eventDate?: string | Date;
+  metadata?: any;
+}
 
+export interface InterventionResponseItem {
+  nextMeasurementDate: null;
+  hid: string;
+  metadata: any;
+  scientificName: string | null;
+  sampleInterventions: SampleIntervention[];
+  description: null;
+  otherSpecies: string | null;
+  geometryUpdatesCount: 0;
+  type: string;
+  interventionEndDate: string;
+  plantProjectSite: string | null;
+  statusReason: null;
+  registrationDate: string;
+  sampleTreeCount: number | null;
+  id: string;
+  tag: string | null;
+  plantDate: string | null;
+  measurements: { width: number; height: number } | null;
+  interventionStartDate: string;
+  idempotencyKey: string;
+  coordinates: any[];
+  scientificSpecies: string | null;
+  history: any[];
+  plantProject: string;
+  plantedSpecies: PlantedSpecies[];
+  originalGeometry: any;
+  captureMode: string;
+  geometry: any;
+  lastMeasurementDate: null;
+  captureStatus: string;
+  deviceLocation: any;
+  status: null;
+}
 
+export interface SampleIntervention {
+  nextMeasurementDate: null;
+  parent: string;
+  hid: string;
+  metadata: any;
+  scientificName: string | null;
+  sampleInterventions: any[];
+  description: null;
+  otherSpecies: string | null;
+  geometryUpdatesCount: 0;
+  type: string;
+  interventionEndDate: string;
+  plantProjectSite: string | null;
+  statusReason: null;
+  registrationDate: string;
+  sampleTreeCount: null;
+  id: string;
+  tag: string | null;
+  plantDate: string | null;
+  measurements: { width: number; height: number } | null;
+  interventionStartDate: string;
+  idempotencyKey: string;
+  profile: string;
+  coordinates: any[];
+  scientificSpecies: string | null;
+  history: any[];
+  plantProject: string;
+  plantedSpecies: any[];
+  originalGeometry: any;
+  captureMode: string;
+  geometry: any;
+  lastMeasurementDate: string | null;
+  captureStatus: string;
+  deviceLocation: any;
+  status: null;
+}
+
+export interface PlantedSpecies {
+  scientificName: string | null;
+  created: string;
+  otherSpecies: string | null;
+  scientificSpecies: string | null;
+  treeCount: number;
+  id: string;
+  updated: string;
+}
+
+export interface GetInterventionsResponse {
+  items: InterventionResponseItem[];
+}
 
 interface FavoriteProjectSpeciesResponse {
   id: number;
@@ -349,7 +449,7 @@ export class MobileService {
         userId: userData.id,
       })
       await this.userCacheService.setUserByAuthMigration(token, userData.auth0Id)
-      await this.emailService.sendMigrationRequestEmail({ memberEmail: userData.email, memberId: userData.uid, memberName: userData.displayName, memberType: userData.type , token})
+      await this.emailService.sendMigrationRequestEmail({ memberEmail: userData.email, memberId: userData.uid, memberName: userData.displayName, memberType: userData.type, token })
     } catch (error) {
       return null
     }
@@ -678,7 +778,7 @@ export class MobileService {
             slug: uniqueSlug,
             name: name.trim(),
             type: projectType || null,
-            target: target? target : null,
+            target: target ? target : null,
             isActive: true,
             isPublic: true,
             isPrimary: false,
@@ -1237,7 +1337,6 @@ export class MobileService {
       const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
       let flag = false;
       let flagReason: any[] = []
-
       const tranformedSpecies = await this.transformSpecies(createInterventionDto)
       const totalCount = tranformedSpecies.reduce((total, item) => total + item.speciesCount, 0);
       if (tranformedSpecies.length === 0) {
@@ -1262,12 +1361,10 @@ export class MobileService {
         if (existingParent.length === 0) {
           throw new Error('No Parent found');
         }
-
         let sampleSpeciesData = {
           id: 0,
           name: 'Unknown'
         }
-        console.log("SDC",tranformedSpecies)
         if (tranformedSpecies[0].isUnknown) {
           const interventionSpeciesData = await this.drizzleService.db
             .select()
@@ -1289,7 +1386,7 @@ export class MobileService {
           if (!existingParent || existingParent.length === 0) {
             throw ''
           } else {
-            console.log("SDC","SDC",interventionSpeciesData)
+            console.log("SDC", "SDC", interventionSpeciesData)
             sampleSpeciesData.id = interventionSpeciesData[0].id
             sampleSpeciesData.name = interventionSpeciesData[0].speciesName || ''
           }
@@ -1423,6 +1520,541 @@ export class MobileService {
       throw new BadRequestException(`Failed to create intervention: ${error.message}`);
     }
   }
+
+async doRemeasurement(
+    remeasurementDTO: RemeasurementDto, 
+    membership: number
+  ): Promise<any> {
+    try {
+      // Validate DTO
+      this.validateRemeasurementDto(remeasurementDTO);
+
+      // Generate UID for tree record
+      const treeRecordUid = generateUid('treerec');
+      
+      // Get tree details
+      const treeDetails = await this.drizzleService.db
+        .select()
+        .from(tree)
+        .where(eq(tree.uid, remeasurementDTO.tree))
+        .limit(1);
+
+      if (treeDetails.length === 0) {
+        throw new NotFoundException('Tree not found');
+      }
+
+      const currentTree = treeDetails[0];
+      const recordedAt = remeasurementDTO.eventDate 
+        ? new Date(remeasurementDTO.eventDate) 
+        : new Date();
+
+      if (remeasurementDTO.type === 'measurement') {
+        return await this.handleMeasurementRecord(
+          currentTree,
+          remeasurementDTO,
+          membership,
+          treeRecordUid,
+          recordedAt
+        );
+      } else if (remeasurementDTO.type === 'status') {
+        return await this.handleStatusRecord(
+          currentTree,
+          remeasurementDTO,
+          membership,
+          treeRecordUid,
+          recordedAt
+        );
+      }
+
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`Failed to process remeasurement: ${error.message}`);
+    }
+  }
+
+  private async handleMeasurementRecord(
+    currentTree: any,
+    remeasurementDTO: RemeasurementDto,
+    membership: number,
+    treeRecordUid: string,
+    recordedAt: Date
+  ) {
+    // Create tree record for measurement
+    const newTreeRecord = {
+      uid: treeRecordUid,
+      treeId: currentTree.id,
+      recordedById: membership,
+      recordType: 'measurement' as const,
+      recordedAt: recordedAt,
+      height: remeasurementDTO.height || null,
+      width: remeasurementDTO.width || null,
+      metadata: remeasurementDTO.metadata || null,
+    };
+
+    // Insert tree record
+    const insertedRecord = await this.drizzleService.db
+      .insert(treeRecord)
+      .values(newTreeRecord)
+      .returning();
+
+    // Update tree table with new measurements
+    const treeUpdateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (remeasurementDTO.height !== undefined) {
+      treeUpdateData.currentHeight = remeasurementDTO.height;
+    }
+    if (remeasurementDTO.width !== undefined) {
+      treeUpdateData.currentWidth = remeasurementDTO.width;
+    }
+
+    const updatedTree = await this.drizzleService.db
+      .update(tree)
+      .set(treeUpdateData)
+      .where(eq(tree.id, currentTree.id))
+      .returning();
+
+    return {
+      success: true,
+      message: 'Tree measurement recorded successfully',
+      treeRecord: insertedRecord[0],
+      updatedTree: updatedTree[0],
+    };
+  }
+
+  private async handleStatusRecord(
+    currentTree: any,
+    remeasurementDTO: RemeasurementDto,
+    membership: number,
+    treeRecordUid: string,
+    recordedAt: Date
+  ) {
+    // Create tree record for status change
+    const newTreeRecord = {
+      uid: treeRecordUid,
+      treeId: currentTree.id,
+      recordedById: membership,
+      recordType: 'status_change' as const,
+      recordedAt: recordedAt,
+      previousStatus: currentTree.status,
+      newStatus: remeasurementDTO.status,
+      statusReason: remeasurementDTO.statusReason || null,
+      metadata: remeasurementDTO.metadata || null,
+    };
+
+    // Insert tree record
+    const insertedRecord = await this.drizzleService.db
+      .insert(treeRecord)
+      .values(newTreeRecord)
+      .returning();
+
+    // Update tree table with new status
+    const treeUpdateData: any = {
+      status: remeasurementDTO.status,
+      statusReason: remeasurementDTO.statusReason || null,
+      statusChangedAt: recordedAt,
+      updatedAt: new Date(),
+    };
+
+    const updatedTree = await this.drizzleService.db
+      .update(tree)
+      .set(treeUpdateData)
+      .where(eq(tree.id, currentTree.id))
+      .returning();
+
+    return {
+      success: true,
+      message: `Tree status updated to ${remeasurementDTO.status} successfully`,
+      treeRecord: insertedRecord[0],
+      updatedTree: updatedTree[0],
+    };
+  }
+
+  private validateRemeasurementDto(dto: RemeasurementDto): void {
+    if (!dto.tree) {
+      throw new BadRequestException('Tree UID is required');
+    }
+
+    if (!dto.type || !['measurement', 'status'].includes(dto.type)) {
+      throw new BadRequestException('Type must be either "measurement" or "status"');
+    }
+
+    if (dto.type === 'measurement') {
+      // Validate measurement data
+      if (dto.height === undefined && dto.width === undefined) {
+        throw new BadRequestException('At least height or width must be provided for measurement');
+      }
+
+      if (dto.height !== undefined) {
+        if (typeof dto.height !== 'number' || dto.height < 0) {
+          throw new BadRequestException('Height must be a positive number');
+        }
+        if (dto.height > 1000) { // Reasonable upper limit for tree height in meters
+          throw new BadRequestException('Height seems unreasonably large (max 1000m)');
+        }
+      }
+
+      if (dto.width !== undefined) {
+        if (typeof dto.width !== 'number' || dto.width < 0) {
+          throw new BadRequestException('Width must be a positive number');
+        }
+        if (dto.width > 100) { // Reasonable upper limit for tree width in meters
+          throw new BadRequestException('Width seems unreasonably large (max 100m)');
+        }
+      }
+    }
+
+    if (dto.type === 'status') {
+      // Validate status data
+      if (!dto.status) {
+        throw new BadRequestException('Status is required for status type');
+      }
+
+      const validStatuses = ['dead', 'alive', 'unknown', 'removed', 'sick'];
+      if (!validStatuses.includes(dto.status)) {
+        throw new BadRequestException(`Status must be one of: ${validStatuses.join(', ')}`);
+      }
+
+      if (dto.status === 'dead' && !dto.statusReason) {
+        throw new BadRequestException('Status reason is required when marking tree as dead');
+      }
+    }
+
+    // Validate eventDate if provided
+    if (dto.eventDate) {
+      const eventDate = new Date(dto.eventDate);
+      if (isNaN(eventDate.getTime())) {
+        throw new BadRequestException('Invalid event date format');
+      }
+      
+      // Don't allow future dates
+      if (eventDate > new Date()) {
+        throw new BadRequestException('Event date cannot be in the future');
+      }
+    }
+  }
+
+
+
+  async getProjectIntervention(mid: number, page, pageSize): Promise<any> {
+    const skip = (page - 1) * pageSize;
+    // Get interventions with all related data
+    const interventions = await this.drizzleService.db
+      .select({
+        // Intervention fields
+        intervention_uid: intervention.uid,
+        intervention_hid: intervention.hid,
+        intervention_metadata: {},
+        intervention_type: intervention.type,
+        intervention_start_date: intervention.interventionStartDate,
+        intervention_end_date: intervention.interventionEndDate,
+        intervention_registration_date: intervention.registrationDate,
+        intervention_sample_tree_count: intervention.totalSampleTreeCount,
+        intervention_idempotency_key: intervention.idempotencyKey,
+        intervention_original_geometry: intervention.originalGeometry,
+        intervention_capture_mode: intervention.captureMode,
+        intervention_capture_status: intervention.captureStatus,
+        intervention_device_location: intervention.deviceLocation,
+        intervention_created_at: intervention.createdAt,
+
+        // Project fields
+        project_uid: project.uid,
+
+        // Site fields (optional)
+        site_uid: site.uid,
+
+        // For single tree interventions - tree data
+        tree_uid: tree.uid,
+        tree_hid: tree.hid,
+        tree_tag: tree.tag,
+        tree_planting_date: tree.plantingDate,
+        tree_current_height: tree.currentHeight,
+        tree_current_width: tree.currentWidth,
+        tree_metadata: {},
+
+        // For single tree interventions - intervention species data
+        intervention_species_uid: interventionSpecies.uid,
+        intervention_species_is_unknown: interventionSpecies.isUnknown,
+        intervention_species_species_name: interventionSpecies.speciesName,
+        intervention_species_created_at: interventionSpecies.createdAt,
+        intervention_species_updated_at: interventionSpecies.updatedAt,
+        intervention_species_count: interventionSpecies.speciesCount,
+
+        // Scientific species data (for single tree)
+        scientific_species_uid: scientificSpecies.uid,
+        scientific_species_scientific_name: scientificSpecies.scientificName,
+      })
+      .from(intervention)
+      .innerJoin(project, eq(intervention.projectId, project.id))
+      .leftJoin(site, eq(intervention.siteId, site.id))
+      .leftJoin(
+        interventionSpecies,
+        and(
+          eq(interventionSpecies.interventionId, intervention.id),
+          isNull(interventionSpecies.deletedAt)
+        )
+      )
+      .leftJoin(
+        tree,
+        and(
+          eq(tree.interventionId, intervention.id),
+          eq(tree.treeType, 'single'), // Only join single trees for main intervention
+          isNull(tree.deletedAt)
+        )
+      )
+      .leftJoin(
+        scientificSpecies,
+        eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id)
+      )
+      .where(
+        and(
+          eq(intervention.userId, mid),
+          isNull(intervention.deletedAt)
+        )
+      )
+      .orderBy(desc(intervention.createdAt))
+      .limit(pageSize)
+      .offset(skip);
+
+    const items: InterventionResponseItem[] = [];
+
+    for (const row of interventions) {
+      // Get planted species for this intervention
+      const plantedSpeciesData = await this.getPlantedSpecies(row.intervention_uid);
+
+      // Get sample interventions for multi-tree and enrichment-planting
+      const sampleInterventions = await this.getSampleInterventions(
+        row.intervention_uid,
+        row.intervention_type,
+        row.intervention_metadata
+      );
+
+      const item: InterventionResponseItem = {
+        nextMeasurementDate: null,
+        hid: row.intervention_hid,
+        metadata: row.intervention_metadata || {},
+        scientificName: this.getScientificName(row),
+        sampleInterventions,
+        description: null,
+        otherSpecies: this.getOtherSpecies(row),
+        geometryUpdatesCount: 0,
+        type: row.intervention_type,
+        interventionEndDate: this.formatDate(row.intervention_end_date),
+        plantProjectSite: row.site_uid || null,
+        statusReason: null,
+        registrationDate: this.formatDate(row.intervention_registration_date),
+        sampleTreeCount: row.intervention_sample_tree_count,
+        id: row.intervention_uid,
+        tag: this.getTag(row),
+        plantDate: this.getPlantDate(row),
+        measurements: this.getMeasurements(row),
+        interventionStartDate: this.formatDate(row.intervention_start_date),
+        idempotencyKey: row.intervention_idempotency_key,
+        coordinates: [], // Always empty array
+        scientificSpecies: this.getScientificSpeciesUid(row),
+        history: [], // Always empty array
+        plantProject: row.project_uid,
+        plantedSpecies: plantedSpeciesData,
+        originalGeometry: row.intervention_original_geometry,
+        captureMode: row.intervention_capture_mode,
+        geometry: row.intervention_original_geometry, // Same as originalGeometry
+        lastMeasurementDate: null,
+        captureStatus: row.intervention_capture_status,
+        deviceLocation: row.intervention_device_location,
+        status: null,
+      };
+
+      items.push(item);
+    }
+
+    return { items };
+  }
+
+  private async getPlantedSpecies(interventionUid: string): Promise<PlantedSpecies[]> {
+    const species = await this.drizzleService.db
+      .select({
+        uid: interventionSpecies.uid,
+        species_name: interventionSpecies.speciesName,
+        is_unknown: interventionSpecies.isUnknown,
+        species_count: interventionSpecies.speciesCount,
+        created_at: interventionSpecies.createdAt,
+        updated_at: interventionSpecies.updatedAt,
+        scientific_species_uid: scientificSpecies.uid,
+        scientific_name: scientificSpecies.scientificName,
+      })
+      .from(interventionSpecies)
+      .innerJoin(intervention, eq(interventionSpecies.interventionId, intervention.id))
+      .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
+      .where(
+        and(
+          eq(intervention.uid, interventionUid),
+          isNull(interventionSpecies.deletedAt)
+        )
+      );
+
+    return species.map(s => ({
+      scientificName: s.scientific_name,
+      created: this.formatDate(s.created_at),
+      otherSpecies: s.is_unknown ? 'Unknown' : null,
+      scientificSpecies: s.scientific_species_uid,
+      treeCount: s.species_count,
+      id: s.uid,
+      updated: this.formatDate(s.updated_at),
+    }));
+  }
+
+  private async getSampleInterventions(
+    interventionUid: string,
+    interventionType: string,
+    parentMetadata: any
+  ): Promise<SampleIntervention[]> {
+    // Only return sample interventions for multi-tree-registration and enrichment-planting
+    if (!['multi-tree-registration', 'enrichment-planting'].includes(interventionType)) {
+      return [];
+    }
+
+    const sampleTrees = await this.drizzleService.db
+      .select({
+        tree_uid: tree.uid,
+        tree_hid: tree.hid,
+        tree_tag: tree.tag,
+        tree_current_height: tree.currentHeight,
+        tree_current_width: tree.currentWidth,
+        tree_planting_date: tree.plantingDate,
+        tree_original_geometry: tree.originalGeometry,
+        tree_created_at: tree.createdAt,
+
+        intervention_uid: intervention.uid,
+        intervention_start_date: intervention.interventionStartDate,
+        intervention_end_date: intervention.interventionEndDate,
+        intervention_registration_date: intervention.registrationDate,
+        intervention_idempotency_key: intervention.idempotencyKey,
+        intervention_capture_mode: intervention.captureMode,
+        intervention_capture_status: intervention.captureStatus,
+        intervention_device_location: intervention.deviceLocation,
+
+        project_uid: project.uid,
+        site_uid: site.uid,
+
+        intervention_species_uid: interventionSpecies.uid,
+        intervention_species_is_unknown: interventionSpecies.isUnknown,
+        intervention_species_species_name: interventionSpecies.speciesName,
+
+        scientific_species_uid: scientificSpecies.uid,
+        scientific_species_scientific_name: scientificSpecies.scientificName,
+      })
+      .from(tree)
+      .innerJoin(intervention, eq(tree.interventionId, intervention.id))
+      .innerJoin(project, eq(intervention.projectId, project.id))
+      .leftJoin(site, eq(intervention.siteId, site.id))
+      .leftJoin(interventionSpecies, eq(tree.interventionSpeciesId, interventionSpecies.id))
+      .leftJoin(scientificSpecies, eq(interventionSpecies.scientificSpeciesId, scientificSpecies.id))
+      .where(
+        and(
+          eq(intervention.uid, interventionUid),
+          eq(tree.treeType, 'sample'), // Only sample trees
+          isNull(tree.deletedAt)
+        )
+      );
+
+    return sampleTrees.map(row => ({
+      nextMeasurementDate: null,
+      parent: interventionUid,
+      hid: row.tree_hid,
+      metadata: parentMetadata || {}, // Use parent intervention's metadata
+      scientificName: row.scientific_species_scientific_name,
+      sampleInterventions: [], // Always empty for sample interventions
+      description: null,
+      otherSpecies: row.intervention_species_is_unknown ? 'Unknown' : null,
+      geometryUpdatesCount: 0,
+      type: 'sample-tree-registration',
+      interventionEndDate: this.formatDate(row.intervention_end_date),
+      plantProjectSite: row.site_uid,
+      statusReason: null,
+      registrationDate: this.formatDate(row.intervention_registration_date),
+      sampleTreeCount: null,
+      id: row.tree_uid,
+      tag: row.tree_tag,
+      plantDate: this.formatDate(row.tree_planting_date),
+      measurements: {
+        width: row.tree_current_width || 0,
+        height: row.tree_current_height || 0,
+      },
+      interventionStartDate: this.formatDate(row.intervention_start_date),
+      idempotencyKey: row.intervention_idempotency_key,
+      profile: "tpo_gEZeQNxNhxZZ54zvYzCofsCr", // This seems to be hardcoded in your example
+      coordinates: [], // Always empty
+      scientificSpecies: row.scientific_species_uid,
+      history: [], // Always empty
+      plantProject: row.project_uid,
+      plantedSpecies: [], // Always empty for sample interventions
+      originalGeometry: row.tree_original_geometry,
+      captureMode: row.intervention_capture_mode,
+      geometry: row.tree_original_geometry, // Same as originalGeometry
+      lastMeasurementDate: null, // Using planting date as last measurement
+      captureStatus: row.intervention_capture_status,
+      deviceLocation: row.intervention_device_location,
+      status: null,
+    }));
+  }
+
+
+
+
+  private getScientificName(row: any): string | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return row.scientific_species_scientific_name || null;
+    }
+    return null;
+  }
+
+  private getOtherSpecies(row: any): string | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return row.intervention_species_is_unknown ? 'Unknown' : null;
+    }
+    return null;
+  }
+
+  private getTag(row: any): string | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return row.tree_tag || null;
+    }
+    return null;
+  }
+
+  private getPlantDate(row: any): string | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return this.formatDate(row.intervention_start_date);
+    }
+    return null;
+  }
+
+  private getMeasurements(row: any): { width: number; height: number } | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return {
+        width: row.tree_current_width || 0,
+        height: row.tree_current_height || 0,
+      };
+    }
+    return null;
+  }
+
+  private getScientificSpeciesUid(row: any): string | null {
+    if (row.intervention_type === 'single-tree-registration') {
+      return row.scientific_species_uid || null;
+    }
+    return null;
+  }
+
+  private formatDate(date: Date | string | null): string {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
 
   transformSpecies = async (d: any) => {
     try {

@@ -5,7 +5,9 @@ import {
   Body,
   UseGuards,
   Req,
-  Headers, Put
+  Headers, Put,
+  Query,
+  Param
 } from '@nestjs/common';
 import { ProjectRoles } from './decorators/project-roles.decorator';
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard';
@@ -35,6 +37,7 @@ export class MobileController {
   ): Promise<any> {
     return this.appservice.getUserDetails(userData, authorization)
   }
+
 
 
   @Post('user/profile')
@@ -72,6 +75,7 @@ export class MobileController {
     return this.appservice.createNewSite(createInterventionDto, membership.userId);
   }
 
+
   @Post('project/:id/intervention')
   @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
@@ -80,6 +84,15 @@ export class MobileController {
     @Membership() membership: any
   ): Promise<InterventionResponseDto> {
     return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
+  }
+
+  @Get('project/interventions')
+  async getProjectIntervention(
+    @Req() req: any,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '4',
+  ): Promise<InterventionResponseDto> {
+    return this.appservice.getProjectIntervention(req.user.id, page, limit);
   }
 
 
@@ -102,6 +115,18 @@ export class MobileController {
     return await this.appservice.getFavoriteSpeciesInProject(membership.projectId);
   }
 
+  @Put('/intervention/:treeid/remeasure')
+  async doRemeasurement(
+    @Body() remeasurementDTo: any,
+    @Param('treeid') treeId: string,
+    @Req() req: any,
+  ): Promise<InterventionResponseDto> {
+    const updatedDto = {
+      ...remeasurementDTo,
+      tree: treeId
+    };
+    return this.appservice.doRemeasurement(updatedDto, req.user.id);
+  }
 
 
   @Post('request/features')
