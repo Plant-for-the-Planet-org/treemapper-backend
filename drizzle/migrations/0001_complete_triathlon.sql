@@ -1,1 +1,0 @@
-ALTER TABLE "tree" DROP COLUMN "original_geometry";

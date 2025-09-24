@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1758647743507,
-      "tag": "0000_simple_mephistopheles",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1758650990473,
-      "tag": "0001_complete_triathlon",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1758653817991,
-      "tag": "0002_salty_dark_beast",
+      "when": 1758706680812,
+      "tag": "0000_warm_maximus",
       "breakpoints": true
     }
   ]

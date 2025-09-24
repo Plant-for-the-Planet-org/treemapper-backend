@@ -973,8 +973,6 @@ export const tree = pgTable('tree', {
   healthMonitoringIdx: index('tree_health_monitoring_idx')
     .on(table.currentHealthScore, table.lastMeasurementDate)
     .where(sql`current_health_score IS NOT NULL AND deleted_at IS NULL`),
-  heightWidthPositive: check('height_width_positive',
-    sql`(current_height IS NULL OR current_height >= 0) AND (current_width IS NULL OR current_width >= 0)`),
   altitudeRange: check('altitude_range',
     sql`altitude IS NULL OR (altitude >= -500 AND altitude <= 9000)`),
   accuracyPositive: check('accuracy_positive', sql`accuracy IS NULL OR accuracy >= 0`),

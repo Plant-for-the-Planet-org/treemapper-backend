@@ -318,13 +318,13 @@ export class MobileService {
     }
 
     // Use Turf to validate the geometry
-    try {
-      if (!booleanValid(geometry)) {
-        throw new BadRequestException('Invalid geometry: geometry does not meet GeoJSON specification requirements.');
-      }
-    } catch (error) {
-      throw new BadRequestException(`Geometry validation failed: ${error.message}`);
-    }
+    // try {
+    //   if (!booleanValid(geometry)) {
+    //     throw new BadRequestException('Invalid geometry: geometry does not meet GeoJSON specification requirements.');
+    //   }
+    // } catch (error) {
+    //   throw new BadRequestException(`Geometry validation failed: ${error.message}`);
+    // }
 
     // Additional validation for specific geometry types
     if (geometryType === 'Point') {
@@ -1466,6 +1466,7 @@ export class MobileService {
           location: locationValue,
           latitude: latlongDetails.latitude,
           longitude: latlongDetails.longitude,
+          originalGeometry: createInterventionDto.geometry,
           height: createInterventionDto.measurements.height,
           width: createInterventionDto.measurements.width,
           plantingDate: new Date(createInterventionDto.interventionStartDate),
@@ -1795,14 +1796,15 @@ export class MobileService {
 
 
   async getProjectIntervention(mid: number, page, pageSize): Promise<any> {
-    const skip = (page - 1) * pageSize;
-    // Get interventions with all related data
+    const parsedPage = parseInt(page, 10) || 1;
+    const parsedPageSize = parseInt(pageSize, 10) || 4;
+    const skip = (parsedPage - 1) * parsedPageSize;
+    console.log("This is page and pageSize", parsedPage, parsedPageSize, skip)
     const interventions = await this.drizzleService.db
       .select({
-        // Intervention fields
         intervention_uid: intervention.uid,
         intervention_hid: intervention.hid,
-        intervention_metadata: {},
+        intervention_metadata: intervention.metadata,
         intervention_type: intervention.type,
         intervention_start_date: intervention.interventionStartDate,
         intervention_end_date: intervention.interventionEndDate,
@@ -1814,14 +1816,8 @@ export class MobileService {
         intervention_capture_status: intervention.captureStatus,
         intervention_device_location: intervention.deviceLocation,
         intervention_created_at: intervention.createdAt,
-
-        // Project fields
         project_uid: project.uid,
-
-        // Site fields (optional)
         site_uid: site.uid,
-
-        // For single tree interventions - tree data
         tree_uid: tree.uid,
         tree_hid: tree.hid,
         tree_tag: tree.tag,
@@ -1829,16 +1825,12 @@ export class MobileService {
         tree_current_height: tree.height,
         tree_current_width: tree.width,
         tree_metadata: {},
-
-        // For single tree interventions - intervention species data
         intervention_species_uid: interventionSpecies.uid,
         intervention_species_is_unknown: interventionSpecies.isUnknown,
         intervention_species_species_name: interventionSpecies.speciesName,
         intervention_species_created_at: interventionSpecies.createdAt,
         intervention_species_updated_at: interventionSpecies.updatedAt,
         intervention_species_count: interventionSpecies.speciesCount,
-
-        // Scientific species data (for single tree)
         scientific_species_uid: scientificSpecies.uid,
         scientific_species_scientific_name: scientificSpecies.scientificName,
       })
@@ -1871,7 +1863,7 @@ export class MobileService {
         )
       )
       .orderBy(desc(intervention.createdAt))
-      .limit(pageSize)
+      .limit(parsedPageSize)
       .offset(skip);
 
     const items: InterventionResponseItem[] = [];
@@ -1908,7 +1900,7 @@ export class MobileService {
         measurements: this.getMeasurements(row),
         interventionStartDate: this.formatDate(row.intervention_start_date),
         idempotencyKey: row.intervention_idempotency_key,
-        coordinates: [], // Always empty array
+        coordinates: [{ image: '' }],
         scientificSpecies: this.getScientificSpeciesUid(row),
         history: [], // Always empty array
         plantProject: row.project_uid,
@@ -1981,7 +1973,7 @@ export class MobileService {
         tree_planting_date: tree.plantingDate,
         tree_original_geometry: tree.originalGeometry,
         tree_created_at: tree.createdAt,
-
+        tree_image: tree.image,
         intervention_uid: intervention.uid,
         intervention_start_date: intervention.interventionStartDate,
         intervention_end_date: intervention.interventionEndDate,
@@ -2040,8 +2032,8 @@ export class MobileService {
       },
       interventionStartDate: this.formatDate(row.intervention_start_date),
       idempotencyKey: row.intervention_idempotency_key,
-      profile: "tpo_gEZeQNxNhxZZ54zvYzCofsCr", // This seems to be hardcoded in your example
-      coordinates: [], // Always empty
+      profile: '',
+      coordinates: [{ image: row.tree_image }], // Always empty
       scientificSpecies: row.scientific_species_uid,
       history: [], // Always empty
       plantProject: row.project_uid,

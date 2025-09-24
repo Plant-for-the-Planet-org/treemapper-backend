@@ -92,6 +92,7 @@ export class MobileController {
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '4',
   ): Promise<InterventionResponseDto> {
+    
     return this.appservice.getProjectIntervention(req.user.id, page, limit);
   }
 

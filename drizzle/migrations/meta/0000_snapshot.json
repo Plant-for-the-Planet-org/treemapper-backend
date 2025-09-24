@@ -1,5 +1,5 @@
 {
-  "id": "42e8832f-879b-4429-92d2-8aba7d8e2eeb",
+  "id": "45476e43-a18b-4a9b-a41b-59d89777d9d2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -4433,14 +4433,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "current_height": {
-          "name": "current_height",
+        "height": {
+          "name": "height",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
         },
-        "current_width": {
-          "name": "current_width",
+        "width": {
+          "name": "width",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
@@ -4713,10 +4713,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "height_width_positive": {
-          "name": "height_width_positive",
-          "value": "(current_height IS NULL OR current_height >= 0) AND (current_width IS NULL OR current_width >= 0)"
-        },
         "altitude_range": {
           "name": "altitude_range",
           "value": "altitude IS NULL OR (altitude >= -500 AND altitude <= 9000)"
