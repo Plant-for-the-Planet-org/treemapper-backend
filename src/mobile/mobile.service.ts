@@ -6,7 +6,7 @@ import { DrizzleService } from '../database/drizzle.service';
 import { ProjectGuardResponse } from 'src/projects/projects.service';
 import { generateParentHID } from 'src/util/hidGenerator';
 import { CaptureStatus } from 'src/interventions/interventions.service';
-import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies, notifications, migrationRequest, treeRecord } from 'src/database/schema';
+import { project, projectMember, workspace, site, scientificSpecies, intervention, tree, interventionSpecies, user, auditLog, workspaceMember, projectSpecies, notifications, migrationRequest, treeRecord, image } from 'src/database/schema';
 import { booleanValid } from '@turf/boolean-valid';
 import { getType } from '@turf/invariant';
 import { ExtendedUser, User } from 'src/users/entities/user.entity';
@@ -20,15 +20,15 @@ import { EmailService } from 'src/email/email.service';
 export interface RemeasurementDto {
   tree: string; // Tree UID
   type: 'measurement' | 'status';
-  
+
   // For measurement type
   height?: number;
   width?: number;
-  
+
   // For status type
   status?: 'dead' | 'alive' | 'unknown' | 'removed' | 'sick';
   statusReason?: string;
-  
+
   // Common fields
   eventDate?: string | Date;
   metadata?: any;
@@ -522,6 +522,53 @@ export class MobileService {
       throw ''
     }
   }
+
+  async updateInterventionImage(imageData: any, userData: User): Promise<boolean> {
+    try {
+      const treeResult = await this.drizzleService.db
+        .select({
+          id: tree.id,
+          interventionId: tree.interventionId,
+          ownerId: intervention.userId,
+        })
+        .from(tree)
+        .innerJoin(intervention, eq(tree.interventionId, intervention.id))
+        .where(eq(tree.uid, imageData.treeUid))
+        .limit(1);
+
+      if (treeResult.length === 0) {
+        throw new BadRequestException('Tree not found or access denied');
+      }
+
+      if (treeResult[0].ownerId !== userData.id) {
+        throw new BadRequestException('access denied');
+      }
+
+      return await this.drizzleService.db.transaction(async (tx) => {
+
+        await tx.insert(image).values({
+          uid: generateUid('img'),
+          entityId: treeResult[0].id,
+          entityType: 'tree' as const,
+          type: imageData.type || 'overview',
+          filename: imageData.filename,
+          mimeType: imageData.mimeType,
+          deviceType: 'mobile' as const,
+          uploadedById: userData.id
+        }).returning();
+
+        await tx.update(tree)
+          .set({ image: imageData.filename })
+          .where(eq(tree.id, treeResult[0].id));
+        return true;
+      });
+    } catch (error) {
+      console.log(error)
+      return false;
+    }
+  }
+
+
 
 
   async updateUserDetails(userBody: any, userData: User): Promise<any> {
@@ -1320,6 +1367,7 @@ export class MobileService {
 
   async createNewInterventionMobile(createInterventionDto: any, membership: ProjectGuardResponse): Promise<any> {
     try {
+      console.log("This is createInterventionDto", createInterventionDto)
       let newHID = generateParentHID();
       let siteId: null | number = null;
       if (createInterventionDto.plantProjectSite) {
@@ -1334,6 +1382,11 @@ export class MobileService {
         siteId = siteData[0].id;
       }
       const geometry = this.getGeoJSONForPostGIS(createInterventionDto.geometry);
+
+      console.log("This is orignal geometry", createInterventionDto.geometry)
+      console.log("This is geometry", geometry)
+      console.log("This is type of ", typeof createInterventionDto.geometry)
+
       const locationValue = sql`ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geometry)}), 4326)`;
       let flag = false;
       let flagReason: any[] = []
@@ -1351,7 +1404,6 @@ export class MobileService {
           createdAt: new Date(),
         }]
       }
-      const uid = generateUid('inv');
       if (createInterventionDto.type === 'sample-tree-registration') {
         const existingParent = await this.drizzleService.db
           .select()
@@ -1363,7 +1415,8 @@ export class MobileService {
         }
         let sampleSpeciesData = {
           id: 0,
-          name: 'Unknown'
+          name: 'Unknown',
+          isUnknown: false
         }
         if (tranformedSpecies[0].isUnknown) {
           const interventionSpeciesData = await this.drizzleService.db
@@ -1371,11 +1424,12 @@ export class MobileService {
             .from(interventionSpecies)
             .where(eq(interventionSpecies.isUnknown, true))
             .limit(1);
-          if (!existingParent || existingParent.length === 0) {
+          if (!interventionSpeciesData || interventionSpeciesData.length === 0) {
             throw ''
           } else {
             sampleSpeciesData.id = interventionSpeciesData[0].id
             sampleSpeciesData.name = interventionSpeciesData[0].speciesName || ''
+            sampleSpeciesData.isUnknown = true
           }
         } else {
           const interventionSpeciesData = await this.drizzleService.db
@@ -1383,12 +1437,12 @@ export class MobileService {
             .from(interventionSpecies)
             .where(eq(interventionSpecies.scientificSpeciesId, tranformedSpecies[0].scientificSpeciesId))
             .limit(1);
-          if (!existingParent || existingParent.length === 0) {
+          if (!interventionSpeciesData || interventionSpeciesData.length === 0) {
             throw ''
           } else {
-            console.log("SDC", "SDC", interventionSpeciesData)
             sampleSpeciesData.id = interventionSpeciesData[0].id
             sampleSpeciesData.name = interventionSpeciesData[0].speciesName || ''
+            sampleSpeciesData.isUnknown = false
           }
         }
         const latlongDetails = this.extractLatLngFromPoint(createInterventionDto.geometry)
@@ -1402,6 +1456,7 @@ export class MobileService {
           interventionId: existingParent[0].id,
           interventionSpeciesId: sampleSpeciesData.id,
           speciesName: sampleSpeciesData.name,
+          isUnknown: sampleSpeciesData.isUnknown,
           createdById: membership.userId,
           tag: createInterventionDto.tag,
           treeType: 'sample' as 'sample',
@@ -1409,11 +1464,10 @@ export class MobileService {
           image: null,
           accuracy: null,
           location: locationValue,
-          originalGeometry: createInterventionDto.geometry,
           latitude: latlongDetails.latitude,
           longitude: latlongDetails.longitude,
-          currentHeight: createInterventionDto.measurements.height,
-          currentWidth: createInterventionDto.measurements.width,
+          height: createInterventionDto.measurements.height,
+          width: createInterventionDto.measurements.width,
           plantingDate: new Date(createInterventionDto.interventionStartDate),
           metadata: createInterventionDto.metadata || null,
         }
@@ -1429,7 +1483,7 @@ export class MobileService {
           hid: sampleResult[0].hid
         }
       }
-
+      const uid = generateUid('inv');
       const interventionData = {
         uid: uid,
         hid: newHID,
@@ -1484,6 +1538,7 @@ export class MobileService {
           interventionId: result[0].id,
           interventionSpeciesId: interventionSpeciesData[0].id,
           speciesName: interventionSpeciesData[0].speciesName,
+          isUnknown: interventionSpeciesData[0].isUnknown,
           createdById: membership.userId,
           tag: createInterventionDto.tag,
           treeType: createInterventionDto.type === 'single-tree-registration' ? 'single' as 'single' : 'sample' as 'sample',
@@ -1496,8 +1551,8 @@ export class MobileService {
           metadata: createInterventionDto.metadata || null,
           latitude: latlongDetails.latitude,
           longitude: latlongDetails.longitude,
-          currentHeight: createInterventionDto.measurements.height,
-          currentWidth: createInterventionDto.measurements.width,
+          height: createInterventionDto.measurements.height,
+          width: createInterventionDto.measurements.width,
         }
         const singleResult = await this.drizzleService.db
           .insert(tree)
@@ -1521,8 +1576,8 @@ export class MobileService {
     }
   }
 
-async doRemeasurement(
-    remeasurementDTO: RemeasurementDto, 
+  async doRemeasurement(
+    remeasurementDTO: RemeasurementDto,
     membership: number
   ): Promise<any> {
     try {
@@ -1531,7 +1586,7 @@ async doRemeasurement(
 
       // Generate UID for tree record
       const treeRecordUid = generateUid('treerec');
-      
+
       // Get tree details
       const treeDetails = await this.drizzleService.db
         .select()
@@ -1544,8 +1599,8 @@ async doRemeasurement(
       }
 
       const currentTree = treeDetails[0];
-      const recordedAt = remeasurementDTO.eventDate 
-        ? new Date(remeasurementDTO.eventDate) 
+      const recordedAt = remeasurementDTO.eventDate
+        ? new Date(remeasurementDTO.eventDate)
         : new Date();
 
       if (remeasurementDTO.type === 'measurement') {
@@ -1729,7 +1784,7 @@ async doRemeasurement(
       if (isNaN(eventDate.getTime())) {
         throw new BadRequestException('Invalid event date format');
       }
-      
+
       // Don't allow future dates
       if (eventDate > new Date()) {
         throw new BadRequestException('Event date cannot be in the future');
@@ -1771,8 +1826,8 @@ async doRemeasurement(
         tree_hid: tree.hid,
         tree_tag: tree.tag,
         tree_planting_date: tree.plantingDate,
-        tree_current_height: tree.currentHeight,
-        tree_current_width: tree.currentWidth,
+        tree_current_height: tree.height,
+        tree_current_width: tree.width,
         tree_metadata: {},
 
         // For single tree interventions - intervention species data
@@ -1921,8 +1976,8 @@ async doRemeasurement(
         tree_uid: tree.uid,
         tree_hid: tree.hid,
         tree_tag: tree.tag,
-        tree_current_height: tree.currentHeight,
-        tree_current_width: tree.currentWidth,
+        tree_current_height: tree.height,
+        tree_current_width: tree.width,
         tree_planting_date: tree.plantingDate,
         tree_original_geometry: tree.originalGeometry,
         tree_created_at: tree.createdAt,
@@ -2059,7 +2114,6 @@ async doRemeasurement(
   transformSpecies = async (d: any) => {
     try {
       const finalData: any = []
-
       if (d.type === 'single-tree-registration' || d.type === 'sample-tree-registration') {
         finalData.push({
           uid: generateUid('invspc'),
@@ -2134,11 +2188,6 @@ async doRemeasurement(
       return []
     }
   }
-
-  async updateInterventionImage(imageData: any, userId: number): Promise<any> {
-
-  }
-
 
 
 

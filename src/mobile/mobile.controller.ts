@@ -104,6 +104,13 @@ export class MobileController {
   }
 
 
+  @Post('intervention/image')
+  async updateInterventionImage(
+    @Body() dto: any,
+    @CurrentUser() user: User) {
+    return await this.appservice.updateInterventionImage(dto, user);
+  }
+
 
 
   @Get('species/:id')

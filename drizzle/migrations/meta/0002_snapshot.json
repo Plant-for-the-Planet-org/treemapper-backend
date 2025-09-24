@@ -1,6 +1,6 @@
 {
-  "id": "42e8832f-879b-4429-92d2-8aba7d8e2eeb",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "d9fb84ab-750e-428d-be7c-a9adab235afd",
+  "prevId": "41bc3b2c-56ef-4251-ba46-53fac93322f2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4433,14 +4433,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "current_height": {
-          "name": "current_height",
+        "height": {
+          "name": "height",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
         },
-        "current_width": {
-          "name": "current_width",
+        "width": {
+          "name": "width",
           "type": "double precision",
           "primaryKey": false,
           "notNull": false
