@@ -39,7 +39,7 @@ export class InterventionsController {
   constructor(private readonly interventionsService: InterventionsService) { }
 
   @Post('/projects/:id/web')
-  @ProjectRoles('owner', 'admin')
+  @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
   async createNewInterventionWeb(
     @Body() createInterventionDto: any,
@@ -93,6 +93,22 @@ export class InterventionsController {
     @Membership() membership: any
   ): Promise<InterventionResponseDto> {
     return this.interventionsService.bulkInterventionUpload(interventionData, membership);
+  }
+
+  @Put(':interventionId/:id')
+  @ProjectRoles('owner', 'admin')
+  @UseGuards(ProjectPermissionsGuard)
+  async editInterventionDetails(
+    @Param('interventionId') interventionId: string,
+    @Body() transferDto: any,
+    @CurrentUser() req: any,
+  ): Promise<any> {
+    const requesterId = req.user?.id || req.user?.sub;
+    return await this.interventionsService.interventionEdit(
+      interventionId,
+      transferDto,
+      requesterId,
+    );
   }
 
 

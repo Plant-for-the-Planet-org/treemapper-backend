@@ -5,19 +5,22 @@ import {
   Body,
   UseGuards,
   Req,
-  Headers, Put
+  Headers, Put,
+  Query,
+  Param
 } from '@nestjs/common';
 import { ProjectRoles } from './decorators/project-roles.decorator';
 import { ProjectPermissionsGuard } from '../projects/guards/project-permissions.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { MobileService } from './mobile.service';
 import { Membership } from 'src/projects/decorators/membership.decorator';
-import { ProjectGuardResponse } from 'src/projects/projects.service';
+import { ProjectGuardResponse, ProjectsService } from 'src/projects/projects.service';
 import { InterventionResponseDto } from 'src/interventions/dto/interventions.dto';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { CreatePresignedUrlDto } from 'src/users/dto/signed-url.dto';
 import { ExtendedUser, User } from 'src/users/entities/user.entity';
 import { UsersService } from 'src/users/users.service';
+import { AcceptInviteDto } from 'src/projects/dto/accept-invite.dto';
 
 
 
@@ -25,7 +28,7 @@ import { UsersService } from 'src/users/users.service';
 @Controller('mobile')
 @UseGuards(JwtAuthGuard)
 export class MobileController {
-  constructor(private readonly appservice: MobileService, private readonly usersService: UsersService,) { }
+  constructor(private readonly appservice: MobileService, private readonly usersService: UsersService, private readonly projectsService: ProjectsService) { }
 
 
   @Get('user/profile')
@@ -35,6 +38,7 @@ export class MobileController {
   ): Promise<any> {
     return this.appservice.getUserDetails(userData, authorization)
   }
+
 
 
   @Post('user/profile')
@@ -62,6 +66,18 @@ export class MobileController {
   }
 
 
+  @Get('invites/:invite/status/link')
+  getProjectSingleLinkStatus(@Param('invite') invite: string) {
+    return this.projectsService.getProjectSingleLinkStatus(invite);
+  }
+
+  @Get('invites/:invite/status')
+  getProjectInviteStatus(@Param('invite') invite: string, @Req() req) {
+    return this.projectsService.getProjectInviteStatus(invite, req.user.email);
+  }
+
+
+
   @Post('site')
   @ProjectRoles('owner', 'admin', 'contributor')
   @UseGuards(ProjectPermissionsGuard)
@@ -71,6 +87,7 @@ export class MobileController {
   ): Promise<any> {
     return this.appservice.createNewSite(createInterventionDto, membership.userId);
   }
+
 
   @Post('project/:id/intervention')
   @ProjectRoles('owner', 'admin', 'contributor')
@@ -82,6 +99,27 @@ export class MobileController {
     return this.appservice.createNewInterventionMobile(createInterventionDto, membership);
   }
 
+  @Get('project/interventions')
+  async getProjectIntervention(
+    @Req() req: any,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '4',
+  ): Promise<InterventionResponseDto> {
+
+    return this.appservice.getProjectIntervention(req.user.id, page, limit);
+  }
+
+  @Post('invites/accept')
+  acceptInvite(@Body() acceptInviteDto: AcceptInviteDto, @CurrentUser() userData: User) {
+    return this.projectsService.acceptInvite(acceptInviteDto.token, userData.id, userData.email, userData);
+  }
+
+
+  @Post('invites/accept/link')
+  acceptInviteLink(@Body() acceptInviteDto: AcceptInviteDto, @CurrentUser() userData: User) {
+    return this.projectsService.acceptLinkInvite(acceptInviteDto.token, userData.id, userData.email, userData);
+  }
+
 
   @Post('signedurl')
   async getSignedUrl(
@@ -90,6 +128,13 @@ export class MobileController {
     return await this.usersService.generateR2Url(dto);
   }
 
+
+  @Post('intervention/image')
+  async updateInterventionImage(
+    @Body() dto: any,
+    @CurrentUser() user: User) {
+    return await this.appservice.updateInterventionImage(dto, user);
+  }
 
 
 
@@ -102,6 +147,18 @@ export class MobileController {
     return await this.appservice.getFavoriteSpeciesInProject(membership.projectId);
   }
 
+  @Put('/intervention/:treeid/remeasure')
+  async doRemeasurement(
+    @Body() remeasurementDTo: any,
+    @Param('treeid') treeId: string,
+    @Req() req: any,
+  ): Promise<InterventionResponseDto> {
+    const updatedDto = {
+      ...remeasurementDTo,
+      tree: treeId
+    };
+    return this.appservice.doRemeasurement(updatedDto, req.user.id);
+  }
 
 
   @Post('request/features')

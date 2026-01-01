@@ -12,6 +12,7 @@ import {
   scientificSpecies,
   projectMember,
   image,
+  project,
 } from '../database/schema/index';
 import {
   InterventionResponseDto,
@@ -514,8 +515,8 @@ export class InterventionsService {
           originalGeometry: createInterventionDto.geometry,
           latitude: latlongDetails.latitude,
           longitude: latlongDetails.longitude,
-          currentHeight: createInterventionDto.height,
-          currentWidth: createInterventionDto.width,
+          height: createInterventionDto.height,
+          width: createInterventionDto.width,
           plantingDate: new Date(createInterventionDto.interventionStartDate),
           metadata: createInterventionDto.metadata || null,
         }
@@ -767,8 +768,8 @@ export class InterventionsService {
           altitude: tree.altitude,
           latitude: tree.latitude,
           longitude: tree.longitude,
-          currentHeight: tree.currentHeight,
-          currentWidth: tree.currentWidth,
+          height: tree.height,
+          width: tree.width,
           currentHealthScore: tree.currentHealthScore,
           status: tree.status,
           statusReason: tree.statusReason,
@@ -860,8 +861,8 @@ export class InterventionsService {
           altitude: treeData.altitude,
           latitude: treeData.latitude,
           longitude: treeData.longitude,
-          currentHeight: treeData.currentHeight,
-          currentWidth: treeData.currentWidth,
+          height: treeData.height,
+          width: treeData.width,
           currentHealthScore: treeData.currentHealthScore,
           status: treeData.status,
           statusReason: treeData.statusReason,
@@ -1061,8 +1062,8 @@ export class InterventionsService {
             location: locationValue,
             latitude: latlongDetails.latitude,
             longitude: latlongDetails.longitude,
-            currentHeight: el.height || null,
-            currentWidth: el.width || null,
+            height: el.height || null,
+            width: el.width || null,
             plantingDate: new Date(el.interventionStartDate),
             metadata: el.metadata || null,
           });
@@ -1149,8 +1150,8 @@ export class InterventionsService {
               location: treeItem.location,
               latitude: treeItem.latitude,
               longitude: treeItem.longitude,
-              currentHeight: treeItem.currentHeight,
-              currentWidth: treeItem.currentWidth,
+              height: treeItem.height,
+              width: treeItem.width,
               plantingDate: treeItem.plantingDate,
               metadata: treeItem.metadata,
             });
@@ -1422,6 +1423,94 @@ export class InterventionsService {
       };
     });
   }
+
+
+
+
+async interventionEdit(
+  interventionUid: string,
+  invData: {
+    prjid: string;
+    field: 'interventionStartDate' | 'interventionEndDate' | 'description';
+    value: string;
+  },
+  requesterId: number,
+): Promise<boolean> {
+  const db = this.drizzleService.db;
+
+  // 1. Fetch the intervention
+  const existingIntervention = await db
+    .select()
+    .from(intervention)
+    .where(
+      and(
+        eq(intervention.uid, interventionUid),
+        isNull(intervention.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (!existingIntervention.length) {
+    throw new NotFoundException('Intervention not found');
+  }
+
+  const interventionData = existingIntervention[0];
+
+
+
+  // 3. Prepare update data based on field with validation
+  const updateData: any = {
+    updatedAt: new Date(),
+    editedAt: new Date(),
+  };
+
+  switch (invData.field) {
+    case 'interventionStartDate':
+      const startDate = new Date(invData.value);
+      if (isNaN(startDate.getTime())) {
+        throw new BadRequestException('Invalid start date format');
+      }
+      
+      // Validate against end date if it exists
+      if (interventionData.interventionEndDate && startDate > interventionData.interventionEndDate) {
+        throw new BadRequestException('Start date cannot be after end date');
+      }
+
+      updateData.interventionStartDate = startDate;
+      break;
+
+    case 'interventionEndDate':
+      const endDate = new Date(invData.value);
+      if (isNaN(endDate.getTime())) {
+        throw new BadRequestException('Invalid end date format');
+      }
+
+      // Validate against start date
+      if (interventionData.interventionStartDate && endDate < interventionData.interventionStartDate) {
+        throw new BadRequestException('End date cannot be before start date');
+      }
+
+      updateData.interventionEndDate = endDate;
+      break;
+
+    case 'description':
+      updateData.description = invData.value;
+      break;
+
+    default:
+      throw new BadRequestException(`Field '${invData.field}' is not editable`);
+  }
+
+  // 4. Update the intervention
+  await db
+    .update(intervention)
+    .set(updateData)
+    .where(eq(intervention.id, interventionData.id));
+
+  return true;
+}
+
+
 
   /**
    * Validate intervention exists and is not deleted
@@ -2141,8 +2230,8 @@ export class InterventionsService {
         treeType: tree.treeType,
         location: sql<GeoJSON.Point>`ST_AsGeoJSON(${tree.location})::json`,
         status: tree.status,
-        currentHeight: tree.currentHeight,
-        currentWidth: tree.currentWidth,
+        height: tree.height,
+        width: tree.width,
         currentHealthScore: tree.currentHealthScore,
         plantingDate: tree.plantingDate,
         lastMeasurementDate: tree.lastMeasurementDate,
